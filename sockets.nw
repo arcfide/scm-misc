@@ -14,9 +14,11 @@ Only Internet and Local/Unix domain sockets are supported
 by this code, though additional types should be relatively easy 
 to make.
 
-The code itself is organized into three main categories: 
-new socket datatypes, constants, and procedurs. 
+The code itself is organized into 
+new socket datatypes and procedures. 
 Each relevant chapter discusses these parts in particular detail.
+The constants section describes how to extend the constants 
+defined for socket procedures.
 
 The library also includes a C Stub and FFI interface to enable the 
 low-level data manipulations and system calls when necessary. 
@@ -34,7 +36,7 @@ and possible improvements.
 \li Error checking and handling
 \li Non-blocking Sockets
 \li Sockets Options
-\li Remove Magic Constants from lookup_proto
+\li Remove Magic Constants from lookup\_proto
 \li Remove excess amount of conversion functions
 \li Switch to or make UNIX another optional name for LOCAL
 \li Consider IP field name replaced with ADDRESS
@@ -65,8 +67,9 @@ the domain, the type, and the protocol of the socket.
 @
 
 The [[fd]] field should be a socket field descriptor, which is a positive integer. 
-The [[domain]], [[type]], and [[protocol]] fields all contain symbols which 
-identify the domain, type, and protocol of the socket, respectively. 
+The [[domain]], [[type]], and [[protocol]] fields all contain constants which 
+return true for 
+[[socket-domain?]], [[socket-type?]], and [[socket-protocol?]], respectively. 
 This functionality could be introspected from the field descriptor, but it 
 is more convenient to store this information directly.
 
@@ -195,12 +198,61 @@ internet-socket-address.
 
 \chapter{Socket Constants}
 
-Most of the work that would normally be required for sockets is 
-the constants for each of the functions. 
-They only need to be evaluated once at compile time.
+Procedures such as [[create-socket]] accept records which wrap 
+numeric constant values for passing into the FFI. 
+These constants are limited with what is built in to have the 
+widest acceptance and portability, but if the user wishes to use 
+more values, he can do so by using the appropriate make form.
+This requires that the user know the Operating specific constant 
+value that should be used in the FFI.
 
-We rely on a syntax [[define-foreign-enumeration]] to define an 
-enumeration and an indexer that provides the right foreign value.
+Every constant type is a child of the [[socket-constant]] type.
+
+<<Datatypes>>=
+(define-record-type socket-constant (fields (immutable value)))
+@
+
+We also use the following convenience to help define these constants.
+
+<<Constants>>=
+(define-syntax define-socket-constants
+  (lambda (x)
+    (define (make-name-maker before after)
+      (lambda (name)
+        (datum->syntax name
+          (string->symbol
+            (string-append 
+              before
+              (symbol->string (syntax->datum name))
+              after)))))
+    (define make-type-name (make-name-maker "%" ""))
+    (define make-constructor (make-name-maker "make-" ""))
+    (define make-predicate (make-name-maker "" "?"))
+    (define (make-const-name name rest)
+      (datum->syntax rest
+        (string->symbol
+          (format "~a/~a" (syntax->datum name) (syntax->datum rest)))))
+    (syntax-case x ()
+      [(_ base-name (include ...) (sr cr)
+          (n1 cre1 b1 ...)
+          (n2 cre2 b2 ...) ...)
+       (with-syntax ([type-name (make-type-name #'base-name)]
+                     [constructor (make-constructor #'base-name)]
+                     [predicate (make-predicate #'base-name)]
+                     [(tmp1 tmp2 ...) (generate-temporaries #'(c1 c2 ...))]
+                     [(cn1 cn2 ...) 
+                      (map (lambda (x) (make-const-name #'base-name x))
+                        #'(n1 n2 ...))])
+         #`(begin
+             (define-foreign-values (include ...)
+               (tmp1 sr cr cre1 b1 ...)
+               (tmp2 sr cr cre2 b2 ...) ...)
+             (define-record-type (type-name constructor predicate)
+               (parent socket-constant))
+             (define cn1 (constructor tmp1))
+             (define cn2 (constructor tmp2)) ...))])))
+
+@        
 
 \chapter{Socket Procedures}
 
@@ -211,6 +263,11 @@ create-socket
 make-socket-domain
 make-socket-type
 make-socket-protocol
+socket-domain/unix socket-domain/local 
+socket-domain/internet socket-domain/internet-v6
+socket-type/stream socket-type/datagram
+socket-type/sequence-packet socket-type/raw
+socket-type/random 
 @
 
 \noindent [[create-socket]] corresponds to the [[socket(2)]] system call. 
@@ -234,31 +291,132 @@ make-socket-protocol
   (foreign-procedure "socket" (fixnum fixnum fixnum) fixnum))
 @
 
-[[create-socket]] uses three different enumerations for 
+[[create-socket]] uses three different constant types for 
 the domain, type, and protocol of the socket.
 
-<<Enumerations>>=
-(define-foreign-enumeration socket-domain
+<<Constants>>=
+(define-socket-constants socket-domain
   (<sys/types.h> <sys/socket.h>)
-  (fixnum int)
+  (fixnum "int")
   (unix "AF_UNIX")
   (local "AF_LOCAL")
   (internet "AF_INET")
   (internet-v6 "AF_INET6"))
 
-(define-foreign-enumeration socket-type
-  (<sys/types.h> <sysy/socket.h>)
-  (fixnum int)
+(define-socket-constants socket-type
+  (<sys/types.h> <sys/socket.h>)
+  (fixnum "int")
   (stream "SOCK_STREAM")
   (datagram "SOCK_DGRAM")
   (sequence-packet "SOCK_SEQPACKET")
   (raw "SOCK_RAW")
   (random "SOCK_RDM"))
 
-(define-foreign-enumeraiton socket-protocol
-  (
-  
-  
+@
+
+<<Exports>>=
+make-socket-protocol socket-protocol?
+protocol-entry-name protocol-entry-aliases protocol-entry-value
+@
+
+Dealing with protocol numbers is slightly different, 
+since these entries are found in a database that can change, 
+rather than in some header file. 
+
+<<Constants>>=
+(define-record-type (%socket-protocol make-socket-protocol socket-protocol?)
+  (parent socket-constant))
+
+@
+
+\noindent Protocols can be retreived by the [[getproto*]] family of 
+functions. 
+These functions return [[protocol-entry]] structures. 
+
+<<Constants>>=
+(define-record-type protocol-entry (fields name aliases value))
+
+@
+
+<<FFI Procedures>>=
+(define $getprotoent 
+  (foreign-procedure "getprotoent" () iptr))
+(define $getprotobyname 
+  (foreign-procedure "getprotobyname" (string) iptr))
+(define $getprotobynumber
+  (foreign-procedure "getprotobynumber" (fixnum) iptr))
+(define $setprotoent
+  (foreign-procedure "setprotoent" (boolean) void))
+(define $endprotoent
+  (foreign-procedure "endprotoent" () void))
+@
+
+<<Exports>>=
+next-protocol-entry
+get-protocol-by-name
+get-protocol-by-number
+open-protocol-database
+close-protocol-database
+@
+
+<<Constants>>=
+(define (next-protocol-entry)
+  (foreign->protocol-entry ($getprotoent)))
+(define (get-protocol-by-name name)
+  (foreign->protocol-entry ($getprotobyname name)))
+(define (get-protocol-by-number n)
+  (foreign->protocol-entry ($getprotobynumber n)))
+(define (open-protocol-database keep-alive?)
+  ($setprotoent keep-alive?))
+(define (close-protocol-database)
+  ($endprotoent))
+
+@
+
+Converting the C structure to the [[protocol-entry]] form 
+is performed by the following function [[foreign->protocol-entry]].
+
+<<Constants>>=
+(define-foreign-constants (<netdb.h>)
+  (protoent/name-offset fixnum "int" "&x.p_name - &x"
+   "struct protoent x;")
+  (protoent/aliases-offset fixnum "int" "&x.p_aliases - &x"
+   "struct protoent x;")
+  (protoent/proto-offset fixnum "int" "&x.p_proto - &x"
+   "struct protoent x;")
+  (size-of/integer fixnum "int" "sizeof(int)"))
+
+(define (protoent-name x) (+ x protoent/name-offset))
+(define (protoent-aliases x) (+ x protoent/aliases-offset))
+(define (protoent-value x) (+ x protoent/proto-offset))
+
+(define (foreign->string x)
+  (let ([v (make-bytevector ($strlen x))])
+    ($strcpy v x)
+    (bytevector->string)))
+
+(define (foreign->integer x)
+  (let ([v (make-bytevector size-of/integer)])
+    ($strncpy v x size-of/integer)
+    (bytevector-sint-ref v 0 (native-endianness) size-of/integer)))
+
+(define (foreign->protocol-entry x)
+  (make-protocol-entry
+    (foreign->string (protoent-name x))
+    (collect-string (for i (up-from (protoent-aliases x) (to (protocol-value x))))
+      (foreign->string i))
+    (make-socket-protocol (foreign->integer (protocol-value x)))))
+
+@
+
+<<FFI Procedures>>=
+(define $strcpy
+  (foreign-procedure "strcpy" (string iptr) void))
+(define $strncpy
+  (foreign-procedure "strncpy" (string iptr fixnum) void))
+(define $strlen
+  (foreign-procdure "strlen" (string) fixnum))
+@
 
 \procsig{[[bind-socket]]}{\var{socket} \var{socket address}}}}
 
