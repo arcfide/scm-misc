@@ -46,7 +46,7 @@ c procedure. Usually, these will be omitted for the simple cases.
              ...))])))
 
 (define-syntax define-foreign-constants
-  (syntax-rules x ()
+  (syntax-rules ()
     [(_ (include ...)
         (name scm-ret c-type c-ret body ...)
         (name2 scm-ret2 c-type2 c-ret2 body2 ...)
@@ -68,15 +68,17 @@ and a list of function data.
 <<Compiling>>=
 (meta define (write-c-file fname includes procs)
   (with-output-to-file fname
-    (printf "~{#include ~s~%~}~%" includes)
-    (for-each 
-      (lambda (x)
-        (printf "~a ~a() {~%~{~a~%{}~%return (~a);~%}~%"
-          (cadr x)
-          (make-foreign-name (car x))
-          (cdddr x)
-          (caddr x)))
-      procs)))
+    (lambda ()
+      (printf "~{#include ~s~%~}~%" includes)
+      (for-each 
+        (lambda (x)
+          (printf "~a ~a() {~%~{~a~%~}~%return (~a);~%}~%"
+            (cadr x)
+            (make-foreign-name (car x))
+            (cdddr x)
+            (caddr x)))
+        procs))
+    'replace))
 
 @
 
@@ -93,7 +95,8 @@ to do the writing, compiling, and loading all at expansion time.
            (syntax->datum #'(include ...))
            (syntax->datum #'((name ret body ...) ...)))
          (load-shared-object
-           ((ffi-compiler) fname)))])))
+           ((ffi-compiler) fname))
+         #'(begin))])))
 @
 
 \chapter{Utilities and Miscellaneous Helpers}
@@ -115,8 +118,8 @@ procedure name.
 We also want to generate a C filename for compilation automatically. 
 
 <<Utilities>>=
-(meta define (build-c-fname)
-  (format "~a~a~a" (ffi-build-path) (directory-separator)
+(meta define (make-c-fname)
+  (format "~a~a~a.c" (ffi-build-path) (directory-separator)
     (collect-string (for c (in-string (format "~s" (gensym))))
       (case c
         [(#\space #\{ #\}) #\_]
@@ -165,7 +168,9 @@ and returns the path of the compiled object.
   (export define-foreign-constants)
   (import 
     (scheme)
-    (arcfide extended-definitions))
+    (riastradh foof-loop)
+    (arcfide extended-definitions)
+    (arcfide ffi-bind parameters))
 
 <<Utilities>>
 
