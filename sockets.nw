@@ -1,0 +1,331 @@
+\title{Sockets in Chez Scheme}
+
+\chapter{Introduction}
+
+This is a socket library for Chez Scheme which attempts to remain 
+as faithful as possible to BSD sockets while still maintaining a 
+normal operation that will be familiar to Scheme programmers.
+Procedures are documented inline at the top of their main
+definitions. 
+
+The current implementation uses records instead of magic numbers. 
+Hopefully this keeps the system a little more portable.
+Only Internet and Local/Unix domain sockets are supported 
+by this code, though additional types should be relatively easy 
+to make.
+
+The code itself is organized into three main categories: 
+new socket datatypes, constants, and procedurs. 
+Each relevant chapter discusses these parts in particular detail.
+
+The library also includes a C Stub and FFI interface to enable the 
+low-level data manipulations and system calls when necessary. 
+
+A build script also accompanies the library to help in the building of 
+the code on some platforms. It is only meant as a guide, and may not 
+work completely on your system.
+
+\chapter{Uncompleted/Planned Features}
+
+The following is a development to-do list of intended features 
+and possible improvements.
+
+\orderedlist
+\li Error checking and handling
+\li Non-blocking Sockets
+\li Sockets Options
+\li Remove Magic Constants from lookup_proto
+\li Remove excess amount of conversion functions
+\li Switch to or make UNIX another optional name for LOCAL
+\li Consider IP field name replaced with ADDRESS
+\li COnsider name change of RECEIVE-FROM-SOCKET
+\li Consider name change of ACCEPT-SOCKET
+\li Better handling of paths in UNIX sockets
+\endorderedlist
+
+\chapter{Socket Datatypes}
+
+\section{Sockets}
+
+<<Exports>>=
+make-socket
+socket?
+socket-fd
+socket-domain
+socket-type
+socket-protocol
+@
+
+Sockets are file descriptors which usually have integer representations. 
+The [[socket]] datatype also defines fields for easily determining 
+the domain, the type, and the protocol of the socket.
+
+<<Datatypes>>=
+(define-record-type socket (fields fd domain type protocol))
+@
+
+The [[fd]] field should be a socket field descriptor, which is a positive integer. 
+The [[domain]], [[type]], and [[protocol]] fields all contain symbols which 
+identify the domain, type, and protocol of the socket, respectively. 
+This functionality could be introspected from the field descriptor, but it 
+is more convenient to store this information directly.
+
+\section{Socket Addresses}
+
+<<Exports>>=
+socket-address?
+socket-address
+@
+
+Other than sockets, one must also have a means by which to address other hosts. 
+Socket Addresses represent the destinations or origins of transmissions. 
+
+All socket address data types are subtypes of [[socket-address]]es.
+
+<<Datatypes>>=
+(define-record-type socket-address)
+@
+
+\subsection{UNIX Socket Addresses}
+
+<<Exports>>=
+unix-socket-address
+unix-socket-address?
+make-unix-socket-address
+unix-socket-address-path
+@
+
+UNIX domain sockets have addresses that are just paths, which in turn are simply strings. 
+
+<<Datatypes>>=
+(define-record-type unix-socket-address
+  (parent socket-address)
+  (fields path))
+@
+
+\subsection{Internet Socket Addresses}
+
+<<Exports>>=
+internet-socket-address
+internet-socket-address?
+make-internet-socket-address
+internet-socket-address-ip
+internet-socket-address-port
+string->ipv4-address
+internet-socket-address->string
+@
+
+Internet addresses are represented by an IP address and a port number.
+The IP address is a bytevector of either 32 or 128 bytes, depending on 
+whether the address is an IPv4 or IPv6 address.
+The port number is an integer. The bytevectors are expected to represent 
+their addresses using network byte ordering.
+
+<<Datatypes>>=
+(define-record-type internet-socket-address 
+  (parent socket-address)
+  (fields ip port))
+
+@
+
+Normally, people don't like to provide internet addresses in network 
+byte ordered bytevectors. 
+Instead, we have two helper procedures that create the structure for us, 
+and we define procedures to extract the port and address information 
+from the structure.
+
+<<Datatypes>>=
+(define string->ipv4-address
+  (lambda (s)
+    (define split
+      (lambda (s)
+        (apply values
+          (string-tokenize
+            (char-set-complement (char-set #\:))))))
+    (define s->ip
+      (lambda (s)
+        (apply bytevector
+          (map string->number
+            (string-tokenize s
+              (char-set-complement (char-set #\.)))))))
+    (let-values ([(ip-string port-string) (split s)])
+      (let ([ip (s->ip ip-string)]
+            [port (string->number port-string)])
+        (assert (= 4 (bytevector-length ip)))
+        (assert (< 0 port 65536))
+        (make-internet-address ip port)))))
+        
+(define internet-socket-address->string
+  (lambda (addr)
+    (let ([ip (internet-socket-address-ip addr)]
+          [port (internet-socket-address-port addr)])
+      (assert (< 0 port 65536))
+      (format 
+        (case (bytevector-length ip) 
+          [(4) "~{~d~^.~}:~d"]
+          [(8) "~{~x~x~^:~}/~d"]
+          [else (assertion-violationf 'internet-socket-address->string
+                  "~s is not a valid ip address")])
+        (bytevector->u8-list ip)
+        (internet-socket-address-port addr)))))
+
+@
+
+\section{Address Information}
+
+<<Exports>>=
+make-address-info
+address-info
+address-info?
+address-info-domain
+address-info-type
+address-info-protocol
+address-info-address
+@
+
+The [[get-address-info]] procedure returns a list of [[address-info]] 
+structures that specify different means by which a host may be contacted. 
+
+<<Datatypes>>=
+(define-record-type address-info (fields domain type protocol address))
+@
+
+The [[address]] field of an [[address-info]] record should be an 
+internet-socket-address.
+
+\chapter{Socket Constants}
+
+Most of the work that would normally be required for sockets is 
+the constants for each of the functions. 
+They only need to be evaluated once at compile time.
+
+We rely on a syntax [[define-foreign-enumeration]] to define an 
+enumeration and an indexer that provides the right foreign value.
+
+\chapter{Socket Procedures}
+
+\procsig{[[create-socket]]}{\var{domain} \var{type} \var{protocol}}{\var{socket}}
+
+<<Exports>>=
+create-socket
+make-socket-domain
+make-socket-type
+make-socket-protocol
+@
+
+\noindent [[create-socket]] corresponds to the [[socket(2)]] system call. 
+
+<<Code>>=
+(define create-socket
+  (lambda (domain type protocol)
+    (let ([ret ($socket (socket-domain-index domain)
+                        (socket-type-index type)
+                        (socket-protocol-index protocol))])
+      (if (negative? ret)
+          (ffi-error 'create-socket)
+          (make-socket ret domain type protocol)))))
+
+@
+
+\noindent [[$socket]] refers directly to the system call:
+
+<<FFI Procedures>>=
+(define $socket 
+  (foreign-procedure "socket" (fixnum fixnum fixnum) fixnum))
+@
+
+[[create-socket]] uses three different enumerations for 
+the domain, type, and protocol of the socket.
+
+<<Enumerations>>=
+(define-foreign-enumeration socket-domain
+  (<sys/types.h> <sys/socket.h>)
+  (fixnum int)
+  (unix "AF_UNIX")
+  (local "AF_LOCAL")
+  (internet "AF_INET")
+  (internet-v6 "AF_INET6"))
+
+(define-foreign-enumeration socket-type
+  (<sys/types.h> <sysy/socket.h>)
+  (fixnum int)
+  (stream "SOCK_STREAM")
+  (datagram "SOCK_DGRAM")
+  (sequence-packet "SOCK_SEQPACKET")
+  (raw "SOCK_RAW")
+  (random "SOCK_RDM"))
+
+(define-foreign-enumeraiton socket-protocol
+  (
+  
+  
+
+\procsig{[[bind-socket]]}{\var{socket} \var{socket address}}}}
+
+\noindent Corresponds directly to [[bind(2)]]. 
+
+<<Code>>=
+(define bind-socket
+  (lambda (sock addr)
+    (let-values ([(foreign-addr foreign-addr-len)
+                  (socket-address->foreign addr)])
+      (let ([ret ($bind (socket-fd sock) 
+                        foreign-addr 
+                        foreign-addr-len)])
+        (if (zero? ret)
+            (void)
+            (ffi-error 'bind-socket))))))
+
+@
+
+
+
+\chapter{Handling FFI Errors}
+
+Error handling for procedures that properly set [[errno]] can be handled 
+by a single procedure that calls [[perror]] and signals an exception 
+in Scheme.
+
+<<Code>>=
+(define ffi-error
+  (lambda (who . args)
+    ($perror (symbol->string who))
+    (apply error `(,who "Error in foreign procedure" ,@args))))
+
+@
+
+<<FFI Procedures>>=
+(define $perror (foreign-procedure "perror" (string) void))
+@
+
+\chapter{Compiling the Library}
+
+\chapter{R6RS Form}
+
+\chapter{Chez Module Form}
+
+\chapter{Vanilla File}
+
+\chapter{License}
+
+This sockets library is distributed under an ISC License.
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Sockets Support for Chez
+;;;; Version 1.0 RC1
+;;;
+;;; Copyright (c) 2008 - 2009 Aaron Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for any
+;;; purpose with or without fee is hereby granted, provided that the above
+;;; copyright notice and this permission notice appear in all copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+;;; WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+;;; MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+;;; ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+;;; WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+;;; ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+;;; OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+@

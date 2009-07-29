@@ -1,0 +1,152 @@
+\title{Garbage Collected Malloc}
+
+\chapter{Introduction}
+
+The following code defines a procedure [[gc-malloc]] that allows one 
+to allocate a chunk of memory for use which will be automatically 
+collected by the garbage collector. 
+
+Care must be taken when using this library to avoid leaving pointers 
+in the foreign side of the Scheme system while removing any reference 
+to the containing pointer object in the Scheme side, which will result 
+in a freeing of the memory while still in (possible) use.
+
+\chapter{Region Datatype}
+
+<<Exports>>=
+malloc-region?
+malloc-region-ptr
+@
+
+A [[malloc-region]] Datatype is defined to permit the storage and 
+identification of region pointers.
+
+<<Code>>=
+(define-record malloc-region (ptr))
+
+@
+
+\chapter{Registering Foreign Regions}
+
+<<Exports>>=
+register-region
+@
+
+[[register-region]] allows you to register a pointer obtained 
+via some other means with the garbage collector for automatic 
+collection. The [[pointer]] must be a positive integer.
+
+<<Code>>=
+(define register-region
+  (lambda (pointer)
+    (let ([x (make-malloc-region pointer)])
+      (malloc-guardian x)
+      x)))
+
+@
+
+\chapter{Allocating Space}
+
+<<Exports>>=
+malloc
+@
+
+[[malloc]] allocates [[size]] bytes of space using the standard 
+system call [[malloc]].
+
+<<Code>>=
+(define $malloc
+  (foreign-procedure "malloc" (uptr) uptr))
+
+(define $free
+  (foreign-procedure "free" (uptr) void))
+  
+(define do-malloc
+  (lambda (size)
+    (make-malloc-region ($malloc size))))
+
+(define do-free
+  (lambda (region)
+    ($free (malloc-region-ptr region))))
+    
+(define malloc-guardian (make-guardian))
+
+(define malloc
+  (lambda (size)
+    (let ([x (do-malloc size)])
+      (malloc-guardian x)
+      x)))
+
+(collect-request-handler
+  (lambda ()
+    (collect)
+    (let f ()
+      (let ((x (malloc-guardian)))
+        (when x
+          (do-free x)
+          (f))))))
+@
+
+The above requires that the appropriate foriegn shared object is 
+loaded and available to this library.
+
+\chapter{R6RS Library Form}
+
+<<malloc.sls>>=
+<<License>>
+
+#!chezscheme
+(library (arcfide malloc)
+  (export
+    <<Exports>>)
+  (import (scheme))
+
+<<Code>>
+
+)
+@
+
+\chapter{Chez Module Form}
+
+<<malloc.ss>>=
+<<License>>
+
+(module gc-malloc
+  (<<Exports>>)
+  (import scheme)
+
+<<Code>>
+
+)
+@
+
+\chaper{Vanilla Code Export}
+
+<<malloc.scm>>=
+<<License>>
+
+<<Code>>
+@
+
+\chapter{License}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; <Description of File>
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@
