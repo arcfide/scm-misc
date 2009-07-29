@@ -1,0 +1,218 @@
+\title {Foreign Value Binding Constructs}
+
+\chapter{Introduction}
+
+This library provides binding constructs designed to generate 
+foreign code and obtain results from them without forcing 
+the user to write their own stub files or compiling them 
+outside of compiling the scheme file. 
+
+\chapter{Binding Foreign Values}
+
+<<Exports>>=
+define-foreign-constants
+@
+
+\procsig{[[define-foreign-constants]]}
+{\var{includes} \var{bindings}} {}
+
+\noindent \var{includes} should be a list of include directives 
+that provide the necessary functions for the foreign code. 
+They should be literally entered, and not quoted, with strings, 
+unless they should be so wrapped in the C file.
+
+\var{bindings} should be a list of the form 
+(\var{name} \var{scheme return} \var{c return} \var{body lines} \ldots).
+\var{name} is the binding to which the result of the foreign procedure 
+will bound.
+\var{scheme return} is the return type of the foreign procedure 
+as used by [[foreign-procedure]].
+\var{c return} is a literal c return type.
+\var{body lines} are strings which represent the body of the 
+c procedure. Usually, these will be omitted for the simple cases.
+
+<<Binding Constructs>>=
+(define-syntax %define-foreign-constants
+  (lambda (x)
+    (syntax-case x ()
+      [(_ (name return) ...)
+       (with-syntax ([(c-name ...) 
+                      (map make-foreign-name 
+                        (map syntax->datum #'(name ...)))])
+         #'(begin
+             (define-constant name
+               (let ([get-val (foreign-procedure c-name () return)])
+                 (get-val)))
+             ...))])))
+
+(define-syntax define-foreign-constants
+  (syntax-rules x ()
+    [(_ (include ...)
+        (name scm-ret c-type c-ret body ...)
+        (name2 scm-ret2 c-type2 c-ret2 body2 ...)
+        ...)
+     (begin
+       (compile-and-load (include ...)
+         (name c-type c-ret body ...) 
+         (name2 c-type2 c-ret2 body2 ...) ...)
+       (%define-foreign-constants
+          (name scm-ret) (name2 scm-ret2) ...))]))
+@
+
+\chapter{Generating and Compiling the C File}
+
+We generate the C file using [[write-c-file]],
+which takes a filename, a list of include, 
+and a list of function data.
+
+<<Compiling>>=
+(meta define (write-c-file fname includes procs)
+  (with-output-to-file fname
+    (printf "~{#include ~s~%~}~%" includes)
+    (for-each 
+      (lambda (x)
+        (printf "~a ~a() {~%~{~a~%{}~%return (~a);~%}~%"
+          (cadr x)
+          (make-foreign-name (car x))
+          (cdddr x)
+          (caddr x)))
+      procs)))
+
+@
+
+We call the above from a syntax [[compile-and-load]] 
+to do the writing, compiling, and loading all at expansion time.
+
+<<Compiling>>=
+(define-syntax compile-and-load
+  (lambda (x)
+    (syntax-case x ()
+      [(_ (include ...) (name ret body ...) ...)
+       (let ([fname (make-c-fname)]) 
+         (write-c-file fname
+           (syntax->datum #'(include ...))
+           (syntax->datum #'((name ret body ...) ...)))
+         (load-shared-object
+           ((ffi-compiler) fname)))])))
+@
+
+\chapter{Utilities and Miscellaneous Helpers}
+
+[[make-foreign-name]] turns a scheme identifier (symbol) into a valid C 
+procedure name.
+
+<<Utilities>>=
+(meta define (make-foreign-name id)
+  (string-append
+    (collect-string (for c (in-string (symbol->string id)))
+      (case c
+        [(#\- #\: #\/ #\? #\>) #\_]
+        [else c]))
+    "_val"))
+
+@
+
+We also want to generate a C filename for compilation automatically. 
+
+<<Utilities>>=
+(meta define (build-c-fname)
+  (format "~a~a~a" (ffi-build-path) (directory-separator)
+    (collect-string (for c (in-string (format "~s" (gensym))))
+      (case c
+        [(#\space #\{ #\}) #\_]
+        [else c]))))
+@
+
+\chapter{Changing compiler options}
+
+<<Parameters>>=
+(define ffi-compiler
+  (make-parameter 
+    (lambda (fname)
+      (system
+        (format "cc -ansi -pedantic -O2 -fPIC -shared -o '~a.so' '~a'"
+          (path-root fname)
+          fname))
+      (string-append (path-root fname) ".so"))
+    (lambda (v)
+      (unless (procedure? v)
+        (error 'ffi-compiler "invalid compiler procedure" v))
+      v)))
+
+(define ffi-build-path
+  (make-parameter "."
+    (lambda (v)
+      (unless (string? v)
+        (error 'ffi-build-path "invalid path directory" v))
+      v)))
+@
+
+It will often be necessary to change the compiler 
+and the options to pass to the compiler.
+The paramters library can be used to control 
+the manner of the call. 
+The parameter should contain a unary procedure 
+which takes the file path of the c file to compile 
+and returns the path of the compiled object.
+
+
+\chapter{R6RS Forms}
+
+<<ffi-bind.sls>>=
+<<License>>
+
+(library (arcfide ffi-bind)
+  (export define-foreign-constants)
+  (import 
+    (scheme)
+    (arcfide extended-definitions))
+
+<<Utilities>>
+
+<<Compiling>>
+
+<<Binding Constructs>>
+
+)
+@
+
+<<ffi-bind/parameters.sls>>=
+<<License>>
+
+(library (arcfide ffi-bind parameters)
+  (export ffi-build-path ffi-compiler)
+  (import (rnrs base)
+    (rnrs control)
+    (only (scheme) 
+      make-parameter
+      system
+      format
+      path-root))
+
+<<Parameters>>
+
+)
+@
+
+\chapter{Licensing}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Foreign Value Binding Constructs
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@
