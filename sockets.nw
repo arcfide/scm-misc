@@ -86,7 +86,31 @@ Socket Addresses represent the destinations or origins of transmissions.
 All socket address data types are subtypes of [[socket-address]]es.
 
 <<Datatypes>>=
-(define-record-type socket-address)
+(define-record-type socket-address (fields converter))
+@
+
+\subsection{Converting Socket Addresses}
+
+\noindent When passing socket addresses to foreign procedures, 
+we must first convert these Scheme datatypes to a proper foreign socket 
+address structure.
+To do this, every child of the [[socket-address]] type 
+must provide a converter. 
+This should be defined by default, and it should not be necessary 
+for the user to specify the converter.
+The converter should accept the socket address type 
+for which it is defined as its sole argument. 
+It should then return a bytevector that represents the 
+foreign structure. 
+
+Internally, when we need to communicate with a foreign 
+procedure that expects a socket address, we use the following 
+wrapper.
+
+<<Datatypes>>=
+(define (socket-address->foreign sock-addr)
+  ((socket-address-converter sock-addr) sock-addr))
+
 @
 
 \subsection{UNIX Socket Addresses}
@@ -103,8 +127,20 @@ UNIX domain sockets have addresses that are just paths, which in turn are simply
 <<Datatypes>>=
 (define-record-type unix-address
   (parent socket-address)
+  (protocol
+    (lambda (n) (lambda (path) ((n unix-address->foreign) path))))
   (fields path))
+
 @
+
+The protocol uses [[unix-address->foreign]] as the converter 
+for a unix address.
+
+<<Datatypes>>=
+(define (unix-address->foreign addr) 0)
+
+@
+    
 
 \subsection{Internet Socket Addresses}
 
@@ -127,7 +163,18 @@ their addresses using network byte ordering.
 <<Datatypes>>=
 (define-record-type internet-address 
   (parent socket-address)
+  (protocol 
+    (lambda (n) (lambda (i p) ((n internet-address->foreign) i p))))
   (fields ip port))
+
+@
+
+Converting the internet-address to a foreign value is done 
+by [[internet-address->foreign]].
+
+<<Datatypes>>=
+(define (internet-address->foreign addr)
+  0)
 
 @
 
@@ -158,7 +205,7 @@ from the structure.
         (assert (< 0 port 65536))
         (make-internet-address ip port)))))
         
-(define internet-socket-address->string
+(define internet-address->string
   (lambda (addr)
     (let ([ip (internet-address-ip addr)]
           [port (internet-address-port addr)])
@@ -168,7 +215,7 @@ from the structure.
           [(4) "~{~d~^.~}:~d"]
           [(8) "~{~x~x~^:~}/~d"]
           [else (assertion-violationf 'internet-socket-address->string
-                  "~s is not a valid ip address")])
+                  "~s is not a valid ip address" ip)])
         (bytevector->u8-list ip)
         (internet-address-port addr)))))
 
@@ -428,11 +475,10 @@ is performed by the following function [[foreign->protocol-entry]].
 <<Code>>=
 (define bind-socket
   (lambda (sock addr)
-    (let-values ([(foreign-addr foreign-addr-len)
-                  (socket-address->foreign addr)])
+    (let ([foreign-addr (socket-address->foreign addr)])
       (let ([ret ($bind (socket-fd sock) 
                         foreign-addr 
-                        foreign-addr-len)])
+                        (bytevector-length foreign-addr))])
         (if (zero? ret)
             (void)
             (ffi-error 'bind-socket))))))
@@ -441,7 +487,7 @@ is performed by the following function [[foreign->protocol-entry]].
 
 <<FFI Procedures>>=
 (define $bind
-  (foreign-procedure "bind" (fixnum iptr fixnum) fixnum))
+  (foreign-procedure "bind" (fixnum string fixnum) fixnum))
 @
 
 \chapter{Handling FFI Errors}
