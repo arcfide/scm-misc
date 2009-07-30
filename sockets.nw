@@ -393,7 +393,7 @@ is performed by the following function [[foreign->protocol-entry]].
 (define (foreign->string x)
   (let ([v (make-bytevector ($strlen x))])
     ($strcpy v x)
-    (bytevector->string)))
+    (bytevector->string v (native-transcoder))))
 
 (define (foreign->integer x)
   (let ([v (make-bytevector size-of/integer)])
@@ -403,7 +403,7 @@ is performed by the following function [[foreign->protocol-entry]].
 (define (foreign->protocol-entry x)
   (make-protocol-entry
     (foreign->string (protoent-name x))
-    (collect-string (for i (up-from (protoent-aliases x) (to (protocol-value x))))
+    (collect-string (for i (up-from (protoent-aliases x) (to (protoent-value x))))
       (foreign->string i))
     (make-socket-protocol (foreign->integer (protocol-value x)))))
 
