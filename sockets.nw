@@ -134,10 +134,31 @@ UNIX domain sockets have addresses that are just paths, which in turn are simply
 @
 
 The protocol uses [[unix-address->foreign]] as the converter 
-for a unix address.
+for a unix address. 
+It returns a bytevector that is the equivalent layout
+of the sockaddr_un structure.
 
 <<Datatypes>>=
-(define (unix-address->foreign addr) 0)
+(define-foreign-constants (<sys/socket.h> <sys/un.h>)
+  (unix-max-path fixnum "int" "sizeof(x.sun_path)"
+   "struct sockaddr_un x;")
+  (size-of/family fixnum "int" "sizeof(sa_family_t)")
+  (af-unix fixnum "int" "AF_UNIX"))
+
+(define (unix-address->foreign addr) 
+  (let ([res (make-bytevector (+ size-of/family unix-max-path) 0)]
+        [opath (string->bytevector 
+                 (unix-address-path addr)
+                 (native-transcoder))])
+    (let ([opath-length (bytevector-length opath)])
+      (bytevector-uint-set! res 0 af-unix (native-endianness) 
+        size-of/family)
+      (bytevector-copy! opath 0 res size-of/family
+        (if (< unix-max-path opath-length)
+            (begin 
+              (warning 'unix-address->foreign "Path truncatation!")
+              unix-max-path)
+            opath-length)))))
 
 @
     
