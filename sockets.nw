@@ -274,9 +274,12 @@ socket-type/random
 <<Code>>=
 (define create-socket
   (lambda (domain type protocol)
-    (let ([ret ($socket (socket-domain-index domain)
-                        (socket-type-index type)
-                        (socket-protocol-index protocol))])
+    (assert (and (socket-domain? domain)
+                 (socket-type? type)
+                 (socket-protocol? protocol)))
+    (let ([ret ($socket (socket-constant-value domain)
+                        (socket-constant-value type)
+                        (socket-constant-value protocol))])
       (if (negative? ret)
           (ffi-error 'create-socket)
           (make-socket ret domain type protocol)))))
