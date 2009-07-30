@@ -116,7 +116,6 @@ wrapper.
 \subsection{UNIX Socket Addresses}
 
 <<Exports>>=
-unix-address
 unix-address?
 make-unix-address
 unix-address-path
@@ -167,7 +166,6 @@ of the sockaddr_un structure.
 \subsection{Internet Socket Addresses}
 
 <<Exports>>=
-internet-address
 internet-address?
 make-internet-address
 internet-address-ip
@@ -247,7 +245,6 @@ from the structure.
 
 <<Exports>>=
 make-address-info
-address-info
 address-info?
 address-info-domain
 address-info-type
