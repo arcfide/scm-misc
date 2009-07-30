@@ -138,12 +138,6 @@ It returns a bytevector that is the equivalent layout
 of the sockaddr_un structure.
 
 <<Datatypes>>=
-(define-foreign-constants (<sys/socket.h> <sys/un.h>)
-  (unix-max-path fixnum "int" "sizeof(x.sun_path)"
-   "struct sockaddr_un x;")
-  (size-of/family fixnum "int" "sizeof(sa_family_t)")
-  (af-unix fixnum "int" "AF_UNIX"))
-
 (define (unix-address->foreign addr) 
   (let ([res (make-bytevector (+ size-of/family unix-max-path) 0)]
         [opath (string->bytevector 
@@ -163,20 +157,19 @@ of the sockaddr_un structure.
 @
     
 
-\subsection{Internet Socket Addresses}
+\subsection{IPV4 Internet Socket Addresses}
 
 <<Exports>>=
 internet-address?
 make-internet-address
 internet-address-ip
 internet-address-port
-string->ipv4-address
+string->internet-address
 internet-address->string
 @
 
 Internet addresses are represented by an IP address and a port number.
-The IP address is a bytevector of either 32 or 128 bytes, depending on 
-whether the address is an IPv4 or IPv6 address.
+The IP address is a bytevector of 4 bytes.
 The port number is an integer. The bytevectors are expected to represent 
 their addresses using network byte ordering.
 
@@ -194,7 +187,18 @@ by [[internet-address->foreign]].
 
 <<Datatypes>>=
 (define (internet-address->foreign addr)
-  0)
+  (let ([res (make-bytevector size-of/addr-in 0)])
+    (bytevector-uint-set! res 0 af-inet 
+      (native-endianness) 
+      size-of/family)
+    (bytevector-uint-set! res size-of/family 
+      (internet-address-port addr)
+      (endianness big)
+      size-of/port)
+    (bytevector-copy! (internet-address-ip addr) 0
+      res (+ size-of/port size-of/family)
+      size-of/ip)
+    res))
 
 @
 
@@ -205,7 +209,7 @@ and we define procedures to extract the port and address information
 from the structure.
 
 <<Datatypes>>=
-(define string->ipv4-address
+(define string->internet-address
   (lambda (s)
     (define split
       (lambda (s)
@@ -230,12 +234,8 @@ from the structure.
     (let ([ip (internet-address-ip addr)]
           [port (internet-address-port addr)])
       (assert (< 0 port 65536))
-      (format 
-        (case (bytevector-length ip) 
-          [(4) "~{~d~^.~}:~d"]
-          [(8) "~{~x~x~^:~}/~d"]
-          [else (assertion-violationf 'internet-socket-address->string
-                  "~s is not a valid ip address" ip)])
+      (assert (= 4 (bytevector-length ip)))
+      (format "~{~d~^.~}:~d"
         (bytevector->u8-list ip)
         (internet-address-port addr)))))
 
@@ -277,48 +277,6 @@ Every constant type is a child of the [[socket-constant]] type.
 <<Datatypes>>=
 (define-record-type socket-constant (fields (immutable value)))
 @
-
-We also use the following convenience to help define these constants.
-
-<<Constants>>=
-(define-syntax define-socket-constants
-  (lambda (x)
-    (define (make-name-maker before after)
-      (lambda (name)
-        (datum->syntax name
-          (string->symbol
-            (string-append 
-              before
-              (symbol->string (syntax->datum name))
-              after)))))
-    (define make-type-name (make-name-maker "%" ""))
-    (define make-constructor (make-name-maker "make-" ""))
-    (define make-predicate (make-name-maker "" "?"))
-    (define (make-const-name name rest)
-      (datum->syntax rest
-        (string->symbol
-          (format "~a/~a" (syntax->datum name) (syntax->datum rest)))))
-    (syntax-case x ()
-      [(_ base-name (include ...) (sr cr)
-          (n1 cre1 b1 ...)
-          (n2 cre2 b2 ...) ...)
-       (with-syntax ([type-name (make-type-name #'base-name)]
-                     [constructor (make-constructor #'base-name)]
-                     [predicate (make-predicate #'base-name)]
-                     [(tmp1 tmp2 ...) (generate-temporaries #'(n1 n2 ...))]
-                     [(cn1 cn2 ...) 
-                      (map (lambda (x) (make-const-name #'base-name x))
-                        #'(n1 n2 ...))])
-         #`(begin
-             (define-foreign-constants (include ...)
-               (tmp1 sr cr cre1 b1 ...)
-               (tmp2 sr cr cre2 b2 ...) ...)
-             (define-record-type (type-name constructor predicate)
-               (parent socket-constant))
-             (define cn1 (constructor tmp1))
-             (define cn2 (constructor tmp2)) ...))])))
-
-@        
 
 \chapter{Socket Procedures}
 
@@ -363,22 +321,31 @@ socket-type/random
 the domain, type, and protocol of the socket.
 
 <<Constants>>=
-(define-socket-constants socket-domain
-  (<sys/types.h> <sys/socket.h>)
-  (fixnum "int")
-  (unix "AF_UNIX")
-  (local "AF_LOCAL")
-  (internet "AF_INET")
-  (internet-v6 "AF_INET6"))
+(define-record-type (%socket-domain make-socket-domain socket-domain?)
+  (parent socket-constant))
 
-(define-socket-constants socket-type
-  (<sys/types.h> <sys/socket.h>)
-  (fixnum "int")
-  (stream "SOCK_STREAM")
-  (datagram "SOCK_DGRAM")
-  (sequence-packet "SOCK_SEQPACKET")
-  (raw "SOCK_RAW")
-  (random "SOCK_RDM"))
+(define socket-domain/unix
+  (make-socket-domain %socket-domain/unix))
+(define socket-domain/local
+  (make-socket-domain %socket-domain/local))
+(define socket-domain/internet
+  (make-socket-domain %socket-domain/internet))
+(define socket-domain/internet-v6
+  (make-socket-domain %socket-domain/internet-v6))
+
+(define-record-type (%socket-type make-socket-type socket-type?)
+  (parent socket-constant))
+
+(define socket-type/stream
+  (make-socket-type %socket-type/stream))
+(define socket-type/datagram
+  (make-socket-type %socket-type/datagram))
+(define socket-type/sequence-packet
+  (make-socket-type %socket-type/sequence-packet))
+(define socket-type/raw
+  (make-socket-type %socket-type/raw))
+(define socket-type/random
+  (make-socket-type %socket-type/random))
 
 @
 
@@ -456,19 +423,6 @@ Converting the C structure to the [[protocol-entry]] form
 is performed by the following function [[foreign->protocol-entry]].
 
 <<Constants>>=
-(define-foreign-constants (<netdb.h>)
-  (protoent/name-offset fixnum "int" 
-   "(char *)&x.p_name - (char *)&x"
-   "struct protoent x;")
-  (protoent/aliases-offset fixnum "int" 
-   "(char *)&x.p_aliases - (char *)&x"
-   "struct protoent x;")
-  (protoent/proto-offset fixnum "int" 
-   "(char *)&x.p_proto - (char *)&x"
-   "struct protoent x;")
-  (size-of/integer fixnum "int" "sizeof(int)")
-  (size-of/pointer fixnum "int" "sizeof(char *)"))
-
 (define (protoent-name x) (+ x protoent/name-offset))
 (define (protoent-aliases x) (+ x protoent/aliases-offset))
 (define (protoent-value x) (+ x protoent/proto-offset))
@@ -553,6 +507,50 @@ in Scheme.
 (define $perror (foreign-procedure "perror" (string) void))
 @
 
+\chapter{Handling Foreign Constants}
+
+A number of structures have to be converted to and from foreign equivalents. 
+The following provides the necessary foreign constants expanded into 
+Scheme values at expansion time that are necessary to do these transformations. 
+
+<<Foreign Constants>>=
+(define-foreign-constants 
+  (<sys/types.h>
+   <sys/socket.h>
+   <sys/un.h>
+   <netinet/in.h>
+   <netdb.h>)
+  (af-unix fixnum "int" "AF_UNIX")
+  (af-inet fixnum "int" "AF_INET")
+  (protoent/name-offset fixnum "int" 
+   "(char *)&x.p_name - (char *)&x"
+   "struct protoent x;")
+  (protoent/aliases-offset fixnum "int" 
+   "(char *)&x.p_aliases - (char *)&x"
+   "struct protoent x;")
+  (protoent/proto-offset fixnum "int" 
+   "(char *)&x.p_proto - (char *)&x"
+   "struct protoent x;")
+  (size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
+  (size-of/family fixnum "int" "sizeof(sa_family_t)")
+  (size-of/integer fixnum "int" "sizeof(int)")
+  (size-of/ip fixnum "int" "sizeof(struct in_addr)")
+  (size-of/pointer fixnum "int" "sizeof(char *)")
+  (size-of/port fixnum "int" "sizeof(x.sin_port)"
+   "struct sockaddr_in x;")
+  (%socket-domain/unix fixnum "int" "AF_UNIX")
+  (%socket-domain/local fixnum "int" "AF_LOCAL")
+  (%socket-domain/internet fixnum "int" "AF_INET")
+  (%socket-domain/internet-v6 fixnum "int" "AF_INET6")
+  (%socket-type/stream fixnum "int" "SOCK_STREAM")
+  (%socket-type/datagram fixnum "int" "SOCK_DGRAM")
+  (%socket-type/sequence-packet fixnum "int" "SOCK_SEQPACKET")
+  (%socket-type/raw fixnum "int" "SOCK_RAW")
+  (%socket-type/random fixnum "int" "SOCK_RDM")
+  (unix-max-path fixnum "int" 
+   "sizeof(x.sun_path)" "struct sockaddr_un x;"))
+@
+
 \chapter{R6RS Form}
 
 <<sockets.sls>>=
@@ -568,6 +566,8 @@ in Scheme.
     (only (srfi :13) string-tokenize)
     (arcfide extended-definitions)
     (arcfide ffi-bind))
+
+<<Foreign Constants>>
 
 <<Datatypes>>
 
