@@ -260,7 +260,7 @@ the domain, type, and protocol of the socket.
   
   
 
-\procsig{[[bind-socket]]}{\var{socket} \var{socket address}}}}
+\procsig{[[bind-socket]]}{\var{socket} \var{socket address}}{}
 
 \noindent Corresponds directly to [[bind(2)]]. 
 
