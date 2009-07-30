@@ -92,16 +92,16 @@ All socket address data types are subtypes of [[socket-address]]es.
 \subsection{UNIX Socket Addresses}
 
 <<Exports>>=
-unix-socket-address
-unix-socket-address?
-make-unix-socket-address
-unix-socket-address-path
+unix-address
+unix-address?
+make-unix-address
+unix-address-path
 @
 
 UNIX domain sockets have addresses that are just paths, which in turn are simply strings. 
 
 <<Datatypes>>=
-(define-record-type unix-socket-address
+(define-record-type unix-address
   (parent socket-address)
   (fields path))
 @
@@ -109,13 +109,13 @@ UNIX domain sockets have addresses that are just paths, which in turn are simply
 \subsection{Internet Socket Addresses}
 
 <<Exports>>=
-internet-socket-address
-internet-socket-address?
-make-internet-socket-address
-internet-socket-address-ip
-internet-socket-address-port
+internet-address
+internet-address?
+make-internet-address
+internet-address-ip
+internet-address-port
 string->ipv4-address
-internet-socket-address->string
+internet-address->string
 @
 
 Internet addresses are represented by an IP address and a port number.
@@ -125,7 +125,7 @@ The port number is an integer. The bytevectors are expected to represent
 their addresses using network byte ordering.
 
 <<Datatypes>>=
-(define-record-type internet-socket-address 
+(define-record-type internet-address 
   (parent socket-address)
   (fields ip port))
 
@@ -160,8 +160,8 @@ from the structure.
         
 (define internet-socket-address->string
   (lambda (addr)
-    (let ([ip (internet-socket-address-ip addr)]
-          [port (internet-socket-address-port addr)])
+    (let ([ip (internet-address-ip addr)]
+          [port (internet-address-port addr)])
       (assert (< 0 port 65536))
       (format 
         (case (bytevector-length ip) 
@@ -170,7 +170,7 @@ from the structure.
           [else (assertion-violationf 'internet-socket-address->string
                   "~s is not a valid ip address")])
         (bytevector->u8-list ip)
-        (internet-socket-address-port addr)))))
+        (internet-address-port addr)))))
 
 @
 
@@ -239,12 +239,12 @@ We also use the following convenience to help define these constants.
        (with-syntax ([type-name (make-type-name #'base-name)]
                      [constructor (make-constructor #'base-name)]
                      [predicate (make-predicate #'base-name)]
-                     [(tmp1 tmp2 ...) (generate-temporaries #'(c1 c2 ...))]
+                     [(tmp1 tmp2 ...) (generate-temporaries #'(n1 n2 ...))]
                      [(cn1 cn2 ...) 
                       (map (lambda (x) (make-const-name #'base-name x))
                         #'(n1 n2 ...))])
          #`(begin
-             (define-foreign-values (include ...)
+             (define-foreign-constants (include ...)
                (tmp1 sr cr cre1 b1 ...)
                (tmp2 sr cr cre2 b2 ...) ...)
              (define-record-type (type-name constructor predicate)
@@ -262,7 +262,6 @@ We also use the following convenience to help define these constants.
 create-socket
 make-socket-domain
 make-socket-type
-make-socket-protocol
 socket-domain/unix socket-domain/local 
 socket-domain/internet socket-domain/internet-v6
 socket-type/stream socket-type/datagram
@@ -323,19 +322,17 @@ Dealing with protocol numbers is slightly different,
 since these entries are found in a database that can change, 
 rather than in some header file. 
 
-<<Constants>>=
+<<Datatypes>>=
 (define-record-type (%socket-protocol make-socket-protocol socket-protocol?)
   (parent socket-constant))
-
 @
 
 \noindent Protocols can be retreived by the [[getproto*]] family of 
 functions. 
 These functions return [[protocol-entry]] structures. 
 
-<<Constants>>=
+<<Datatypes>>=
 (define-record-type protocol-entry (fields name aliases value))
-
 @
 
 <<FFI Procedures>>=
@@ -378,7 +375,6 @@ is performed by the following function [[foreign->protocol-entry]].
 
 <<Constants>>=
 (define-foreign-constants (<netdb.h>)
-  (protoent/start
   (protoent/name-offset fixnum "int" 
    "(char *)&x.p_name - (char *)&x"
    "struct protoent x;")
@@ -419,7 +415,7 @@ is performed by the following function [[foreign->protocol-entry]].
 (define $strncpy
   (foreign-procedure "strncpy" (string iptr fixnum) void))
 (define $strlen
-  (foreign-procdure "strlen" (string) fixnum))
+  (foreign-procedure "strlen" (string) fixnum))
 @
 
 \procsig{[[bind-socket]]}{\var{socket} \var{socket address}}}}
@@ -460,11 +456,32 @@ in Scheme.
 (define $perror (foreign-procedure "perror" (string) void))
 @
 
-\chapter{Compiling the Library}
-
 \chapter{R6RS Form}
 
-\chapter{Chez Module Form}
+<<sockets.sls>>=
+<<License>>
+
+(library (arcfide sockets)
+  (export 
+    <<Exports>>)
+  (import 
+    (scheme)
+    (riastradh foof-loop)
+    (srfi :14)
+    (only (srfi :13) string-tokenize)
+    (arcfide extended-definitions)
+    (arcfide ffi-bind))
+
+<<Datatypes>>
+
+<<FFI Procedures>>
+
+<<Constants>>
+
+<<Code>>
+
+)
+@
 
 \chapter{Vanilla File}
 
