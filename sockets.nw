@@ -375,11 +375,15 @@ is performed by the following function [[foreign->protocol-entry]].
 
 <<Constants>>=
 (define-foreign-constants (<netdb.h>)
-  (protoent/name-offset fixnum "int" "&x.p_name - &x"
+  (protoent/start
+  (protoent/name-ptr fixnum "int" 
+   "(char *)&x.p_name - (char *)&x"
    "struct protoent x;")
-  (protoent/aliases-offset fixnum "int" "&x.p_aliases - &x"
+  (protoent/aliases-ptr fixnum "int" 
+   "(char *)&x.p_aliases - (char *)&x"
    "struct protoent x;")
-  (protoent/proto-offset fixnum "int" "&x.p_proto - &x"
+  (protoent/proto-ptr fixnum "int" 
+   "(char *)&x.p_proto - (char *)&x"
    "struct protoent x;")
   (size-of/integer fixnum "int" "sizeof(int)"))
 
