@@ -214,7 +214,7 @@ from the structure.
     (define split
       (lambda (s)
         (apply values
-          (string-tokenize
+          (string-tokenize s
             (char-set-complement (char-set #\:))))))
     (define s->ip
       (lambda (s)
@@ -296,17 +296,16 @@ socket-type/random
 \noindent [[create-socket]] corresponds to the [[socket(2)]] system call. 
 
 <<Code>>=
-(define create-socket
-  (lambda (domain type protocol)
-    (assert (and (socket-domain? domain)
-                 (socket-type? type)
-                 (socket-protocol? protocol)))
-    (let ([ret ($socket (socket-constant-value domain)
-                        (socket-constant-value type)
-                        (socket-constant-value protocol))])
-      (if (negative? ret)
-          (ffi-error 'create-socket)
-          (make-socket ret domain type protocol)))))
+(define (create-socket domain type protocol)
+  (assert (and (socket-domain? domain)
+               (socket-type? type)
+               (socket-protocol? protocol)))
+  (let ([ret ($socket (socket-constant-value domain)
+                      (socket-constant-value type)
+                      (socket-constant-value protocol))])
+    (if (negative? ret)
+        (ffi-error 'create-socket)
+        (make-socket ret domain type protocol))))
 
 @
 
@@ -472,21 +471,43 @@ bind-socket
 \noindent Corresponds directly to [[bind(2)]]. 
 
 <<Code>>=
-(define bind-socket
-  (lambda (sock addr)
-    (let ([foreign-addr (socket-address->foreign addr)])
-      (let ([ret ($bind (socket-fd sock) 
-                        foreign-addr 
-                        (bytevector-length foreign-addr))])
-        (if (zero? ret)
-            (void)
-            (ffi-error 'bind-socket))))))
+(define (bind-socket sock addr)
+  (let ([foreign-addr (socket-address->foreign addr)])
+    (let ([ret ($bind (socket-fd sock) 
+                      foreign-addr 
+                      (bytevector-length foreign-addr))])
+      (if (zero? ret)
+          (void)
+          (ffi-error 'bind-socket)))))
 
 @
 
 <<FFI Procedures>>=
 (define $bind
   (foreign-procedure "bind" (fixnum string fixnum) fixnum))
+@
+
+\procsig{[[listen-socket]]}{\var{socket} \var{queue length}}{}
+
+<<Exports>>=
+listen-socket
+@
+
+\noindent Corresponds to [[listen(2)]].
+
+<<Code>>=
+(define (listen-socket sock queue-length)
+  (let ([ret ($listen (socket-fd sock) queue-length)])
+    (case ret
+      [(0) (void)]
+      [(-1) (ffi-error 'listen)]
+      [else (error 'listen "Unknown return: ~s" ret)])))
+
+@
+
+<<FFI Procedures>>=
+(define $listen
+  (foreign-procedure "listen" (fixnum fixnum) fixnum))
 @
 
 \chapter{Handling FFI Errors}
