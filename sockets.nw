@@ -278,7 +278,10 @@ the domain, type, and protocol of the socket.
 
 @
 
-
+<<FFI Procedures>>=
+(define $bind
+  (foreign-procedure "bind" (fixnum iptr fixnum) fixnum))
+@
 
 \chapter{Handling FFI Errors}
 
