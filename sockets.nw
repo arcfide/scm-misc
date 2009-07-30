@@ -379,13 +379,13 @@ is performed by the following function [[foreign->protocol-entry]].
 <<Constants>>=
 (define-foreign-constants (<netdb.h>)
   (protoent/start
-  (protoent/name-ptr fixnum "int" 
+  (protoent/name-offset fixnum "int" 
    "(char *)&x.p_name - (char *)&x"
    "struct protoent x;")
-  (protoent/aliases-ptr fixnum "int" 
+  (protoent/aliases-offset fixnum "int" 
    "(char *)&x.p_aliases - (char *)&x"
    "struct protoent x;")
-  (protoent/proto-ptr fixnum "int" 
+  (protoent/proto-offset fixnum "int" 
    "(char *)&x.p_proto - (char *)&x"
    "struct protoent x;")
   (size-of/integer fixnum "int" "sizeof(int)"))
