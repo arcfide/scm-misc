@@ -378,7 +378,6 @@ is performed by the following function [[foreign->protocol-entry]].
 
 <<Constants>>=
 (define-foreign-constants (<netdb.h>)
-  (protoent/start
   (protoent/name-ptr fixnum "int" 
    "(char *)&x.p_name - (char *)&x"
    "struct protoent x;")
