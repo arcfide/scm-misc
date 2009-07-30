@@ -387,11 +387,11 @@ These functions return [[protocol-entry]] structures.
 
 <<FFI Procedures>>=
 (define $getprotoent 
-  (foreign-procedure "getprotoent" () iptr))
+  (foreign-procedure "getprotoent" () uptr))
 (define $getprotobyname 
-  (foreign-procedure "getprotobyname" (string) iptr))
+  (foreign-procedure "getprotobyname" (string) uptr))
 (define $getprotobynumber
-  (foreign-procedure "getprotobynumber" (fixnum) iptr))
+  (foreign-procedure "getprotobynumber" (fixnum) uptr))
 (define $setprotoent
   (foreign-procedure "setprotoent" (boolean) void))
 (define $endprotoent
@@ -434,7 +434,8 @@ is performed by the following function [[foreign->protocol-entry]].
   (protoent/proto-offset fixnum "int" 
    "(char *)&x.p_proto - (char *)&x"
    "struct protoent x;")
-  (size-of/integer fixnum "int" "sizeof(int)"))
+  (size-of/integer fixnum "int" "sizeof(int)")
+  (size-of/pointer fixnum "int" "sizeof(char *)"))
 
 (define (protoent-name x) (+ x protoent/name-offset))
 (define (protoent-aliases x) (+ x protoent/aliases-offset))
@@ -450,22 +451,30 @@ is performed by the following function [[foreign->protocol-entry]].
     ($strncpy v x size-of/integer)
     (bytevector-sint-ref v 0 (native-endianness) size-of/integer)))
 
+(define (foreign->pointer x)
+  (let ([v (make-bytevector size-of/pointer)])
+    ($strncpy v x size-of/pointer)
+    (bytevector-uint-ref v 0 (native-endianness) size-of/pointer)))
+
 (define (foreign->protocol-entry x)
   (make-protocol-entry
-    (foreign->string (protoent-name x))
-    (collect-string (for i (up-from (protoent-aliases x) (to (protoent-value x))))
-      (foreign->string i))
+    (foreign->string (foreign->pointer (protoent-name x)))
+    (collect-list 
+      ([for i  (up-from (foreign->pointer (protoent-aliases x))
+                        (by size-of/pointer))]
+       [until (zero? ($strlen i))])
+      (foreign->string (foreign->pointer i)))
     (make-socket-protocol (foreign->integer (protoent-value x)))))
 
 @
 
 <<FFI Procedures>>=
 (define $strcpy
-  (foreign-procedure "strcpy" (string iptr) void))
+  (foreign-procedure "strcpy" (string uptr) uptr))
 (define $strncpy
-  (foreign-procedure "strncpy" (string iptr fixnum) void))
+  (foreign-procedure "strncpy" (string uptr fixnum) uptr))
 (define $strlen
-  (foreign-procedure "strlen" (string) fixnum))
+  (foreign-procedure "strlen" (uptr) fixnum))
 @
 
 \procsig{[[bind-socket]]}{\var{socket} \var{socket address}}{}
