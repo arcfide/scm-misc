@@ -405,7 +405,7 @@ is performed by the following function [[foreign->protocol-entry]].
     (foreign->string (protoent-name x))
     (collect-string (for i (up-from (protoent-aliases x) (to (protoent-value x))))
       (foreign->string i))
-    (make-socket-protocol (foreign->integer (protocol-value x)))))
+    (make-socket-protocol (foreign->integer (protoent-value x)))))
 
 @
 
