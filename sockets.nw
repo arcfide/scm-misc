@@ -439,7 +439,10 @@ is performed by the following function [[foreign->protocol-entry]].
 
 @
 
-
+<<FFI Procedures>>=
+(define $bind
+  (foreign-procedure "bind" (fixnum iptr fixnum) fixnum))
+@
 
 \chapter{Handling FFI Errors}
 
