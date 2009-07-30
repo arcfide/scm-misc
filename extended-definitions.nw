@@ -5,6 +5,8 @@
 This library defines a set of definition constructs.
 This includes ways to define functions that ought to be integrated, 
 as well as constant values.
+[[define-auxilary-keywords]] is useful for explicitly exporting 
+auxilary syntax.
 
 \chapter{Definitions}
 
@@ -35,6 +37,16 @@ as well as constant values.
          (lambda (y)
            (syntax-case y ()
              [id (identifier? #'id) #`'#,(datum->syntax #'id x)]))))]))
+
+(define-syntax define-auxilary-keywords
+  (syntax-rules ()
+    [(_ aux ...)
+     (begin
+       (define-syntax aux
+         (lambda (x)
+           (errorf #f "misplaced aux keyword ~a"
+             (syntax->datum x))))
+       ...)]))
 @
 
 \chapter{R6RS Module}
@@ -44,7 +56,7 @@ as well as constant values.
 
 #!chezscheme
 (library (arcfide extended-definitions)
-  (export define-integrable define-constant)
+  (export define-integrable define-constant define-auxilary-keywords)
   (import (scheme))
 
 <<Definitions>>
