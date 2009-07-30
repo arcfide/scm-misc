@@ -158,7 +158,8 @@ of the sockaddr_un structure.
             (begin 
               (warning 'unix-address->foreign "Path truncatation!")
               unix-max-path)
-            opath-length)))))
+            opath-length)))
+    res))
 
 @
     
@@ -402,6 +403,19 @@ rather than in some header file.
 functions. 
 These functions return [[protocol-entry]] structures. 
 
+Generally, however, it is not necessary to use the protocol database, 
+and users generally use the default. 
+A special case constant is thus provided.
+
+<<Exports>>=
+socket-protocol/auto
+@
+
+<<Constants>>=
+(define socket-protocol/auto (make-socket-protocol 0))
+
+@
+
 <<Datatypes>>=
 (define-record-type protocol-entry (fields name aliases value))
 @
@@ -499,6 +513,10 @@ is performed by the following function [[foreign->protocol-entry]].
 @
 
 \procsig{[[bind-socket]]}{\var{socket} \var{socket address}}{}
+
+<<Exports>>=
+bind-socket
+@
 
 \noindent Corresponds directly to [[bind(2)]]. 
 
