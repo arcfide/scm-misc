@@ -113,6 +113,21 @@ wrapper.
 
 @
 
+If we need to convert an unknown address type into a 
+Scheme data structure, we use the following.
+
+<<Datatypes>>=
+(define (foreign->socket-address domain addr addr-len)
+  ((socket-domain-extractor domain) addr addr-len))
+
+@
+
+When constructing a bytevector container for foreign code, 
+it is useful to know the size a structure should be before 
+creating it. This is defined as [[foreign-address-size]], 
+but it is defined as part of the record definition for 
+socket domains below.
+
 \subsection{UNIX Socket Addresses}
 
 <<Exports>>=
@@ -155,7 +170,22 @@ of the sockaddr_un structure.
     res))
 
 @
-    
+
+Converting the foreign address back to a UNIX address 
+can be done by grabbing the vector elements of the range from 
+the start of the path to the first null. 
+
+<<Datatypes>>=
+(define (foreign->unix-address addr addr-len)
+  (let* ([path-len (- (bytevector-sint-ref addr-len 0 
+                        (native-endianness) 
+                        size-of/integer) 
+                      size-of/family)]
+         [path (make-bytevector path-len)])
+    (bytevector-copy! addr size-of/family path 0 path-len)
+    (make-unix-address (bytevector->string path (native-transcoder)))))
+
+@
 
 \subsection{IPV4 Internet Socket Addresses}
 
@@ -199,6 +229,18 @@ by [[internet-address->foreign]].
       res (+ size-of/port size-of/family)
       size-of/ip)
     res))
+
+@
+
+Converting back is pretty easy.
+
+<<Datatypes>>=
+(define (foreign->internet-address addr addr-len)
+  (let ([ip (make-bytevector 4)]
+        [ipi (+ size-of/family size-of/port)])
+    (bytevector-copy! addr ipi ip 0 4)
+    (make-internet-address ip
+      (bytevector-uint-ref addr size-of/family (endianness big) size-of/port))))
 
 @
 
@@ -287,7 +329,7 @@ create-socket
 make-socket-domain
 make-socket-type
 socket-domain/unix socket-domain/local 
-socket-domain/internet socket-domain/internet-v6
+socket-domain/internet
 socket-type/stream socket-type/datagram
 socket-type/sequence-packet socket-type/raw
 socket-type/random 
@@ -319,19 +361,38 @@ socket-type/random
 [[create-socket]] uses three different constant types for 
 the domain, type, and protocol of the socket.
 
+Socket domains determine the family to which the socket belongs. 
+They also must embed an extracter and a size value so that 
+converting to and from foreign values can be done without 
+explicitly knowing the type of the domain beforehand.
+
 <<Constants>>=
 (define-record-type (%socket-domain make-socket-domain socket-domain?)
-  (parent socket-constant))
+  (parent socket-constant)
+  (fields 
+    (immutable extractor socket-domain-extractor)
+    (immutable addr-size foreign-address-size)))
 
 (define socket-domain/unix
-  (make-socket-domain %socket-domain/unix))
+  (make-socket-domain %socket-domain/unix
+    foreign->unix-address
+    size-of/addr-un))
 (define socket-domain/local
-  (make-socket-domain %socket-domain/local))
+  (make-socket-domain %socket-domain/local
+    foreign->unix-address
+    size-of/addr-un))
 (define socket-domain/internet
-  (make-socket-domain %socket-domain/internet))
-(define socket-domain/internet-v6
-  (make-socket-domain %socket-domain/internet-v6))
+  (make-socket-domain %socket-domain/internet
+    foreign->internet-address
+    size-of/addr-in))
 
+@
+
+Socket types determine the nature of the data stream that 
+transmits over the socket. See the [[socket(2)]] man page for 
+more details. 
+
+<<Constants>>=
 (define-record-type (%socket-type make-socket-type socket-type?)
   (parent socket-constant))
 
@@ -510,6 +571,42 @@ listen-socket
   (foreign-procedure "listen" (fixnum fixnum) fixnum))
 @
 
+\procsig{[[accept-socket]]}{\var{socket}}{\var{socket} \var{address}}
+
+<<Exports>>=
+accept-socket
+@
+
+\noindent Corresponds to [[accept(2)]], but returns both the socket 
+and the address as its return values.
+
+<<Code>>=
+(define (accept-socket sock)
+  (let ([size (foreign-address-size (socket-domain sock))])
+    (let ([addr (make-bytevector size 0)]
+          [addr-len (make-bytevector size-of/integer 0)])
+      (bytevector-sint-set! addr-len 0 size 
+        (native-endianness) 
+        size-of/integer)
+      (let ([ret ($accept (socket-fd sock) addr addr-len)])
+        (if (negative? ret) 
+            (ffi-error 'accept)
+            (values (make-socket ret
+                      (socket-domain sock)
+                      (socket-type sock)
+                      (socket-protocol sock))
+              (foreign->socket-address 
+                (socket-domain sock) 
+                addr 
+                addr-len)))))))
+
+@
+
+<<FFI Procedures>>=
+(define $accept
+  (foreign-procedure "accept" (fixnum string string) fixnum))
+@
+
 \chapter{Handling FFI Errors}
 
 Error handling for procedures that properly set [[errno]] can be handled 
@@ -553,6 +650,7 @@ Scheme values at expansion time that are necessary to do these transformations.
    "(char *)&x.p_proto - (char *)&x"
    "struct protoent x;")
   (size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
+  (size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
   (size-of/family fixnum "int" "sizeof(sa_family_t)")
   (size-of/integer fixnum "int" "sizeof(int)")
   (size-of/ip fixnum "int" "sizeof(struct in_addr)")
