@@ -150,7 +150,7 @@ UNIX domain sockets have addresses that are just paths, which in turn are simply
 The protocol uses [[unix-address->foreign]] as the converter 
 for a unix address. 
 It returns a bytevector that is the equivalent layout
-of the sockaddr_un structure.
+of the sockaddr\_un structure.
 
 <<Datatypes>>=
 (define (unix-address->foreign addr) 
