@@ -109,7 +109,7 @@ procedure name.
   (string-append
     (collect-string (for c (in-string (symbol->string id)))
       (case c
-        [(#\- #\: #\/ #\? #\> #\% #\$ #\=) #\_]
+        [(#\- #\: #\/ #\? #\> #\% #\$ #\= #\&) #\_]
         [else c]))
     "_val"))
 
