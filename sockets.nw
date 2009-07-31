@@ -628,6 +628,28 @@ connect-socket
   (foreign-procedure "connect" (fixnum string fixnum) fixnum))
 @
 
+\procsig{[[close-socket]]}{\var{socket}}{}
+
+<<Exports>>=
+close-socket
+@
+
+Equivalent to [[close(2)]].
+
+<<Code>>=
+(define (close-socket sock)
+  (case ($close (socket-fd sock))
+    [(0) (void)]
+    [(-1) (ffi-error 'close)]
+    [else (error 'close-socket "Unknown foreign return value.")]))
+
+@
+
+<<FFI Procedures>>=
+(define $close
+  (foreign-procedure "close" (fixnum) fixnum))
+@
+
 \chapter{Handling FFI Errors}
 
 Error handling for procedures that properly set [[errno]] can be handled 
