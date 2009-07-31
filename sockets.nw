@@ -649,6 +649,45 @@ Equivalent to [[close(2)]].
 (define $close
   (foreign-procedure "close" (fixnum) fixnum))
 @
+\procsig{[[shutdown-socket]]}{\var{socket} \var{method}}{}
+
+<<Exports>>=
+shutdown-socket
+shutdown-method?
+make-shutdown-method
+shutdown-method/read shutdown-method/write shutdown-method/read&write
+@
+
+Corresponds to [[shutdown(s)]].
+
+<<Code>>=
+(define (shutdown-socket sock how)
+  (assert (shutdown-method? how))
+  (case ($shutdown (socket-fd sock) (socket-constant-value how))
+    [(0) (void)]
+    [(-1) (ffi-error 'shutdown)]
+    [else (error 'shutdown-socket "Unknown foreign return value.")]))
+
+@
+
+<<FFI Procedures>>=
+(define $shutdown
+  (foreign-procedure "shutdown" (fixnum fixnum) fixnum))
+@
+
+The shutdown method is a constant value defined as follows.
+
+<<Constants>>=
+(define-record-type shutdown-method (parent socket-constant))
+
+(define shutdown-method/read 
+  (make-shutdown-method %shutdown/read))
+(define shutdown-method/write 
+  (make-shutdown-method %shutdown/write))
+(define shutdown-method/read&write
+  (make-shutdown-method %shutdown/read&write))
+
+@
 
 \chapter{Handling FFI Errors}
 
@@ -700,6 +739,9 @@ Scheme values at expansion time that are necessary to do these transformations.
   (size-of/pointer fixnum "int" "sizeof(char *)")
   (size-of/port fixnum "int" "sizeof(x.sin_port)"
    "struct sockaddr_in x;")
+  (%shutdown/write fixnum "int" "SHUT_RD")
+  (%shutdown/read fixnum "int" "SHUT_WR")
+  (%shutdown/read&write fixnum "int" "SHUT_RDWR")
   (%socket-domain/unix fixnum "int" "AF_UNIX")
   (%socket-domain/local fixnum "int" "AF_LOCAL")
   (%socket-domain/internet fixnum "int" "AF_INET")
