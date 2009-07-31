@@ -689,6 +689,102 @@ The shutdown method is a constant value defined as follows.
 
 @
 
+\procsig{[[socket->port]]}{\var{socket}}{}
+
+<<Exports>>=
+socket->port
+@
+
+Creates a binary input/ouput port from the socket with the 
+socket field descriptor as its id. 
+
+{\it XXX: There must be a more efficient way to implement the 
+[[read!]] and [[write!]] procedures here.}
+
+<<Code>>=
+(define (socket->port sock)
+  (make-custom-binary-input/output-port
+    (format "Socket ~a" (socket-fd sock))
+    <<Read Socket>>
+    <<Write Socket>>
+    #f #f 
+    <<Close Socket>>))
+    
+@
+
+We use the [[read(2)]] procedure to handle the reading. 
+Since the system [[read]] procedure does not take a position, 
+whereas the R6RS [[read!]] procedure is expected to take a 
+position, we have to use another intermediate vector, for the 
+moment. 
+
+<<Read Socket>>=
+(lambda (bv s c)
+  (let ([buf (make-bytevector c)])
+    (let ([res ($read (socket-fd sock) buf c)])
+      (bytevector-copy! buf 0 bv s res)
+      res)))
+@
+
+<<FFI Procedures>>=
+(define $read
+  (foreign-procedure "read" (fixnum string fixnum) fixnum))
+@
+
+Writing works in mostly the same way, 
+except that the R6RS [[write!]] differs from the normal 
+[[write(2)]] system call because a zero count write sends 
+EOF to the file. 
+
+<<Write Socket>>=
+(lambda (bv s c)
+  (if (zero? c)
+      (let ([res ($write (socket-fd sock)
+                   (bytevector (char->integer (eof-character)))
+                   1)])
+        (cond
+          [(= -1 res) (ffi-error 'write)]
+          [(negative? res) 
+           (error 'socket-write "Unknown foreign return value.")]
+          [else res]))
+      (let ([buf (make-bytevector c)])
+        (bytevector-copy! bv s buf 0 c)
+        (let ([res ($write (socket-fd sock) buf c)])
+          (cond
+            [(= -1 res) (ffi-error 'write)]
+            [(negative? res)
+             (error 'socket-write "Unknown foreign return value.")]
+            [else res])))))
+@
+
+<<FFI Procedures>>=
+(define $write
+  (foreign-procedure "write" (fixnum string fixnum) fixnum))
+@
+
+We use the [[eof-character]] parameter to decide what end-of-file 
+character to send.
+
+<<Exports>>=
+eof-character
+@
+
+<<Code>>=
+(define eof-character
+  (make-parameter #\x4
+    (lambda (c)
+      (unless (char? c)
+        (error 'eof-character "Invalid character" c))
+      c)))
+
+@
+
+Closing a socket is the simple matter of using [[close-socket]].
+
+<<Close Socket>>=
+(lambda () (close-socket sock))
+@
+
 \chapter{Handling FFI Errors}
 
 Error handling for procedures that properly set [[errno]] can be handled 
@@ -793,7 +889,7 @@ This sockets library is distributed under an ISC License.
 <<License>>=
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Sockets Support for Chez
-;;;; Version 1.0 RC1
+;;;; Version 1.1 Alpha
 ;;;
 ;;; Copyright (c) 2008 - 2009 Aaron Hsu <arcfide@sacrideo.us>
 ;;; 
