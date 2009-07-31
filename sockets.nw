@@ -607,6 +607,27 @@ and the address as its return values.
   (foreign-procedure "accept" (fixnum string string) fixnum))
 @
 
+\procsig{[[connect-socket]]}{\var{socket} \var{address}}{}
+
+<<Exports>>=
+connect-socket
+@
+
+<<Code>>=
+(define (connect-socket sock addr)
+  (let ([fa (socket-address->foreign addr)])
+    (case ($connect (socket-fd sock) fa (bytevector-length fa))
+      [(0) (void)]
+      [(-1) (ffi-error 'connect)]
+      [else (error 'connect-socket "Unknown foreign return value.")])))
+
+@
+
+<<FFI Procedures>>=
+(define $connect
+  (foreign-procedure "connect" (fixnum string fixnum) fixnum))
+@
+
 \chapter{Handling FFI Errors}
 
 Error handling for procedures that properly set [[errno]] can be handled 
