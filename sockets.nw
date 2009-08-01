@@ -171,6 +171,19 @@ of the sockaddr\_un structure.
 
 @
 
+<<FFI Constants>>=
+(af-unix fixnum "int" "AF_UNIX")
+(size-of/family fixnum "int" "sizeof(sa_family_t)")
+(unix-max-path fixnum "int" 
+   "sizeof(x.sun_path)" "struct sockaddr_un x;")
+@
+
+<<FFI Headers>>=
+<sys/types.h>
+<sys/socket.h>
+<sys/un.h>
+@
+
 Converting the foreign address back to a UNIX address 
 can be done by grabbing the vector elements of the range from 
 the start of the path to the first null. 
@@ -185,6 +198,10 @@ the start of the path to the first null.
     (bytevector-copy! addr size-of/family path 0 path-len)
     (make-unix-address (bytevector->string path (native-transcoder)))))
 
+@
+
+<<FFI Constants>>=
+(size-of/integer fixnum "int" "sizeof(int)")
 @
 
 \subsection{IPV4 Internet Socket Addresses}
@@ -230,6 +247,18 @@ by [[internet-address->foreign]].
       size-of/ip)
     res))
 
+@
+
+<<FFI Constants>>=
+(size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
+(size-of/port fixnum "int" "sizeof(x.sin_port)"
+   "struct sockaddr_in x;")
+(size-of/ip fixnum "int" "sizeof(struct in_addr)")
+(af-inet fixnum "int" "AF_INET")
+@
+
+<<FFI Headers>>=
+<netinet/in.h>
 @
 
 Converting back is pretty easy.
@@ -388,6 +417,14 @@ explicitly knowing the type of the domain beforehand.
 
 @
 
+<<FFI Constants>>=
+(%socket-domain/unix fixnum "int" "AF_UNIX")
+(%socket-domain/local fixnum "int" "AF_LOCAL")
+(%socket-domain/internet fixnum "int" "AF_INET")
+(%socket-domain/internet-v6 fixnum "int" "AF_INET6")
+(size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
+@
+
 Socket types determine the nature of the data stream that 
 transmits over the socket. See the [[socket(2)]] man page for 
 more details. 
@@ -407,6 +444,14 @@ more details.
 (define socket-type/random
   (make-socket-type %socket-type/random))
 
+@
+
+<<FFI Constants>>=
+(%socket-type/stream fixnum "int" "SOCK_STREAM")
+(%socket-type/datagram fixnum "int" "SOCK_DGRAM")
+(%socket-type/sequence-packet fixnum "int" "SOCK_SEQPACKET")
+(%socket-type/raw fixnum "int" "SOCK_RAW")
+(%socket-type/random fixnum "int" "SOCK_RDM")
 @
 
 <<Exports>>=
@@ -522,6 +567,24 @@ is performed by the following function [[foreign->protocol-entry]].
 (define $strlen
   (foreign-procedure "strlen" (uptr) fixnum))
 @
+
+<<FFI Constants>>=
+(size-of/pointer fixnum "int" "sizeof(char *)")
+(protoent/name-offset fixnum "int" 
+ "(char *)&x.p_name - (char *)&x"
+ "struct protoent x;")
+(protoent/aliases-offset fixnum "int" 
+ "(char *)&x.p_aliases - (char *)&x"
+ "struct protoent x;")
+(protoent/proto-offset fixnum "int" 
+ "(char *)&x.p_proto - (char *)&x"
+ "struct protoent x;")
+@
+
+<<FFI Headers>>=
+<netdb.h>
+@
+
 
 \procsig{[[bind-socket]]}{\var{socket} \var{socket address}}{}
 
@@ -689,6 +752,12 @@ The shutdown method is a constant value defined as follows.
 
 @
 
+<<FFI Constants>>=
+(%shutdown/write fixnum "int" "SHUT_RD")
+(%shutdown/read fixnum "int" "SHUT_WR")
+(%shutdown/read&write fixnum "int" "SHUT_RDWR")
+@
+
 \procsig{[[socket->port]]}{\var{socket}}{}
 
 <<Exports>>=
@@ -785,6 +854,164 @@ Closing a socket is the simple matter of using [[close-socket]].
 (lambda () (close-socket sock))
 @
 
+\procsig{[[send-to-socket]]}{\var{socket} \var{buffer} \var{address}}{\var{bytes sent}}
+
+<<Exports>>=
+send-to-socket
+@
+
+Corresponds to the [[sendto(2)]] system call.
+
+<<Code>>=
+(define (send-to-socket sock buf addr . flags)
+  (assert (forall send-to-option? flags))
+  (let* ([fa (socket-address->foreign addr)]
+         [fa-len (bytevector-length fa)]
+         [res ($sendto (socket-fd sock) 
+                buf (bytevector-length buf)
+                (fold-left 
+                  (lambda (s v) 
+                    (fxior s (socket-constant-value v)))  
+                  0 
+                  flags)
+                fa fa-len)])
+    (cond
+      [(= -1 res) (ffi-error 'sendto)]
+      [(negative? res)
+       (error 'send-to-socket "Unknown foreign return value.")]
+      [else res])))
+
+@
+
+<<FFI Procedures>>=
+(define $sendto
+  (foreign-procedure "sendto" 
+    (fixnum string fixnum fixnum string fixnum) 
+    fixnum))
+@
+
+There are a number of system depended flags
+that can be passed to [[send-to-socket]],
+but only those reasonably portable ones are defined here.
+
+<<Exports>>=
+send-to/dont-route send-to/out-of-band
+make-send-to-option
+@
+
+<<Constants>>=
+(define-record-type send-to-option (parent socket-constant))
+
+(define send-to/dont-route
+  (make-send-to-option %send-to/dont-route))
+(define send-to/out-of-band
+  (make-send-to-option %send-to/out-of-band))
+
+@
+
+<<FFI Constants>>=
+(%msg/dont-route fixnum "int" "MSG_DONTROUTE")
+(%msg/out-of-band fixnum "int" "MSG_OOB")
+@
+
+\procsig{[[receive-from-socket]]}
+  {\var{socket} \var{count} . \var{flags}}
+  {\var{received data} \var{sender address}}
+
+<<Exports>>=
+receive-from-socket
+@
+
+Corresponds to the system call [[recvfrom(2)]].
+
+{\it XXX: We are doing multiple bytevector copies, and I can't 
+see this as a good thing.}
+
+<<Code>>=
+(define (receive-from-socket sock c . flags)
+  (assert (forall receive-from-option? flags))
+  (let ([buf (make-bytevector count)]
+        [addr-len (foreign-address-size (socket-domain sock))])
+    (let* ([addr (make-bytevector addr-len)]
+           [addr-len-buf (make-bytevector size-of/integer)])
+      (bytevector-sint-set! addr-len-buf 0 addr-len 
+        (native-endianness) size-of/integer)
+      (let ([n ($recvfrom (socket-fd sock) buf c 
+                 (fold-left
+                   (lambda (s v)
+                     (fxior s (socket-constant-value v)))
+                   0
+                   flags)
+                 addr addr-len)])
+        (cond
+          [(= -1 n) (ffi-error 'recvfrom)]
+          [(negative? n)
+           (error 'receive-from-socket 
+             "Unknown foreign return value.")]
+          [else
+           (values 
+             (if (< n c)
+                 (let ([res (make-bytevector n)])
+                   (bytevector-copy! buf 0 res 0 n)
+                   res)
+                 buf)
+             (foreign->socket-address (socket-domain sock) 
+               addr addr-len-buf))])))))
+
+@
+
+<<FFI Procedures>>=
+(define $recvfrom
+  (foreign-procedure "recvfrom" 
+    (fixnum string fixnum fixnum string string)
+    fixnum))
+@
+
+A few flags are pre-defined.
+
+<<Exports>>=
+receive-from/out-of-band receive-from/peek 
+receive-from/wait-all receive-from/dontwait
+make-receive-from-option
+@
+
+<<Constants>>=
+(define-record-type receive-from-option (parent socket-constant))
+
+(define receive-from/out-of-band
+  (make-receive-from-option %msg/out-of-band))
+(define receive-from/peek
+  (make-receive-from-option %msg/peek))
+(define receive-from/wait-all
+  (make-receive-from-option %msg/wait-all))
+(define receive-from/dont-wait
+  (make-receive-from-option %msg/dont-wait))
+
+@
+
+<<FFI Constants>>=
+(%msg/peek fixnum "int" "MSG_PEEK")
+(%msg/wait-all fixnum "int" MSG_WAITALL")
+(%msg/dont-wait fixnum "int" MSG_DONTWAIT")
+@
+
+\procsig{[[socket-maximum-connections]]}{}{\var{integer}}
+
+<<Exports>>=
+socket-maximum-connections
+@
+
+This is a procedure for accessing the [[SOMAXCONN]] value.
+
+<<Code>>=
+(define (socket-maximum-connections)
+  %somaxconn)
+@
+
+<<FFI Constants>>=
+(%somaxconn fixnum "int" "SOMAXCONN")
+@
+
 \chapter{Handling FFI Errors}
 
 Error handling for procedures that properly set [[errno]] can be handled 
@@ -811,44 +1038,8 @@ Scheme values at expansion time that are necessary to do these transformations.
 
 <<Foreign Constants>>=
 (define-foreign-constants 
-  (<sys/types.h>
-   <sys/socket.h>
-   <sys/un.h>
-   <netinet/in.h>
-   <netdb.h>)
-  (af-unix fixnum "int" "AF_UNIX")
-  (af-inet fixnum "int" "AF_INET")
-  (protoent/name-offset fixnum "int" 
-   "(char *)&x.p_name - (char *)&x"
-   "struct protoent x;")
-  (protoent/aliases-offset fixnum "int" 
-   "(char *)&x.p_aliases - (char *)&x"
-   "struct protoent x;")
-  (protoent/proto-offset fixnum "int" 
-   "(char *)&x.p_proto - (char *)&x"
-   "struct protoent x;")
-  (size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
-  (size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
-  (size-of/family fixnum "int" "sizeof(sa_family_t)")
-  (size-of/integer fixnum "int" "sizeof(int)")
-  (size-of/ip fixnum "int" "sizeof(struct in_addr)")
-  (size-of/pointer fixnum "int" "sizeof(char *)")
-  (size-of/port fixnum "int" "sizeof(x.sin_port)"
-   "struct sockaddr_in x;")
-  (%shutdown/write fixnum "int" "SHUT_RD")
-  (%shutdown/read fixnum "int" "SHUT_WR")
-  (%shutdown/read&write fixnum "int" "SHUT_RDWR")
-  (%socket-domain/unix fixnum "int" "AF_UNIX")
-  (%socket-domain/local fixnum "int" "AF_LOCAL")
-  (%socket-domain/internet fixnum "int" "AF_INET")
-  (%socket-domain/internet-v6 fixnum "int" "AF_INET6")
-  (%socket-type/stream fixnum "int" "SOCK_STREAM")
-  (%socket-type/datagram fixnum "int" "SOCK_DGRAM")
-  (%socket-type/sequence-packet fixnum "int" "SOCK_SEQPACKET")
-  (%socket-type/raw fixnum "int" "SOCK_RAW")
-  (%socket-type/random fixnum "int" "SOCK_RDM")
-  (unix-max-path fixnum "int" 
-   "sizeof(x.sun_path)" "struct sockaddr_un x;"))
+  (<<FFI Headers>>)
+  <<FFI Constants>>)
 @
 
 \chapter{R6RS Form}
