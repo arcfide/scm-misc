@@ -72,7 +72,7 @@ and a list of function data.
       (printf "~{#include ~s~%~}~%" includes)
       (for-each 
         (lambda (x)
-          (printf "~a ~a() {~%~{~a~%~}~%return (~a);~%}~%"
+          (printf "~a ~a() {~%~{~a~%~}~%return (~a);~%}~%~%"
             (cadr x)
             (make-foreign-name (car x))
             (cdddr x)
