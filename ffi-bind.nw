@@ -133,7 +133,7 @@ We also want to generate a C filename for compilation automatically.
   (make-parameter 
     (lambda (fname)
       (system
-        (format "cc -ansi -pedantic -O2 -fPIC -shared -o '~a.so' '~a'"
+        (format "cc -Wall -pedantic -O2 -fPIC -shared -o '~a.so' '~a'"
           (path-root fname)
           fname))
       (string-append (path-root fname) ".so"))
