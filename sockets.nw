@@ -33,14 +33,10 @@ The following is a development to-do list of intended features
 and possible improvements.
 
 \orderedlist
-\li Error checking and handling
 \li Non-blocking Sockets
 \li Sockets Options
-\li Remove Magic Constants from lookup\_proto
-\li Remove excess amount of conversion functions
-\li Switch to or make UNIX another optional name for LOCAL
 \li Consider IP field name replaced with ADDRESS
-\li COnsider name change of RECEIVE-FROM-SOCKET
+\li Consider name change of RECEIVE-FROM-SOCKET
 \li Consider name change of ACCEPT-SOCKET
 \li Better handling of paths in UNIX sockets
 \endorderedlist
