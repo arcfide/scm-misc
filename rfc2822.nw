@@ -64,9 +64,8 @@ with streams of characters.
 \section{Character Classes (RFC 2822 3.2.1)}
 
 <<Imports>>=
-(import srfi-14)
-(import parser-combinators)
-(import text-parser-combinators)
+(srfi :14)
+(riastradh parscheme)
 @
 
 The RFC defines a series of parsers for low level character classing. 
