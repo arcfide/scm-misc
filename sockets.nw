@@ -333,6 +333,189 @@ structures that specify different means by which a host may be contacted.
 The [[address]] field of an [[address-info]] record should be an 
 internet-socket-address.
 
+\procsig{[[get-address-info]]}{\var{node} \var{service}
+  [\var{domain} \var{type} \var{protocol}] 
+  [\var{flags} \ldots]}{\var{List of addresses}
+
+<<Exports>>=
+get-address-info
+@
+
+Corresponds to [[getaddrinfo(2)]]. The optional domain, type, and protocol 
+may be false or may correspond to some form of socket options. They are 
+used as hints for [[get-address-info]] in the same manner as the 
+corresponding hints structure for [[getaddrinfo(2)]]. The flags also 
+work in the same way, but they must all be values for which 
+[[address-info-option?]] returns true when applied to them.
+
+<<Code>>=
+(define get-address-info
+  (case-lambda
+    [(node service)
+     (%get-address-info node service #f #f #f '())]
+    [(node service dom type proto . flags)
+     (%get-address-info node service dom type proto flags)]))
+
+(define (%get-address-info node service domain type protocol flags)
+  (assert (or (not domain) (socket-domain? domain)))
+  (assert (or (not type) (socket-type? type)))
+  (assert (or (not protocol) (socket-protocol? protocol)))
+  (assert (for-all address-info-option? flags))
+  (let ([addr-list-ptr (make-bytevector size-of/pointer)]
+        [hints (make-addrinfo-hints domain type protocol flags)])
+    (let ([res ($getaddrinfo node service hints addr-list-ptr)])
+      (if (zero? res)
+          (foreign->address-info-list addr-list-ptr)
+          (errorf 'get-address-info
+            "getaddrinfo() failed with code ~d: ~a"
+            res
+            ($gai_strerror res))))))
+
+@
+
+<<FFI Procedures>>=
+(define $getaddrinfo
+  (foreign-procedure "getaddrinfo" (string string string string) fixnum))
+(define $gai_strerror
+  (foreign-procedure "gai_strerror" (fixnum) string))
+@
+
+There are a few built in address info options.
+
+<<Constants>>=
+(define-record-type address-info-option (parent socket-constant))
+
+(define address-info/canon-name
+  (make-address-info-option %ai/canonname))
+(define address-info/numeric-host
+  (make-address-info-option %ai/numerichost))
+(define address-info/passive
+  (make-address-info-option %ai/passive))
+@
+
+<<FFI Constants>>=
+(%ai/canonname fixnum "int" "AI_CANONNAME")
+(%ai/numerichost fixnum "int" "AI_NUMERICHOST")
+(%ai/passive fixnum "int" "AI_PASSIVE")
+@
+
+[[make-addrinfo-hints converts a domain, type, protocol, 
+and set of flags into a [[struct addrinfo]] bytevector.
+
+<<Code>>=
+(define (make-addrinfo-hints domain type protocol flags)
+  (let ([res (make-bytevector size-of/addrinfo 0)])
+    (bytevector-sint-set! res addrinfo/flags-offset 
+      (fold-left
+        (lambda (s v)
+          (fxior s (socket-constant-value v)))
+        0
+        flags)
+      (native-endianness)
+      size-of/integer)
+    (when domain
+      (bytevector-sint-set! res addrinfo/family-offset
+        (socket-constant-value domain)
+        (native-endianness)
+        size-of/integer))
+    (when type
+      (bytevector-sint-set! res addrinfo/type-offset
+        (socket-constant-value type)
+        (native-endianness)
+        size-of/integer))
+    (when protocol
+      (bytevector-sint-set! res addrinfo/proto-offset
+        (socket-constant-value protocol)
+        (native-endianness)
+        size-of/integer))
+    res))
+
+@
+
+<<FFI Constants>>=
+(size-of/addrinfo fixnum "int" "sizeof(struct addrinfo)")
+(addrinfo/family-offset fixnum "int"
+ "(char *)&x.ai_family - (char *)&x"
+ "struct addrinfo x;")
+(addrinfo/flags-offset fixnum "int"
+ "(char *)&x.ai_flags - (char *)&x"
+ "struct addrinfo x;")
+(addrinfo/type-offset fixnum "int"
+ "(char *)&x.ai_socktype - (char *)&x"
+ "struct addrinfo x;")
+(addrinfo/proto-offset fixnum "int"
+ "(char *)&x.ai_protocol - (char *)&x"
+ "struct addrinfo x;")
+@
+
+Converting from a foreign [[struct addrinfo]] structure 
+to an address information list is done 
+with [[foreign->address-info-list]].
+
+<<Code>>=
+(define (foreign->address-info-list addr-list-ptr)
+  (collect-list 
+    ([with ptr (get-pointer-field addr-list-ptr 0)
+       (foreign->pointer (+ ptr addrinfo/next-offset))]
+     [until (zero? ptr)])
+    (let ([buf (make-bytevector size-of/addrinfo)])
+      ($memcpy buf ptr size-of/addrinfo) 
+      (let ([domain 
+             (lookup-domain 
+               (get-integer-field buf addrinfo/family-offset))])
+        (make-address-info
+          domain
+          (make-socket-type 
+            (get-integer-field buf addrinfo/type-offset))
+          (make-socket-protocol
+            (get-integer-field buf addrinfo/proto-offset))
+          (let ([addr-size 
+                 (get-integer-field buf addrinfo/addrlen-offset)])
+            (foreign->socket-address domain 
+              (get-buffer-field buf addrinfo/addr-offset addr-size)
+              (make-integer-container addr-size))))))))
+
+@
+
+The following procedures help to access data from a field.
+
+<<Code>>=
+(define (get-buffer-field buf offset count)
+  (let ([new (make-bytevector count)])
+    ($memcpy new (get-pointer-field buf offset) count)
+    new))
+
+(define (get-integer-field buf offset)
+  (bytevector-sint-ref buf offset (native-endianness) size-of/integer))
+  
+(define (get-pointer-field buf offset)
+  (bytevector-uint-ref buf offset (native-endianness) size-of/pointer))
+
+(define (make-integer-container n)
+  (let ([res (make-bytevector size-of/integer)])
+    (bytevector-sint-set! res 0 n (native-endianness) size-of/integer)
+    res))
+  
+@
+
+<<FFI Constants>>=
+(addrinfo/addrlen-offset fixnum "int" 
+ "(char *)&x.ai_addrlen - (char *)&x"
+ "struct addrinfo x;")
+(addrinfo/addr-offset fixnum "int"
+ "(char *)&x.ai_addr - (char *)&x"
+ "struct addrinfo x;")
+(addrinfo/next-offset fixnum "int"
+  "(char *)&x.ai_next - (char *)&x"
+  "struct addrinfo x;")
+(size-of/size-t fixnum "int" "sizeof(size_t)")
+@
+
+<<FFI Procedures>>=
+(define $memcpy
+  (foreign-procedure "memcpy" (string uptr fixnum) uptr))
+@
+
 \chapter{Socket Constants}
 
 Procedures such as [[create-socket]] accept records which wrap 
@@ -425,6 +608,46 @@ explicitly knowing the type of the domain beforehand.
 (size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
 @
 
+Socket domains sometimes need to be grabbed by just their 
+internal value. 
+We set up a database to hold the registered domains and 
+allow for additional domains to be registered.
+
+<<Exports>>=
+register-socket-domain!
+@
+
+<<Code>>=
+(define socket-domain-db
+  (make-parameter '()))
+
+(define (register-socket-domain! domain)
+  (assert (socket-domain? domain))
+  (let* ([val (socket-constant-value domain)]
+         [res (assv val (socket-domain-db))])
+    (if res 
+        (set-cdr! res domain)
+        (socket-domain-db
+          (cons (cons val domain) 
+                (socket-domain-db))))))
+
+@
+
+We register only the two necessary ones right now.
+
+<<Domain Registration>>=
+(register-socket-domain! socket-domain/unix)
+(register-socket-domain! socket-domain/internet)
+@
+
+We'll want to be able to look these domains up by number.
+
+<<Code>>=
+(define (lookup-domain val)
+  (let ([res (assv val (socket-domain-db))])
+    (and res (cdr res))))
+@
+
 Socket types determine the nature of the data stream that 
 transmits over the socket. See the [[socket(2)]] man page for 
 more details. 
@@ -505,7 +728,7 @@ socket-protocol/auto
 <<Exports>>=
 next-protocol-entry
 get-protocol-by-name
-get-protocol-by-number
+get-protocol-by-constant
 open-protocol-database
 close-protocol-database
 @
@@ -515,8 +738,9 @@ close-protocol-database
   (foreign->protocol-entry ($getprotoent)))
 (define (get-protocol-by-name name)
   (foreign->protocol-entry ($getprotobyname name)))
-(define (get-protocol-by-number n)
-  (foreign->protocol-entry ($getprotobynumber n)))
+(define (get-protocol-by-constant proto)
+  (foreign->protocol-entry 
+    ($getprotobynumber (socket-constant-value proto))))
 (define (open-protocol-database keep-alive?)
   ($setprotoent keep-alive?))
 (define (close-protocol-database)
@@ -539,12 +763,12 @@ is performed by the following function [[foreign->protocol-entry]].
 
 (define (foreign->integer x)
   (let ([v (make-bytevector size-of/integer)])
-    ($strncpy v x size-of/integer)
+    ($memcpy v x size-of/integer)
     (bytevector-sint-ref v 0 (native-endianness) size-of/integer)))
 
 (define (foreign->pointer x)
   (let ([v (make-bytevector size-of/pointer)])
-    ($strncpy v x size-of/pointer)
+    ($memcpy v x size-of/pointer)
     (bytevector-uint-ref v 0 (native-endianness) size-of/pointer)))
 
 (define (foreign->protocol-entry x)
@@ -562,8 +786,6 @@ is performed by the following function [[foreign->protocol-entry]].
 <<FFI Procedures>>=
 (define $strcpy
   (foreign-procedure "strcpy" (string uptr) uptr))
-(define $strncpy
-  (foreign-procedure "strncpy" (string uptr fixnum) uptr))
 (define $strlen
   (foreign-procedure "strlen" (uptr) fixnum))
 @
@@ -864,7 +1086,7 @@ Corresponds to the [[sendto(2)]] system call.
 
 <<Code>>=
 (define (send-to-socket sock buf addr . flags)
-  (assert (forall send-to-option? flags))
+  (assert (for-all send-to-option? flags))
   (let* ([fa (socket-address->foreign addr)]
          [fa-len (bytevector-length fa)]
          [res ($sendto (socket-fd sock) 
@@ -903,9 +1125,9 @@ make-send-to-option
 (define-record-type send-to-option (parent socket-constant))
 
 (define send-to/dont-route
-  (make-send-to-option %send-to/dont-route))
+  (make-send-to-option %msg/dont-route))
 (define send-to/out-of-band
-  (make-send-to-option %send-to/out-of-band))
+  (make-send-to-option %msg/out-of-band))
 
 @
 
@@ -929,8 +1151,8 @@ see this as a good thing.}
 
 <<Code>>=
 (define (receive-from-socket sock c . flags)
-  (assert (forall receive-from-option? flags))
-  (let ([buf (make-bytevector count)]
+  (assert (for-all receive-from-option? flags))
+  (let ([buf (make-bytevector c)]
         [addr-len (foreign-address-size (socket-domain sock))])
     (let* ([addr (make-bytevector addr-len)]
            [addr-len-buf (make-bytevector size-of/integer)])
@@ -971,7 +1193,7 @@ A few flags are pre-defined.
 
 <<Exports>>=
 receive-from/out-of-band receive-from/peek 
-receive-from/wait-all receive-from/dontwait
+receive-from/wait-all receive-from/dont-wait
 make-receive-from-option
 @
 
@@ -991,8 +1213,8 @@ make-receive-from-option
 
 <<FFI Constants>>=
 (%msg/peek fixnum "int" "MSG_PEEK")
-(%msg/wait-all fixnum "int" MSG_WAITALL")
-(%msg/dont-wait fixnum "int" MSG_DONTWAIT")
+(%msg/wait-all fixnum "int" "MSG_WAITALL")
+(%msg/dont-wait fixnum "int" "MSG_DONTWAIT")
 @
 
 \procsig{[[socket-maximum-connections]]}{}{\var{integer}}
@@ -1068,6 +1290,8 @@ Scheme values at expansion time that are necessary to do these transformations.
 
 <<Code>>
 
+<<Domain Registration>>
+
 )
 @
 
@@ -1080,7 +1304,7 @@ This sockets library is distributed under an ISC License.
 <<License>>=
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Sockets Support for Chez
-;;;; Version 1.1 Alpha
+;;;; Version 1.2 Alpha
 ;;;
 ;;; Copyright (c) 2008 - 2009 Aaron Hsu <arcfide@sacrideo.us>
 ;;; 
