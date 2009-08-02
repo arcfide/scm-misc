@@ -1,0 +1,468 @@
+\title{RFC 2822 Message Parsing}
+\author{Aaron W. Hsu}
+\bsdlicensed
+
+\maketitlepage
+
+\beginabstract
+RFC 2822 is the latest internet messaging standard 
+that supercedes the traditional RFC 822.
+This manual documents the implementation of a library 
+for parsing and using RFC 2822 compliant messages.
+It is implemented in Chez Scheme
+and closely follows the organization of the RFC 
+for easy navigation.
+\endabstract
+
+\maketoc
+
+\chapter{Module Declaration and General Layout}
+The implementation divides roughly into Datatype declarations, 
+utilities that are not part of the RFC,
+Tokenization, or low-level lexical parsing,
+Field Parsing,
+and Message Parsing. 
+When an exported procedure is defined, 
+an appropriate export chunk will accompany it.
+When a procedure is used for the first time in this document,
+an import chunk will import the appropriate libraries 
+if they have not already been imported previously in the document.
+
+<<rfc2822.ss>>=
+<<License>>
+
+;(library (arcfide rfc-2822)
+  #;(export <<Exports>>)
+  (import (scheme)
+    <<Imports>>)
+
+<<Datatypes>>
+
+<<Utilities>>
+
+<<Tokenization>>
+
+<<Field Parsing>>
+
+<<Message Parsing>>
+
+;)
+@
+
+Exported procedures will be documented in the following format:
+
+\procsig{[[procedure-name]]}{\var{input-args} {\it\ldots}}{\var{return-value}}
+
+\chapter{Low-level Pre-processing and Tokenization}
+RFC 2822 3.2 defines a series of lexical tokens 
+which are used in later, higher-level parsers. 
+These are used in structured field bodies. 
+Higher level parsers are defined in terms of these lower-level tokens, 
+and take streams of these tokens, rather than dealing explicitly 
+with streams of characters.
+
+\section{Character Classes (RFC 2822 3.2.1)}
+
+<<Imports>>=
+(import srfi-14)
+(import parser-combinators)
+(import text-parser-combinators)
+@
+
+The RFC defines a series of parsers for low level character classing. 
+These may or may not be used by the future parsers, but are defined 
+here just in case. 
+
+{\it XXX: Decide whether these are actually needed.}
+
+<<Tokenization>>=
+(define-parser rfc2822-parser:no-ws-ctl
+  (parser:char-in-set
+    (char-set-union
+      (ucs-range->char-set 1 8)
+      (char-set (integer->char 11))
+      (char-set (integer->char 12))
+      (ucs-range->char-set 14-31)
+      (char-set (integer->char 127))))
+
+(define-parser rfc2822-parser:text
+  (parser:choice
+    (parser:char-in-set
+      (char-set-complement char-set:full #\return #\linefeed))
+    rfc2822-parser:obs-text))
+
+(define-parser rfc2822-parser:specials
+  (parser:char-in-set
+    (char-set #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\")))
+
+@
+
+\section{Quoted Characters (RFC 3.2.2)}
+Quoted characters are characters that would normally not be valid 
+except for their being escaped by a backslash character.
+
+<<Tokenization>>=
+(define-parser rfc2822-parser:quoted-pair
+  (parser:choice 
+    (parser:sequence (parser:char= #\\) rfc2822-parser:text)
+    rfc2822-parser:obs-qp))
+
+@
+
+\section{Whitespace and Comments (RFC 3.2.3)}
+Whitespace and comments semantically have meaning 
+no further than that of a single space. 
+However, since a comment is usually intended 
+for some human to read it, 
+the following parsers will maintain the information in comments. 
+
+These parsers return lists of strings and lists,
+which contain the comment text.
+If no comments were found, and only whitespace exists, 
+then nil is returned.
+
+The RFC doesn't give an explicit parser for CRLF and WSP, 
+but this is useful.
+
+<<Utilities>>=
+(define-parser rfc2822-parser:crlf
+  (parser:sequence 
+    (parser:char= #\return)
+    (parser:char= #\linefeed)))
+
+(define-parser rfc2822-parser:wsp
+  (parser:char-in-set (char-set #\space #\tab)))
+
+@
+
+The RFC defines two main whitespace targets: FWS and CFWS.
+
+<<Tokenization>>=
+(define-parser rfc2822-parser:fws
+  (parser:choice
+    (*parser 
+      [s1 (parser:optional ""
+            (parser:backtrackable
+              (*parser [s (parser:string:repeated rfc2822-parser:wsp)]
+                       [rfc2822-parser:crlf]
+                (parser:return s))))]
+      [s2 (parser:string:at-least 1 rfc2822-parser:wsp)]
+      (parser:return (string-append s1 s2)))))
+
+(define %fws-opt (parser:optional #f rfc2822-parser:fws))
+
+(define-parser rfc2822-parser:ctext
+  (parser:char-in-set
+    (char-set-complement char-set:full
+      (char-set #\nul #\return #\linefeed #\tab #\space)
+      (char-set #\( #\) #\\))))
+
+(define-parser rfc2822-parser:ccontent
+  (parser:string:at-least 1
+    (parser:choice rfc2822-parser:ctext rfc2822-parser:quoted-pair)))
+
+(define-parser rfc2822-parser:comment
+  (parser:bracketed-list (parser:char= #\() (parser:char= #\))
+    (parser:choice rfc2822-parser:comment
+      (parser:string:append:repeated
+        (parser:choice rfc2822-parser:fws rfc2822-parser:ccontent)))))
+
+(define-parser rfc2822-parser:cfws
+  (parser:deep-choice
+    (parser:list:repeated
+      (parser:single-bracketed %fws-opt rfc2822-parser:comment))
+    rfc2822-parser:fws))
+
+(define %cfws-opt (parser:optional #f rfc2822-parser:cfws))
+
+@
+
+Above we use a parser designed for parsing bracketed elements 
+that have the same left and right brackets.
+
+<<Utilities>>=
+(define parser:single-bracketed
+  (lambda (b p) (parser:bracketed b b p)))
+
+@
+
+It is also convenient to be able to parse a list of strings into a string.
+
+<<Utilities>>=
+(define parser:string:append:repeated
+  (lambda (p)
+    (*parser [sl (parser:list:repeated p)]
+      (parser:return (apply string-append sl)))))
+
+@
+
+\section{Atoms (RFC 3.2.4)}
+Atoms are just small units of basic text without controls, wsp, or specials.
+The RFC defines a dot atom production for times when runs of atoms may have 
+a period between them.
+Atoms are returned as strings.
+
+<<Tokenization>>=
+(define-parser rfc2822-parser:atext
+  (parser:char-in-set
+    (char-set-complement char-set:full
+      char-set:iso-control
+      char-set:whitespace
+      (char-set #\nul #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\"))))
+
+(define-parser %1*atext
+  (parser:string:at-least 1 rfc2822-parser:atext))
+
+(define-parser rfc2822-parser:atom
+  (parser:single-bracketed %cfws-opt %1*atext))
+
+(define-parser rfc2822-parser:dot-atom-text
+  (*parser [s1 %1*atext]
+           [rest (parser:list:repeated
+                   (parser:sequence (parser:char= #\.) %1*atext))]
+    (parser:return (format #f "~a~{.~a~}" s1 rest))))
+
+(define-parser rfc2822-parser:dot-atom
+  (parser:single-bracketed %cfws-opt rfc2822-parser:dot-atom-text))
+
+@
+
+\section{Quoted Strings (RFC 3.2.5)}
+Quoted strings allows a stream of text to be considered as one unit, 
+such as when this text can not be expressed with just the atom syntax. 
+A Quoted String can be folded, and is treated as a single unit 
+modulo quote characters and surrounding CWFS.
+
+<<Tokenization>>=
+(define-parser rfc2822-parser:qtext
+  (parser:char-in-set
+    (char-set-complement char-set:full
+      (char-set #\nul #\return #\linefeed #\tab #\space #\\ #\"))))
+
+(define-parser rfc2822-parser:qcontent
+  (parser:string:repeated
+    (parser:choice rfc2822-parser:qtext rfc2822-parser:quoted-pair)))
+
+(define-parser rfc2822-parser:quoted-string
+  (parser:single-bracketed %cfws-opt
+    (parser:single-bracketed (parser:char= #\")
+      (parser:string:append:repeated
+        (parser:choice rfc2822-parser:fws rfc2822-parser:qcontent))))) 
+
+@
+
+\section{Miscellaneous Tokens (RFC 3.2.6)}
+As well as providing convenience parsers defined in the RFC for handling 
+runs of quoted strings and atoms. 
+
+<<Tokenization>>=
+(define-parser rfc2822-parser:word
+  (parser:choice rfc2822-parser:atom rfc2822-parser:quoted-string))
+  
+(define-parser rfc2822-parser:phrase
+  (parser:deep-choice
+    (parser:string:append:at-least 1 rfc2822-parser:word)
+    obs-phrase))
+
+@
+
+The above uses another variation of the [[string-append]] based parser 
+previously defined.
+
+<<Utilities>>=
+(define parser:string:append:at-least
+  (lambda (k p)
+    (*parser [sl (parser:list:at-least k p)]
+      (parser:return (apply string-append sl)))))
+
+@
+
+It is also necessary to parse unstructured fields, 
+which do not have the same tokenization as above.
+In particular, white space and comments are not collapsed. 
+
+<<Tokenization>>=
+(define-parser rfc2822-parser:utext
+  (parser:choice 
+    (parser:char-in-set
+      (char-set-complement char-set:full
+        (char-set #\nul #\return #\linefeed #\tab #\space)))
+    obs-utext))
+
+(define-parser rfc2822-parser:unstructured
+  (parser:string:append:repeated
+    (parser:choice 
+      rfc2822-parser:fws
+      (parser:string:repeated rfc2822-parser:utext))))
+
+@
+
+\chapter{Date and Time Specification (RFC 3.3)}
+This following parsers handle the RFC's definition of date and time, 
+and return the date and time object as a date object in Chez Scheme. 
+There is little validation occuring in this specification other than 
+what is necessary to parser the field. 
+As such, it does not do simple checking like assuring that the 
+numeric day of the month corresponds to the day of the week given, 
+\&c.
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:date-time
+  (*parser [(parser:optional #f rfc2822-parser:day-of-week
+              (parser:char= #\,))]
+           [day rfc2822-parser:day]
+           [month rfc2822-parser:month]
+           [year rfc2822-parser:year]
+           [rfc2822-parser:fws]
+           [hour rfc2822-parser:hour]
+           [(parser:char= #\:)]
+           [minute rfc2822-parser:minute]
+           [(parser:char= #\:)]
+           [seconds (parser:optional 0 
+                      (parser:sequence (parser:char= #\:)
+                        rfc2822-parser:second))]
+           [rfc2822-parser:fws]
+           [timezone rfc2822-parser:zone]
+           [%cfws-opt]
+    (parser:return
+      (make-date 0 seconds minute hour day month year timezone))))
+
+(define-parser rfc2822-parser:day-of-week
+  (parser:deep-choice 
+    (parser:sequence %fws-opt rfc2822-parser:day-name)
+    obs-day-of-week))
+
+(define-parser rfc2822-parser:day-name
+  (parser:deep-choice
+    (parser:string-ci= "mon")
+    (parser:string-ci= "tue")
+    (parser:string-ci= "wed")
+    (parser:string-ci= "thu")
+    (parser:string-ci= "fri")
+    (parser:string-ci= "sat")
+    (parser:string-ci= "sun")))
+    
+(define-parser rfc2822-parser:day
+  (parser:choice
+    (parser:sequence %fws-opt 1*2digit))
+    obs-day))
+
+(define-parser rfc2822-parser:month
+  (parser:choice
+    (parser:sequence 
+      rfc2822-parser:fws 
+      rfc2822-parser:month-name 
+      rfc2822-parser:fws)))
+
+(define-parser rfc2822-parser:month-name
+  (parser:deep-choice
+    (parser:string-ci= "jan")
+    (parser:string-ci= "feb")
+    (parser:string-ci= "mar")
+    (parser:string-ci= "apr")
+    (parser:string-ci= "may")
+    (parser:string-ci= "jun")
+    (parser:string-ci= "jul")
+    (parser:string-ci= "aug")
+    (parser:string-ci= "sep")
+    (parser:string-ci= "oct")
+    (parser:string-ci= "nov")
+    (parser:string-ci= "dec")))
+
+(define-parser rfc2822-parser:year
+  (parser:deep-choice 4*digit obs-year))
+
+(define-parser rfc2822-parser:hour
+  (parser:deep-choice 2digit obs-hour))
+(define-parser rfc2822-parser:minute
+  (parser:deep-choice 2digit obs-minute))
+(define-parser rfc2822-parser:second
+  (parser:deep-choice 2digit obs-second))
+
+(define-parser rfc2822-parser:zone
+  (parser:choice 
+    (*parser [sign (parser:choice 
+                     (parser:sequence  
+                       (parser:char= #\+) 
+                       (parser:return +))
+                     (parser:sequence 
+                       (parser:char= #\-) 
+                       (parser:return -)))]
+             [offset 4digit]
+      (parser:return (sign offset)))
+    obs-zone))
+
+@
+
+The following are some simple parsers for digits 
+that return the digits converted from their strings into numbers.
+
+<<Field Parsers>>=
+(define-parser 1*2digit (parser:string-number:between 1 2))
+(define-parser 4*digit (parser:string-number:at-least 4))
+(define-parser 4digit (parser:string-number:exactly 4))
+(define-parser 2digit (parser:string-number:exactly 2))
+
+@
+
+The parsers used above are extensions to the normal text parsers. 
+They are defined below.
+
+<<Utilities>>=
+(define-parser parser:string-number:between
+  (lambda (i j)
+    (*parser [digs (parser:string:between i j 
+                     (parser:char-in-set char-set:digit)]
+      (parser:return (string->number digs)))))
+
+(define-parser parser:string-number:at-least
+  (lambda (k)
+    (*parser [digs (parser:string:at-least k
+                     (parser:char-in-set char-set:digit))]
+      (parser:return (string->number digs)))))
+
+(define-parser parser:string-number:exactly
+  (lambda (k)
+    (*parser [digs (parser:string:exactly k
+                     (parser:char-in-set char-set:digit))]
+      (parser:return (string->number digs)))))
+
+@
+
+\chapter{Address Specification (RFC 3.4)}
+
+
+\chapter{Loading and file dependencies}
+The following code will load all the file dependencies 
+for this library before loading the actual library.
+
+<<rfc2822-load.ss>=
+(include "check-arg.ss")
+(include "let-opt.ss")
+(include "srfi-14.ss")
+(include "srfi-8.ss")
+(include "srfi-1.ss")
+(include "stream.ss")
+(include "perror.ss")
+(include "matcomb.ss")
+(include "mattext.ss")
+(include "parcomb.ss")
+(include "srfi-45.ss")
+(include "partext.ss")
+(include "rfc2822.ss")
+@
+
+For those who wish to wrap this code in their own module systems, 
+the following chunk is provided.
+
+<<rfc2822-plain.ss>>=
+<<Datatypes>>
+
+<<Utilities>>
+
+<<Tokenization>>
+
+<<Field Parsing>>
+
+<<Message Parsing>>
+@
