@@ -432,29 +432,11 @@ They are defined below.
 
 
 \chapter{Loading and file dependencies}
-The following code will load all the file dependencies 
-for this library before loading the actual library.
-
-<<rfc2822-load.ss>=
-(include "check-arg.ss")
-(include "let-opt.ss")
-(include "srfi-14.ss")
-(include "srfi-8.ss")
-(include "srfi-1.ss")
-(include "stream.ss")
-(include "perror.ss")
-(include "matcomb.ss")
-(include "mattext.ss")
-(include "parcomb.ss")
-(include "srfi-45.ss")
-(include "partext.ss")
-(include "rfc2822.ss")
-@
 
 For those who wish to wrap this code in their own module systems, 
 the following chunk is provided.
 
-<<rfc2822-plain.ss>>=
+<<rfc2822-plain.scm>>=
 <<Datatypes>>
 
 <<Utilities>>
