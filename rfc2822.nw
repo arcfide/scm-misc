@@ -1,10 +1,6 @@
 \title{RFC 2822 Message Parsing}
-\author{Aaron W. Hsu}
-\bsdlicensed
 
-\maketitlepage
-
-\beginabstract
+\chapter{Introduction}
 RFC 2822 is the latest internet messaging standard 
 that supercedes the traditional RFC 822.
 This manual documents the implementation of a library 
@@ -12,9 +8,6 @@ for parsing and using RFC 2822 compliant messages.
 It is implemented in Chez Scheme
 and closely follows the organization of the RFC 
 for easy navigation.
-\endabstract
-
-\maketoc
 
 \chapter{Module Declaration and General Layout}
 The implementation divides roughly into Datatype declarations, 
@@ -51,7 +44,7 @@ if they have not already been imported previously in the document.
 
 Exported procedures will be documented in the following format:
 
-\procsig{[[procedure-name]]}{\var{input-args} {\it\ldots}}{\var{return-value}}
+\procsig{[[procedure-name]]}{\var{input-args} {\it\dots}}{\var{return-value}}
 
 \chapter{Low-level Pre-processing and Tokenization}
 RFC 2822 3.2 defines a series of lexical tokens 
