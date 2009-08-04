@@ -310,18 +310,32 @@ numeric day of the month corresponds to the day of the week given,
     (parser:string-ci= "sun")))
     
 (define-parser rfc2822-parser:date
-  (parser:sequence
-    rfc2822-parser:day rfc2822-parser:month rfc2822-parser:year))
-
+  (*parser [day rfc2822-parser:day]
+           [month rfc2822-parser:month]
+           [year rfc2822-parser:year]
+    (parser:return
+      (make-date 0 0 0 0 day month year 0))))
+      
 (define-parser rfc2822-parser:year
   (parser:deep-choice 4*digit rfc2822-parser:obs-year))
 
 (define-parser rfc2822-parser:month
   (parser:deep-choice
-    (parser:sequence 
-      rfc2822-parser:fws 
-      rfc2822-parser:month-name 
-      rfc2822-parser:fws)
+    (parser:single-bracketed rfc2822-parser:fws 
+      (*parser [name rfc2822-parser:month-name]
+        (case (string->symbol name)
+          [(jan) 1]
+          [(feb) 2]
+          [(mar) 3]
+          [(apr) 4]
+          [(may) 5]
+          [(jun) 6]
+          [(jul) 7]
+          [(aug) 8]
+          [(sep) 9]
+          [(oct) 10]
+          [(nov) 11]
+          [(dec) 12])))
     rfc2822-parser:obs-month))
    
 (define-parser rfc2822-parser:month-name
@@ -345,19 +359,29 @@ numeric day of the month corresponds to the day of the week given,
     obs-day))
 
 (define-parser rfc2822-parser:time
-  (parser:sequence 
-    rfc2822-parser:time-of-day 
-    rfc2822-parser:fws
-    rfc2822-parser:zone))
+  (*parser [time rfc2822-parser:time-of-day]
+           [rfc2822-parser:fws]
+           [zone rfc2822-parser:zone]
+    (parser:return
+      (make-date 0
+        (date-second time)
+        (date-minute time)
+        (date-hour time)
+        1 1 1901
+        zone))))
     
 (define-parser rfc2822-parser:time-of-day
-  (parser:sequence 
-    rfc2822-parser:hour
-    (parser:char= #\:)
-    rfc2822-parser:minute
-    (parser:char= #\:)
-    (parser:optional 0 
-      (parser:sequence (parser:char= #\:) rfc2822-parser:second))))
+  (*parser [hour rfc2822-parser:hour]
+           [(parser:char= #\:)]
+           [minute rfc2822-parser:minute]
+           [(parser:char= #\:)]
+           [second (parser:optional 0 
+                     (parser:sequence 
+                       (parser:char= #\:) 
+                       rfc2822-parser:second))]
+    (parser:return
+      (make-date 0 second minute hour
+        1 1 1901 0))))
 
 (define-parser rfc2822-parser:hour
   (parser:deep-choice 2digit obs-hour))
