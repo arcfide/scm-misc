@@ -81,7 +81,7 @@ here just in case.
   (parser:choice
     (parser:char-in-set
       (char-set-complement char-set:full #\return #\linefeed))
-    rfc2822-parser:obs-text))
+    obs-text))
 
 (define-parser rfc2822-parser:specials
   (parser:char-in-set
@@ -97,7 +97,7 @@ except for their being escaped by a backslash character.
 (define-parser rfc2822-parser:quoted-pair
   (parser:choice 
     (parser:sequence (parser:char= #\\) rfc2822-parser:text)
-    rfc2822-parser:obs-qp))
+    obs-qp))
 
 @
 
@@ -324,7 +324,7 @@ numeric day of the month corresponds to the day of the week given,
       (make-date 0 0 0 0 day month year 0))))
       
 (define-parser rfc2822-parser:year
-  (parser:deep-choice 4*digit rfc2822-parser:obs-year))
+  (parser:deep-choice 4*digit obs-year))
 
 (define-parser rfc2822-parser:month
   (parser:deep-choice
@@ -343,7 +343,7 @@ numeric day of the month corresponds to the day of the week given,
           [(oct) 10]
           [(nov) 11]
           [(dec) 12])))
-    rfc2822-parser:obs-month))
+    obs-month))
    
 (define-parser rfc2822-parser:month-name
   (parser:deep-choice
@@ -503,7 +503,7 @@ An angle address is just an angle delimited address specification.
       (parser:sequence %cfws-opt (parser:char= #\<)
       (parser:sequence (parser:char= #\>) %cfws-opt)
       rfc2822-parser:addr-spec)
-    rfc2822-parser:obs-angle-addr))
+    obs-angle-addr))
 
 @
 
@@ -544,7 +544,7 @@ Mailbox lists are comma separated mailboxes.
                        (parser:char= #\,) 
                        rfc2822-parser:mailbox))]
       (parser:return (cons first rest)))
-    rfc2822-parser:obs-mbox-list))
+    obs-mbox-list))
 
 @
 
@@ -567,7 +567,7 @@ Local parts are either atoms with dots or quoted strings.
   (parser:choice 
     rfc2822-parser:quoted-string 
     rfc2822-parser:dot-atom
-    rfc2822-parser:obs-local-part))
+    obs-local-part))
 
 @
 
@@ -578,7 +578,7 @@ Domains use the possible domain literal.
   (parser:deep-choice
     rfc2822-parser:dot-atom
     rfc2822-parser:domain-literal
-    rfc2822-parser:obs-domain))
+    obs-domain))
 
 @
 
@@ -630,7 +630,7 @@ parse the obsolete syntax as required by RFC 2822.
 (define-parser rfc2822-parser:message
   (*parser [fields (parser:deep-choice 
                      rfc2822-parser:fields
-                     rfc2822-parser:obs-fields)]
+                     obs-fields)]
            [body (parser:optional #f rfc2822-parser:body)]
     (parser:return
       (make-rfc2822-message fields body))))
@@ -839,13 +839,13 @@ The following is a convenience parser for fields.
   (parser:deep-choice
     rfc2822-parser:dot-atom-text
     rfc2822-parser:no-fold-quote
-    rfc2822-parser:obs-id-left))
+    obs-id-left))
 
 (define-parser id-right
   (parser:deep-choice
     rfc2822-parser:dot-atom-text
     rfc2822-parser:no-fold-literal
-    rfc2822-parser:obs-id-right))
+    obs-id-right))
 
 (define-parser rfc2822-parser:no-fold-quote
   (parser:single-bracketed (parser:char= #\")
@@ -941,7 +941,7 @@ The following is a convenience parser for fields.
       (parser:deep-choice
         rfc2822-parser:addr-spec
         %cfws-opt))
-    rfc2822-parser:obs-path))
+    obs-path))
 
 (define-record-type rfc2822-received (fields entries date))
 
