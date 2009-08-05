@@ -21,12 +21,12 @@ When a procedure is used for the first time in this document,
 an import chunk will import the appropriate libraries 
 if they have not already been imported previously in the document.
 
-<<rfc2822.ss>>=
+<<rfc2822.sls>>=
 <<License>>
 
 ;(library (arcfide rfc-2822)
   #;(export <<Exports>>)
-  (import (scheme)
+  (import (rnrs base)
     <<Imports>>)
 
 <<Datatypes>>
@@ -298,6 +298,13 @@ As such, it does not do simple checking like assuring that the
 numeric day of the month corresponds to the day of the week given, 
 \&c.
 
+<<Imports>>=
+(only (scheme) 
+  make-date
+  date-second date-hour date-minute date-day date-month date-year
+  date-offset)
+@
+
 <<Field Parsing>>=
 (define-parser rfc2822-parser:day-name
   (parser:deep-choice
@@ -451,6 +458,10 @@ but compliant programs must still be able to parse them.
 \chapter{Address Specification (RFC 3.4)}
 
 Addresses are either individual mailboxes or groups thereof.
+
+<<Imports>>=
+(rnrs records syntactic)
+@
 
 <<Field Parsing>>=
 (define-record-type rfc2822-address (fields name local domain))
@@ -606,13 +617,396 @@ We handle quotes in dcontent.
 
 @
 
-
-    
-
 \section{Obsolete Address Parsers}
 
 This section details the obsolete parsers that 
 parse the obsolete syntax as required by RFC 2822.
+
+\chapter{Message Parsers (3.5)}
+
+<<Message Parsing>>=
+(define-record-type rfc2822-message (fields fields body))
+
+(define-parser rfc2822-parser:message
+  (*parser [fields (parser:deep-choice 
+                     rfc2822-parser:fields
+                     rfc2822-parser:obs-fields)]
+           [body (parser:optional #f rfc2822-parser:body)]
+    (parser:return
+      (make-rfc2822-message fields body))))
+
+(define-parser rfc2822-parser:body
+  (parser:string:append:repeated
+    (parser:sequence rfc2822-parser:crlf 
+      (parser:string:repeated rfc2822-parser:text))))
+
+@
+
+\chapter{Field Definitions (3.6)}
+
+Parsing the fields does no error checking of the order or type of 
+fields that exist. 
+Validating whether a given field list is a valid RFC 2822 message 
+header is left to another procedure.
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:fields
+  (*parser [traces (parser:list:repeated %traces)]
+           [other (parser:list:repeated %fields)]
+     (parser:return (append traces other))))
+     
+(define-parser %fields
+  (parser:deep-choice
+    rfc2822-parser:orig-date
+    rfc2822-parser:from
+    rfc2822-parser:sender
+    rfc2822-parser:reply-to
+    rfc2822-parser:to
+    rfc2822-parser:cc
+    rfc2822-parser:bcc
+    rfc2822-parser:message-id
+    rfc2822-parser:in-reply-to
+    rfc2822-parser:references
+    rfc2822-parser:subject
+    rfc2822-parser:comments
+    rfc2822-parser:keywords
+    rfc2822-parser:optional-field))
+    
+@
+
+Since traces need to be grouped with resent- fields and 
+their fields are always paired together, we have a single 
+structure for handling them.
+
+<<Field Parsing>>=
+(define-record-type rfc2822-trace (fields return received resent))
+
+(define-parser %traces
+  (*parser [trace rfc2822-parser:trace]
+           [resends 
+            (parser:list:repeated
+              (parser:deep-choice
+                rfc2822-parser:resent-date
+                rfc2822-parser:resent-from
+                rfc2822-parser:resent-sender
+                rfc2822-parser:resent-to
+                rfc2822-parser:resent-cc
+                rfc2822-parser:resent-bcc
+                rfc2822-parser:resent-msg-id))]
+    (parser:return 
+      (cons 'trace
+        (make-rfc2822-trace
+          (rfc2822-trace-return trace)
+          (rfc2822-trace-received trace)
+          resends)))))
+
+@
+
+\section{Validating Messages}
+
+Validating messages requires that we also validate the field counts.
+These are too complicated to do during normal parsing without 
+confusing the code. We may also wish to ignore this validation 
+for some reason. Regardless, we provide 
+[[validate-rfc2822-field-counts]] to raise an assertion violation 
+error if the message is not valid.
+
+<<Imports>>=
+(rnrs enumerations)
+(riastradh foof-loop)
+@
+
+<<Message Parsing>>=
+(define (validate-rfc2822-field-counts fields)
+  (define field-names
+    '(orig-date from sender reply-to to cc bcc message-id 
+      in-reply-to references subject comments
+      keywords optional-field))
+  (define field-index
+    (enum-set-indexer (make-enumeration field-names)))
+  (define field-counts (make-vector (length field-names) 0))
+  (define (field-count field)
+    (vector-ref field-counts (field-index field)))
+  (define (field-inc! field)
+    (when (memq field field-names)
+      (let ([i (field-index field)])
+        (vector-set! field-counts i (+ 1 (field-count field))))))
+  (define multiple-from? #f)
+  (define non-trace-fields
+    (loop ([for field rest (in-list fields)]
+           [while (eq? 'trace (car field))])
+      => (cdr rest)))
+  (loop ([for field (in-list non-trace-fields)])
+    (case (car field)
+      [(from)
+       (when (null? (cdr field))
+         (set! multiple-from? #t))]
+      [(trace) 
+       (assertion-violation 'validate-rfc2822-field-counts
+         "Trace field occurs after regular fields.")]
+      [else (field-inc! (car field))])
+    (field-inc! (car field)))
+  (assert (= 1 (field-count 'orig-date)))
+  (assert (= 1 (field-count 'from)))
+  (assert (if mutliple-from? 
+              (= 1 (field-count 'sender))
+              (<= 0 (field-count 'sender) 1)))
+  (assert
+    (for-all (lambda (x) (<= 0 (field-count x) 1))
+      '(reply-to to cc bcc message-id in-reply-to 
+        references subject))))
+
+@
+
+The next sections deal with the actual field definitions. 
+The following is a convenience parser for fields.
+
+<<Utilities>>=
+(define (parser:rfc2822-header name head-str parser)
+  (*parser [(parser:string-ci= head-str)]
+           [(parser:char= #\:)]
+           [res parser]
+           [rfc2822-parser:crlf)]
+    (parser:return
+      (cons name res))))
+
+@
+
+\section{Origination date field (3.6.1)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:orig-date
+  (parser:rfc2822-header 'orig-date "Date" rfc2822-parser:date-time))
+
+@
+
+\section{Originator Fields (3.6.2)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:from
+  (parser:rfc2822-header 'from "From" rfc2822-parser:mailbox-list))
+
+(define-parser rfc2822-parser:sender
+  (parser:rfc2822-header 'sender "Sender" rfc2822-parser:mailbox))
+
+(define-parser rfc2822-parser:reply-to
+  (parser:rfc2822-header 'reply-to "Reply-To" 
+    rfc2822-parser:address-list))
+
+@
+
+\section{Destination Address Fields (3.6.3)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:to
+  (parser:rfc2822-header 'to "To" rfc2822-parser:address-list))
+
+(define-parser rfc2822-parser:cc
+  (parser:rfc2822-header 'cc "Cc" rfc2822-parser:address-list))
+  
+(define-parser rfc2822-parser:bcc
+  (parser:rfc2822-header 'bcc "Bcc"
+    (parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
+
+@
+
+\section{Identification Fields (3.6.4)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:message-id
+  (parser:rfc2822-header 'message-id "Message-ID" 
+    rfc2822-parser:msg-id))
+
+(define-parser rfc2822-parser:in-reply-to
+  (parser:rfc2822-header 'in-reply-to "In-Reply-To"
+    (parser:list:at-least 1 rfc2822-parser:msg-id)))
+
+(define-parser rfc2822-parser:references
+  (parser:rfc2822-header 'references "References"
+    (parser:list:at-least 1 rfc2822-parser:msg-id)))
+
+(define-parser rfc2822-parser:msg-id
+  (parser:bracketed
+    (parser:sequence %cfws-opt (parser:char= #\<))
+    (parser:sequence (parser:char= #\> %cfws-opt))
+    (*parser [left id-left]
+             [(parser:char= #\@)]
+             [right id-right]
+      (parser:return
+        (string-append left "@" right)))))
+
+(define-parser id-left
+  (parser:deep-choice
+    rfc2822-parser:dot-atom-text
+    rfc2822-parser:no-fold-quote
+    rfc2822-parser:obs-id-left))
+
+(define-parser id-right
+  (parser:deep-choice
+    rfc2822-parser:dot-atom-text
+    rfc2822-parser:no-fold-literal
+    rfc2822-parser:obs-id-right))
+
+(define-parser rfc2822-parser:no-fold-quote
+  (parser:single-bracketed (parser:char= #\")
+    (parser:string:repeated
+      (parser:choice 
+        rfc2822-parser:qtext 
+        rfc2822-parser:quoted-pair))))
+
+(define-parser rfc2822-parser:no-fold-literal
+  (parser:bracketed
+    (parser:char= #\[)
+    (parser:char= #\])
+    (parser:string:repeated
+      rfc2822-parser:dtext
+      rfc2822-parser:quoted-pair)))
+
+@
+
+\section{Information Fields (3.6.5)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:subject
+  (parser:rfc2822-header 'subject "Subject" 
+    rfc2822-parser:unstructured))
+
+(define-parser rfc2822-parser:comments
+  (parser:rfc2822-header 'comments "Comments"
+    rfc2822-parser:unstructured))
+
+(define-parser rfc2822-parser:keywords
+  (parser:rfc2822-header 'keywords "Keywords"
+    (*parser [first rfc2822-parser:phrase]
+             [rest (parser:list:repeated
+                     (parser:sequence (parser:char= #\,)
+                       rfc2822-parser:phrase))]
+      (parser:return (cons first rest)))))
+
+@
+
+\section{Resent Fields (3.6.6)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:resent-date
+  (parser:rfc2822-header 'resent-date "Resent-Date"
+    rfc2822-parser:date-time))
+
+(define-parser rfc2822-parser:resent-from
+  (parser:rfc2822-header 'resent-from "Resent-From"
+    rfc2822-parser:mailbox-list))
+
+(define-parser rfc2822-parser:resent-sender
+  (parser:rfc2822-header 'resent-sender "Resent-Sender"
+    rfc2822-parser:mailbox))
+
+(define-parser rfc2822-parser:resent-to
+  (parser:rfc2822-header 'resent-to "Resent-To"
+    rfc2822-parser:address-list))
+
+(define-parser rfc2822-parser:resent-cc
+  (parser:rfc2822-header 'resent-cc "Resent-Cc"
+    rfc2822-parser:address-list))
+
+(define-parser rfc2822-parser:resent-bcc
+  (parser:rfc2822-header 'resent-bcc "Resent-Bcc"
+    (parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
+
+(define-parser rfc2822-parser:resent-msg-id
+  (parser:rfc2822-header 'resent-msg-id "Resent-Msg-ID"
+    rfc2822-parser:msg-id))
+
+@
+
+\section{Trace Fields (3.6.7)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:trace
+  (*parser [return (parser:optional #f rfc2822-parser:return)]
+           [received 
+            (parser:list:at-least 1 rfc2822-parser:received)]
+    (make-rfc2822-trace return received #f)))
+
+(define-parser rfc2822-parser:return
+  (parser:bracketed
+    (parser:string-ci= "Return-Path:")
+    rfc2822-parser:crlf
+    rfc2822-parser:path))
+
+(define-parser rfc2822-parser:path
+  (parser:deep-choice
+    (parser:bracketed
+      (parser:sequence %cfws-opt (parser:char= #\<))
+      (parser:sequence (parser:char= #\>) %cfws-opt)
+      (parser:deep-choice
+        rfc2822-parser:addr-spec
+        %cfws-opt))
+    rfc2822-parser:obs-path))
+
+(define-record-type rfc2822-received (fields entries date))
+
+(define-parser rfc2822-parser:received
+  (*parser [(parser:string-ci= "Received:")]
+           [entries rfc2822-parser:name-val-list]
+           [(parser:char= #\:)]
+           [date rfc2822-parser:date-time]
+           [rfc2822-parser:crlf]
+    (parser:return (make-rfc2822-received entries date))))
+
+(define-parser rfc2822-parser:name-val-list
+  (*parser [%cfws-opt]
+           [first rfc2822-parser:name-val-pair]
+           [rest (parser:list:repeated 
+                   rfc2822-parser:cfws
+                   rfc2822-parser:name-val-pair)]
+    (parser:return (cons first rest))))
+
+(define-parser rfc2822-parser:name-val-pair
+  (*parser [name rfc2822-parser:item-name]
+           [rfc2822-parser:cfws]
+           [value rfc2822-parser:item-value]
+    (parser:return (cons name value))))
+
+(define-parser rfc2822-parser:item-name
+  (*parser [first-char rfc2822-parser:alpha]
+           [rest (parser:string:repeated
+                   (parser:choice (parser:char= #\-)
+                     rfc2822-parser:alpha
+                     rfc2822-parser:digit))]
+    (parser:return (string-append (string first-char) rest))))
+
+(define-parser rfc2822-parser:item-value
+  (parser:deep-choice
+    (parser:list:repeated rfc2822-parser:angle-addr)
+    rfc2822-parser:addr-spec
+    rfc2822-parser:atom
+    rfc2822-parser:domain
+    rfc2822-parser:msg-id))
+
+@
+
+\section{Optional Fields (3.6.8)}
+
+<<Field Parsing>>=
+(define-parser rfc2822-parser:optional-field
+  (*parser [field-name rfc2822-parser:field-name]
+           [(parser:char= #\:)]
+           [contents rfc2822-parser:unstructured]
+           [rfc2822-parser:crlf]
+    (parser:return 
+      (cons (string->symbol (string-downcase field-name))
+        contents))))
+
+(define-parser rfc2822-parser:field-name
+  (parser:string:at-least 1 rfc2822-parser:ftext))
+
+(define-parser rfc2822-parser:ftext
+  (parser:char-in-set
+    (char-set-complement char-set:full
+      char-set:iso-control
+      (char-set #\nul #\space #\:))))
+
+@
 
 \chapter{Loading and file dependencies}
 
