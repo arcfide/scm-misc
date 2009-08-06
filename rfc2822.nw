@@ -82,7 +82,7 @@ here just in case.
 (define-parser rfc2822-parser:text
   (parser:choice
     (parser:char-in-set
-      (char-set-complement char-set:full #\return #\linefeed))
+      (char-set-difference char-set:full (char-set #\return #\linefeed)))
     obs-text))
 
 (define-parser rfc2822-parser:specials
@@ -153,7 +153,7 @@ The RFC defines two main whitespace targets: FWS and CFWS.
 
 (define-parser rfc2822-parser:ctext
   (parser:char-in-set
-    (char-set-complement char-set:full
+    (char-set-difference char-set:full
       (char-set #\nul #\return #\linefeed #\tab #\space)
       (char-set #\( #\) #\\))))
 
@@ -209,7 +209,7 @@ Atoms are returned as strings.
 <<Tokenization>>=
 (define-parser rfc2822-parser:atext
   (parser:char-in-set
-    (char-set-complement char-set:full
+    (char-set-difference char-set:full
       char-set:iso-control
       char-set:whitespace
       (char-set #\nul #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\"))))
@@ -245,7 +245,7 @@ modulo quote characters and surrounding CWFS.
 <<Tokenization>>=
 (define-parser rfc2822-parser:qtext
   (parser:char-in-set
-    (char-set-complement char-set:full
+    (char-set-difference char-set:full
       (char-set #\nul #\return #\linefeed #\tab #\space #\\ #\"))))
 
 (define-parser rfc2822-parser:qcontent
@@ -296,7 +296,7 @@ In particular, white space and comments are not collapsed.
 (define-parser rfc2822-parser:utext
   (parser:choice 
     (parser:char-in-set
-      (char-set-complement char-set:full
+      (char-set-difference char-set:full
         (char-set #\nul #\return #\linefeed #\tab #\space)))
     obs-utext))
 
@@ -379,14 +379,15 @@ rfc2822-parser:date-time
            [rfc2822-parser:fws]
            [time rfc2822-parser:time]
            [%cfws-opt]
-    (make-date 0
-      (date-second time)
-      (date-minute time)
-      (date-hour time)
-      (date-day date)
-      (date-month date)
-      (date-year date)
-      (date-zone-offset time))))
+    (parser:return 
+      (make-date 0
+        (date-second time)
+        (date-minute time)
+        (date-hour time)
+        (date-day date)
+        (date-month date)
+        (date-year date)
+        (date-zone-offset time)))))
 
 (define-parser rfc2822-parser:day-of-week
   (parser:deep-choice
@@ -417,19 +418,20 @@ rfc2822-parser:date-time
   (parser:deep-choice
     (parser:single-bracketed rfc2822-parser:fws 
       (*parser [name rfc2822-parser:month-name]
-        (case (string->symbol name)
-          [(jan) 1]
-          [(feb) 2]
-          [(mar) 3]
-          [(apr) 4]
-          [(may) 5]
-          [(jun) 6]
-          [(jul) 7]
-          [(aug) 8]
-          [(sep) 9]
-          [(oct) 10]
-          [(nov) 11]
-          [(dec) 12])))
+        (parser:return
+          (case (string->symbol name)
+            [(jan) 1]
+            [(feb) 2]
+            [(mar) 3]
+            [(apr) 4]
+            [(may) 5]
+            [(jun) 6]
+            [(jul) 7]
+            [(aug) 8]
+            [(sep) 9]
+            [(oct) 10]
+            [(nov) 11]
+            [(dec) 12]))))
     obs-month))
    
 (define-parser rfc2822-parser:month-name
@@ -604,6 +606,10 @@ Addresses are either individual mailboxes or groups thereof.
 (rnrs records syntactic)
 @
 
+<<Exports>>=
+rfc2822-parser:address
+@
+
 <<Datatypes>>=
 (define-record-type rfc2822-address (fields name local domain))
 (define-record-type rfc2822-group (fields name addresses))
@@ -766,7 +772,7 @@ We handle quotes in dcontent.
 
 (define-parser rfc2822-parser:dtext
   (parser:char-in-set
-    (char-set-complement char-set:full
+    (char-set-difference char-set:full
       char-set:whitespace
       (char-set #\[ #\] #\\))))
 
@@ -862,6 +868,10 @@ It adds a route, which only exists in the old style.
 @
 
 \chapter{Message Parsers (3.5)}
+
+<<Exports>>=
+rfc2822-parser:message
+@
 
 <<Datatypes>>=
 (define-record-type rfc2822-message (fields fields body))
@@ -1445,7 +1455,7 @@ we provide an additional structure.
 
 (define-parser rfc2822-parser:ftext
   (parser:char-in-set
-    (char-set-complement char-set:full
+    (char-set-difference char-set:full
       char-set:iso-control
       (char-set #\nul #\space #\:))))
 
