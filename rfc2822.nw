@@ -348,7 +348,34 @@ numeric day of the month corresponds to the day of the week given,
   date-offset)
 @
 
+<<Exports>>=
+rfc2822-parser:day-time
+@
+
 <<Field Parsing>>=
+(define-parser rfc2822-parser:day-time
+  (*parser [(parser:optional #f 
+              (parser:sequence 
+                rfc2822-parser:day-of-week
+                (parser:char= #\,)))]
+           [date rfc2822-parser:date]
+           [rfc2822-parser:fws]
+           [time rfc2822-parser:time]
+           [%cfws-opt]
+    (make-date 0
+      (date-second time)
+      (date-minute time)
+      (date-hour time)
+      (date-day date)
+      (date-month date)
+      (date-year date)
+      (date-zone-offset time))))
+
+(define-parser rfc2822-parser:day-of-week
+  (parser:deep-choice
+    (parser:sequence %fws-opt rfc2822-parser:day-name)
+    obs-day-of-week))
+
 (define-parser rfc2822-parser:day-name
   (parser:deep-choice
     (parser:string-ci= "mon")
