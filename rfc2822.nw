@@ -239,10 +239,6 @@ such as when this text can not be expressed with just the atom syntax.
 A Quoted String can be folded, and is treated as a single unit 
 modulo quote characters and surrounding CWFS.
 
-<<Datatypes>>=
-(define-record-type rfc2822-quoted-string (fields value))
-@
-
 <<Tokenization>>=
 (define-parser rfc2822-parser:qtext
   (parser:char-in-set
@@ -257,10 +253,8 @@ modulo quote characters and surrounding CWFS.
   (parser:bracketed
     (parser:sequence %cfws-opt (parser:char= #\"))
     (parser:sequence (parser:char= #\") %cfws-opt)
-    (*parser 
-      [val (parser:string:append:repeated
-             (parser:choice rfc2822-parser:fws rfc2822-parser:qcontent))]
-      (parser:return (make-rfc2822-quoted-string val))))) 
+    (parser:string:append:repeated
+      (parser:choice rfc2822-parser:fws rfc2822-parser:qcontent))))
 
 @
 
