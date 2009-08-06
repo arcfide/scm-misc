@@ -470,7 +470,6 @@ rfc2822-parser:date-time
   (*parser [hour rfc2822-parser:hour]
            [(parser:char= #\:)]
            [minute rfc2822-parser:minute]
-           [(parser:char= #\:)]
            [second (parser:optional 0 
                      (parser:sequence 
                        (parser:char= #\:) 
