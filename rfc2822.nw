@@ -24,8 +24,8 @@ if they have not already been imported previously in the document.
 <<rfc2822.sls>>=
 <<License>>
 
-(library (arcfide rfc2822)
-  (export <<Exports>>)
+;(library (arcfide rfc2822)
+  #;(export <<Exports>>)
   (import (rnrs base)
     <<Imports>>)
 
@@ -41,7 +41,7 @@ if they have not already been imported previously in the document.
 
 <<Obsolete>>
 
-)
+;)
 @
 
 Exported procedures will be documented in the following format:
@@ -191,8 +191,9 @@ It is also convenient to be able to parse a list of strings into a string.
 <<Utilities>>=
 (define parser:string:append:repeated
   (lambda (p)
-    (*parser [sl (parser:list:repeated p)]
-      (parser:return (apply string-append sl)))))
+    (parser:repeated (lambda (x y) (string-append y x))
+      (parser:return "") 
+      p)))
 
 @
 
@@ -249,16 +250,17 @@ modulo quote characters and surrounding CWFS.
       (char-set #\nul #\return #\linefeed #\tab #\space #\\ #\"))))
 
 (define-parser rfc2822-parser:qcontent
-  (parser:string:repeated
+  (parser:string:at-least 1
     (parser:choice rfc2822-parser:qtext rfc2822-parser:quoted-pair)))
 
 (define-parser rfc2822-parser:quoted-string
-  (parser:single-bracketed %cfws-opt
-    (parser:single-bracketed (parser:char= #\")
-      (*parser 
-        [val (parser:string:append:repeated
-               (parser:choice rfc2822-parser:fws rfc2822-parser:qcontent))]
-        (parser:return (make-rfc2822-quoted-string val)))))) 
+  (parser:bracketed
+    (parser:sequence %cfws-opt (parser:char= #\"))
+    (parser:sequence (parser:char= #\") %cfws-opt)
+    (*parser 
+      [val (parser:string:append:repeated
+             (parser:choice rfc2822-parser:fws rfc2822-parser:qcontent))]
+      (parser:return (make-rfc2822-quoted-string val))))) 
 
 @
 
