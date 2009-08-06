@@ -557,10 +557,12 @@ Addresses are either individual mailboxes or groups thereof.
 (rnrs records syntactic)
 @
 
-<<Field Parsing>>=
+<<Datatypes>>=
 (define-record-type rfc2822-address (fields name local domain))
 (define-record-type rfc2822-group (fields name addresses))
+@
 
+<<Field Parsing>>=
 (define-parser rfc2822-parser:address
   (parser:deep-choice rfc2822-parser:mailbox rfc2822-parser:group))
 
@@ -678,9 +680,11 @@ Domains use the possible domain literal.
 
 A domain literal specifies an actual, specific host.
 
-<<Field Parsing>>=
+<<Datatype>>=
 (define-record-type rfc2822-domain-literal (fields value))
+@
 
+<<Field Parsing>>=
 (define-parser rfc2822-parser:domain-literal
   (*parser 
     [res 
@@ -716,11 +720,17 @@ We handle quotes in dcontent.
 This section details the obsolete parsers that 
 parse the obsolete syntax as required by RFC 2822.
 
-<<Obsolete>>=
+Firstly, we make an obslete address structure that 
+is a child of the regular address structure. 
+It adds a route, which only exists in the old style. 
+
+<<Datatypes>>=
 (define-record-type rfc2822-obsolete-address
   (parent rfc2822-address)
   (fields route))
+@
 
+<<Obsolete>>=
 (define-parser obs-angle-addr
   (parser:bracketed
     (parser:sequence %cfws-opt (parser:char= #\<))
@@ -783,9 +793,11 @@ parse the obsolete syntax as required by RFC 2822.
 
 \chapter{Message Parsers (3.5)}
 
-<<Message Parsing>>=
+<<Datatype>>=
 (define-record-type rfc2822-message (fields fields body))
+@
 
+<<Message Parsing>>=
 (define-parser rfc2822-parser:message
   (*parser [fields (parser:deep-choice 
                      rfc2822-parser:fields
@@ -837,9 +849,11 @@ Since traces need to be grouped with resent- fields and
 their fields are always paired together, we have a single 
 structure for handling them.
 
-<<Field Parsing>>=
+<<Datatypes>>=
 (define-record-type rfc2822-trace (fields return received resent))
+@
 
+<<Field Parsing>>=
 (define-parser %traces
   (*parser [trace rfc2822-parser:trace]
            [resends 
@@ -1248,6 +1262,9 @@ The following is a convenience parser for fields.
 
 \section{Trace Fields (3.6.7)}
 
+Tracing here grabs all the trace fields into one structure. 
+This only works if the fields are not obsolete fields. 
+
 <<Field Parsing>>=
 (define-parser rfc2822-parser:trace
   (*parser [return (parser:optional #f rfc2822-parser:return)]
@@ -1271,8 +1288,16 @@ The following is a convenience parser for fields.
         %cfws-opt))
     obs-path))
 
-(define-record-type rfc2822-received (fields entries date))
+@
 
+To handle parsing the received field, 
+we provide an additional structure.
+
+<<Datatypes>>=
+(define-record-type rfc2822-received (fields entries date))
+@
+
+<<Field Parsing>>=
 (define-parser rfc2822-parser:received
   (*parser [(parser:string-ci= "Received:")]
            [entries rfc2822-parser:name-val-list]
