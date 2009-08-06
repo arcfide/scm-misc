@@ -516,23 +516,20 @@ The parsers used above are extensions to the normal text parsers.
 They are defined below.
 
 <<Utilities>>=
-(define-parser parser:string-number:between
-  (lambda (i j)
-    (*parser [digs (parser:string:between i j 
-                     (parser:char-in-set char-set:digit))]
-      (parser:return (string->number digs)))))
+(define-parser (parser:string-number:between i j)
+  (*parser [digs (parser:string:between i j 
+                   (parser:char-in-set char-set:digit))]
+    (parser:return (string->number digs))))
 
-(define-parser parser:string-number:at-least
-  (lambda (k)
-    (*parser [digs (parser:string:at-least k
-                     (parser:char-in-set char-set:digit))]
-      (parser:return (string->number digs)))))
+(define-parser (parser:string-number:at-least k)
+  (*parser [digs (parser:string:at-least k
+                   (parser:char-in-set char-set:digit))]
+    (parser:return (string->number digs))))
 
-(define-parser parser:string-number:exactly
-  (lambda (k)
-    (*parser [digs (parser:string:exactly k
-                     (parser:char-in-set char-set:digit))]
-      (parser:return (string->number digs)))))
+(define-parser (parser:string-number:exactly k)
+  (*parser [digs (parser:string:exactly k
+                   (parser:char-in-set char-set:digit))]
+    (parser:return (string->number digs))))
 
 @
 
