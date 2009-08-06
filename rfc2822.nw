@@ -39,6 +39,8 @@ if they have not already been imported previously in the document.
 
 <<Message Parsing>>
 
+<<Obsolete>>
+
 ;)
 @
 
@@ -1402,4 +1404,6 @@ the following chunk is provided.
 <<Field Parsing>>
 
 <<Message Parsing>>
+
+<<Obsolete>>
 @
