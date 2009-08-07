@@ -139,15 +139,13 @@ The RFC defines two main whitespace targets: FWS and CFWS.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:fws
-  (parser:choice
-    (*parser 
-      [s1 (parser:optional ""
-            (parser:backtrackable
-              (*parser [s (parser:string:repeated rfc2822-parser:wsp)]
-                       [rfc2822-parser:crlf]
-                (parser:return s))))]
-      [s2 (parser:string:at-least 1 rfc2822-parser:wsp)]
-      (parser:return (string-append s1 s2)))))
+  (parser:deep-choice
+    (*parser [s1 (parser:string:repeated rfc2822-parser:wsp)]
+             [rfc2822-parser:crlf]
+             [s2 (parser:string:at-least 1 rfc2822-parser:wsp)]
+      (parser:return (string-append s1 s2)))
+    (parser:string:at-least 1 rfc2822-parser:wsp)
+    obs-fws))
 
 (define %fws-opt (parser:optional #f rfc2822-parser:fws))
 
@@ -168,10 +166,13 @@ The RFC defines two main whitespace targets: FWS and CFWS.
         (parser:choice rfc2822-parser:fws rfc2822-parser:ccontent)))))
 
 (define-parser rfc2822-parser:cfws
-  (parser:deep-choice
+  (parser:sequence 
     (parser:list:repeated
-      (parser:single-bracketed %fws-opt rfc2822-parser:comment))
-    rfc2822-parser:fws))
+      (parser:backtrackable 
+        (parser:sequence %fws-opt rfc2822-parser:comment)))
+    (parser:deep-choice
+      (parser:sequence %fws-opt rfc2822-parser:comment)
+      rfc2822-parser:fws)))
 
 (define %cfws-opt (parser:optional #f rfc2822-parser:cfws))
 
@@ -194,6 +195,19 @@ It is also convenient to be able to parse a list of strings into a string.
     (parser:repeated (lambda (x y) (string-append y x))
       (parser:return "") 
       p)))
+
+@
+
+\subsection{Obsolete Folding Whitespace (4.2)}
+
+<<Obsolete>>=
+(define-parser obs-fws
+  (*parser [s1 (parser:string:at-least 1 rfc2822-parser:wsp)]
+           [rest (parser:string:repeated 
+                   (parser:sequence
+                     rfc2822-parser:crlf
+                     (parser:string:at-least 1 rfc2822-parser:wsp)))]
+    (parser:return (string-append s1 rest))))
 
 @
 
