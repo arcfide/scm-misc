@@ -264,11 +264,11 @@ runs of quoted strings and atoms.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:word
-  (parser:choice rfc2822-parser:atom rfc2822-parser:quoted-string))
+  (parser:deep-choice rfc2822-parser:atom rfc2822-parser:quoted-string))
   
 (define-parser rfc2822-parser:phrase
   (parser:deep-choice
-    (parser:string:append:at-least 1 rfc2822-parser:word)
+    (parser:list:at-least 1 rfc2822-parser:word)
     obs-phrase))
 
 @
@@ -715,7 +715,7 @@ Local parts are either atoms with dots or quoted strings.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:local-part
-  (parser:choice 
+  (parser:deep-choice 
     rfc2822-parser:quoted-string 
     rfc2822-parser:dot-atom
     obs-local-part))
