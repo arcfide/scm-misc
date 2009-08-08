@@ -314,7 +314,7 @@ In particular, white space and comments are not collapsed.
   (parser:string:append:repeated
     (parser:choice 
       rfc2822-parser:fws
-      (parser:string:repeated rfc2822-parser:utext))))
+      (parser:string:at-least 1 rfc2822-parser:utext))))
 
 @
 
@@ -325,9 +325,8 @@ In particular, white space and comments are not collapsed.
   (parser:sequence (parser:char= #\\)
     (parser:char-in-set char-set:full)))
 
-(define-parser obs-text
-  (parser:string:repeated 
-    (parser:char-in-set char-set:full)))
+(define-parser obs-text 
+  (parser:char-in-set char-set:full))
 
 (define-parser obs-utext obs-text)
 
