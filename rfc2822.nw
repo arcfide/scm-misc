@@ -25,9 +25,9 @@ if they have not already been imported previously in the document.
 <<License>>
 
 ;(library (arcfide rfc2822)
-  #;(export <<Exports>>)
-  (import (rnrs base)
-    <<Imports>>)
+	#;(export <<Exports>>)
+	(import (rnrs base)
+		<<Imports>>)
 
 <<Datatypes>>
 
@@ -71,23 +71,23 @@ here just in case.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:no-ws-ctl
-  (parser:char-in-set
-    (char-set-union
-      (ucs-range->char-set 1 8)
-      (char-set (integer->char 11))
-      (char-set (integer->char 12))
-      (ucs-range->char-set 14 31)
-      (char-set (integer->char 127)))))
+	(parser:char-in-set
+		(char-set-union
+			(ucs-range->char-set 1 8)
+			(char-set (integer->char 11))
+			(char-set (integer->char 12))
+			(ucs-range->char-set 14 31)
+			(char-set (integer->char 127)))))
 
 (define-parser rfc2822-parser:text
-  (parser:choice
-    (parser:char-in-set
-      (char-set-difference char-set:full (char-set #\return #\linefeed)))
-    obs-text))
+	(parser:choice
+		(parser:char-in-set
+			(char-set-difference char-set:full (char-set #\return #\linefeed)))
+		obs-text))
 
 (define-parser rfc2822-parser:specials
-  (parser:char-in-set
-    (char-set #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\")))
+	(parser:char-in-set
+		(char-set #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\")))
 
 @
 
@@ -97,9 +97,9 @@ except for their being escaped by a backslash character.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:quoted-pair
-  (parser:choice 
-    (parser:sequence (parser:char= #\\) rfc2822-parser:text)
-    obs-qp))
+	(parser:choice 
+		(parser:sequence (parser:char= #\\) rfc2822-parser:text)
+		obs-qp))
 
 @
 
@@ -120,18 +120,18 @@ but this is useful.
 
 <<Utilities>>=
 (define-parser rfc2822-parser:crlf
-  (parser:sequence 
-    (parser:char= #\return)
-    (parser:char= #\linefeed)))
+	(parser:sequence 
+		(parser:char= #\return)
+		(parser:char= #\linefeed)))
 
 (define-parser rfc2822-parser:wsp
-  (parser:char-in-set (char-set #\space #\tab)))
-  
+	(parser:char-in-set (char-set #\space #\tab)))
+	
 (define-parser rfc2822-parser:alpha
-  (parser:char-in-set char-set:letter))
+	(parser:char-in-set char-set:letter))
 
 (define-parser rfc2822-parser:digit
-  (parser:char-in-set char-set:digit))
+	(parser:char-in-set char-set:digit))
 
 @
 
@@ -139,40 +139,40 @@ The RFC defines two main whitespace targets: FWS and CFWS.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:fws
-  (parser:deep-choice
-    (*parser [s1 (parser:string:repeated rfc2822-parser:wsp)]
-             [rfc2822-parser:crlf]
-             [s2 (parser:string:at-least 1 rfc2822-parser:wsp)]
-      (parser:return (string-append s1 s2)))
-    (parser:string:at-least 1 rfc2822-parser:wsp)
-    obs-fws))
+	(parser:deep-choice
+		(*parser [s1 (parser:string:repeated rfc2822-parser:wsp)]
+						 [rfc2822-parser:crlf]
+						 [s2 (parser:string:at-least 1 rfc2822-parser:wsp)]
+			(parser:return (string-append s1 s2)))
+		(parser:string:at-least 1 rfc2822-parser:wsp)
+		obs-fws))
 
 (define %fws-opt (parser:optional #f rfc2822-parser:fws))
 
 (define-parser rfc2822-parser:ctext
-  (parser:char-in-set
-    (char-set-difference char-set:full
-      (char-set #\nul #\return #\linefeed #\tab #\space)
-      (char-set #\( #\) #\\))))
+	(parser:char-in-set
+		(char-set-difference char-set:full
+			(char-set #\nul #\return #\linefeed #\tab #\space)
+			(char-set #\( #\) #\\))))
 
 (define-parser rfc2822-parser:ccontent
-  (parser:string:at-least 1
-    (parser:choice rfc2822-parser:ctext rfc2822-parser:quoted-pair)))
+	(parser:string:at-least 1
+		(parser:choice rfc2822-parser:ctext rfc2822-parser:quoted-pair)))
 
 (define-parser rfc2822-parser:comment
-  (parser:bracketed-list (parser:char= #\() (parser:char= #\))
-    (parser:choice rfc2822-parser:comment
-      (parser:string:append:repeated
-        (parser:choice rfc2822-parser:fws rfc2822-parser:ccontent)))))
+	(parser:bracketed-list (parser:char= #\() (parser:char= #\))
+		(parser:choice rfc2822-parser:comment
+			(parser:string:append:repeated
+				(parser:choice rfc2822-parser:fws rfc2822-parser:ccontent)))))
 
 (define-parser rfc2822-parser:cfws
-  (parser:sequence 
-    (parser:list:repeated
-      (parser:backtrackable 
-        (parser:sequence %fws-opt rfc2822-parser:comment)))
-    (parser:deep-choice
-      (parser:sequence %fws-opt rfc2822-parser:comment)
-      rfc2822-parser:fws)))
+	(parser:sequence 
+		(parser:list:repeated
+			(parser:backtrackable 
+				(parser:sequence %fws-opt rfc2822-parser:comment)))
+		(parser:deep-choice
+			(parser:sequence %fws-opt rfc2822-parser:comment)
+			rfc2822-parser:fws)))
 
 (define %cfws-opt (parser:optional #f rfc2822-parser:cfws))
 
@@ -183,7 +183,7 @@ that have the same left and right brackets.
 
 <<Utilities>>=
 (define parser:single-bracketed
-  (lambda (b p) (parser:bracketed b b p)))
+	(lambda (b p) (parser:bracketed b b p)))
 
 @
 
@@ -191,10 +191,10 @@ It is also convenient to be able to parse a list of strings into a string.
 
 <<Utilities>>=
 (define parser:string:append:repeated
-  (lambda (p)
-    (parser:repeated (lambda (x y) (string-append y x))
-      (parser:return "") 
-      p)))
+	(lambda (p)
+		(parser:repeated (lambda (x y) (string-append y x))
+			(parser:return "") 
+			p)))
 
 @
 
@@ -202,12 +202,12 @@ It is also convenient to be able to parse a list of strings into a string.
 
 <<Obsolete>>=
 (define-parser obs-fws
-  (*parser [s1 (parser:string:at-least 1 rfc2822-parser:wsp)]
-           [rest (parser:string:repeated 
-                   (parser:sequence
-                     rfc2822-parser:crlf
-                     (parser:string:at-least 1 rfc2822-parser:wsp)))]
-    (parser:return (string-append s1 rest))))
+	(*parser [s1 (parser:string:at-least 1 rfc2822-parser:wsp)]
+					 [rest (parser:string:repeated 
+									 (parser:sequence
+										 rfc2822-parser:crlf
+										 (parser:string:at-least 1 rfc2822-parser:wsp)))]
+		(parser:return (string-append s1 rest))))
 
 @
 
@@ -223,27 +223,27 @@ Atoms are returned as strings.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:atext
-  (parser:char-in-set
-    (char-set-difference char-set:full
-      char-set:iso-control
-      char-set:whitespace
-      (char-set #\nul #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\"))))
+	(parser:char-in-set
+		(char-set-difference char-set:full
+			char-set:iso-control
+			char-set:whitespace
+			(char-set #\nul #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\"))))
 
 (define-parser %1*atext
-  (parser:string:at-least 1 rfc2822-parser:atext))
+	(parser:string:at-least 1 rfc2822-parser:atext))
 
 (define-parser rfc2822-parser:atom
-  (parser:single-bracketed %cfws-opt %1*atext))
+	(parser:single-bracketed %cfws-opt %1*atext))
 
 (define-parser rfc2822-parser:dot-atom-text
-  (*parser [s1 %1*atext]
-           [rest (parser:list:repeated
-                   (parser:sequence (parser:char= #\.) %1*atext))]
-    (parser:return 
-      (fold-left (lambda (x y) (string-append x "." y)) s1 rest))))
+	(*parser [s1 %1*atext]
+					 [rest (parser:list:repeated
+									 (parser:sequence (parser:char= #\.) %1*atext))]
+		(parser:return 
+			(fold-left (lambda (x y) (string-append x "." y)) s1 rest))))
 
 (define-parser rfc2822-parser:dot-atom
-  (parser:single-bracketed %cfws-opt rfc2822-parser:dot-atom-text))
+	(parser:single-bracketed %cfws-opt rfc2822-parser:dot-atom-text))
 
 @
 
@@ -255,20 +255,20 @@ modulo quote characters and surrounding CWFS.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:qtext
-  (parser:char-in-set
-    (char-set-difference char-set:full
-      (char-set #\nul #\return #\linefeed #\tab #\space #\\ #\"))))
+	(parser:char-in-set
+		(char-set-difference char-set:full
+			(char-set #\nul #\return #\linefeed #\tab #\space #\\ #\"))))
 
 (define-parser rfc2822-parser:qcontent
-  (parser:string:at-least 1
-    (parser:choice rfc2822-parser:qtext rfc2822-parser:quoted-pair)))
+	(parser:string:at-least 1
+		(parser:choice rfc2822-parser:qtext rfc2822-parser:quoted-pair)))
 
 (define-parser rfc2822-parser:quoted-string
-  (parser:bracketed
-    (parser:sequence %cfws-opt (parser:char= #\"))
-    (parser:sequence (parser:char= #\") %cfws-opt)
-    (parser:string:append:repeated
-      (parser:choice rfc2822-parser:fws rfc2822-parser:qcontent))))
+	(parser:bracketed
+		(parser:sequence %cfws-opt (parser:char= #\"))
+		(parser:sequence (parser:char= #\") %cfws-opt)
+		(parser:string:append:repeated
+			(parser:choice rfc2822-parser:fws rfc2822-parser:qcontent))))
 
 @
 
@@ -278,12 +278,12 @@ runs of quoted strings and atoms.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:word
-  (parser:deep-choice rfc2822-parser:atom rfc2822-parser:quoted-string))
-  
+	(parser:deep-choice rfc2822-parser:atom rfc2822-parser:quoted-string))
+	
 (define-parser rfc2822-parser:phrase
-  (parser:deep-choice
-    (parser:list:at-least 1 rfc2822-parser:word)
-    obs-phrase))
+	(parser:deep-choice
+		(parser:list:at-least 1 rfc2822-parser:word)
+		obs-phrase))
 
 @
 
@@ -292,9 +292,9 @@ previously defined.
 
 <<Utilities>>=
 (define parser:string:append:at-least
-  (lambda (k p)
-    (*parser [sl (parser:list:at-least k p)]
-      (parser:return (apply string-append sl)))))
+	(lambda (k p)
+		(*parser [sl (parser:list:at-least k p)]
+			(parser:return (apply string-append sl)))))
 
 @
 
@@ -304,17 +304,41 @@ In particular, white space and comments are not collapsed.
 
 <<Tokenization>>=
 (define-parser rfc2822-parser:utext
-  (parser:choice 
-    (parser:char-in-set
-      (char-set-difference char-set:full
-        (char-set #\nul #\return #\linefeed #\tab #\space)))
-    obs-utext))
+	(parser:choice 
+		(parser:char-in-set
+			(char-set-difference char-set:full
+				(char-set #\nul #\return #\linefeed #\tab #\space)))
+		obs-utext))
+
+#;(define-parser rfc2822-parser:unstructured
+	(parser:string:at-least-until 1
+		(parser:choice (parser:peek rfc2822-parser:crlf) (parser:end))
+		rfc2822-parser:utext))
 
 (define-parser rfc2822-parser:unstructured
-  (parser:string:append:repeated
-    (parser:choice 
-      rfc2822-parser:fws
-      (parser:string:at-least 1 rfc2822-parser:utext))))
+	(parser:string:append:repeated-until
+		(parser:deep-choice 
+			(parser:peek 
+				(parser:sequence 
+					rfc2822-parser:crlf 
+					(parser:choice 
+						(parser:end) 
+						(parser:char-not-in-set char-set:whitespace))))
+			(parser:end))
+		(parser:deep-choice 
+			rfc2822-parser:fws
+			(parser:string:at-least-until 1
+				(parser:choice (parser:peek rfc2822-parser:crlf) (parser:end))
+				rfc2822-parser:utext))))
+
+@
+
+<<Utilities>>=
+(define (parser:string:append:repeated-until terminal parser)
+	(parser:repeated-until terminal 
+		(lambda (x y) (string-append y x))
+		(parser:return "")
+		parser))
 
 @
 
@@ -322,38 +346,37 @@ In particular, white space and comments are not collapsed.
 
 <<Obsolete>>=
 (define-parser obs-qp
-  (parser:sequence (parser:char= #\\)
-    (parser:char-in-set char-set:full)))
+	(parser:sequence (parser:char= #\\)
+		(parser:char-in-set char-set:full)))
 
 (define-parser obs-text 
-  (parser:char-in-set char-set:full))
+	(parser:char-in-set char-set:full))
 
 (define-parser obs-utext obs-text)
 
 (define-parser obs-phrase
-  (*parser [w rfc2822-parser:word]
-           [rest (parser:string:append:repeated
-                   (parser:choice 
-                     rfc2822-parser:word
-                     (parser:string= ".")
-                     rfc2822-parser:cfws))]
-    (parser:return (string-append w rest))))
-    
+	(*parser [w rfc2822-parser:word]
+					 [rest (parser:string:append:repeated
+									 (parser:choice 
+										 rfc2822-parser:word
+										 (parser:string= ".")
+										 rfc2822-parser:cfws))]
+		(parser:return (string-append w rest))))
+		
 (define-parser obs-phrase-list
-  (parser:deep-choice
-    (*parser [lst (parser:list:at-least 1
-                    (*parser [p (parser:optional #f 
-                                  rfc2822-parser:phrase)]
-                             [%cfws-opt]
-                             [(parser:char= #\,)]
-                             [%cfws-opt]
-                      (parser:return p)))]
-             [last (parser:optional #f rfc2822-parser:phrase)]
-      (parser:return
-        (filter (lambda (x) x)
-          (append lst (list last)))))
-    rfc2822-parser:phrase))
-    
+	(parser:deep-choice
+		(*parser [lst (parser:list:at-least 1
+										(*parser [p (parser:optional #f 
+																	rfc2822-parser:phrase)]
+														 [%cfws-opt]
+														 [(parser:char= #\,)]
+														 [%cfws-opt]
+											(parser:return p)))]
+						 [last (parser:optional #f rfc2822-parser:phrase)]
+			(parser:return
+				(filter (lambda (x) x)
+					(append lst (list last)))))
+		rfc2822-parser:phrase))
 
 @
 
@@ -369,9 +392,9 @@ numeric day of the month corresponds to the day of the week given,
 
 <<Imports>>=
 (only (scheme) 
-  make-date
-  date-second date-hour date-minute date-day date-month date-year
-  date-zone-offset)
+	make-date
+	date-second date-hour date-minute date-day date-month date-year
+	date-zone-offset)
 @
 
 <<Exports>>=
@@ -380,132 +403,132 @@ rfc2822-parser:date-time
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:date-time
-  (*parser [(parser:optional #f 
-              (parser:sequence 
-                rfc2822-parser:day-of-week
-                (parser:char= #\,)))]
-           [date rfc2822-parser:date]
-           [rfc2822-parser:fws]
-           [time rfc2822-parser:time]
-           [%cfws-opt]
-    (parser:return 
-      (make-date 0
-        (date-second time)
-        (date-minute time)
-        (date-hour time)
-        (date-day date)
-        (date-month date)
-        (date-year date)
-        (date-zone-offset time)))))
+	(*parser [(parser:optional #f 
+							(parser:sequence 
+								rfc2822-parser:day-of-week
+								(parser:char= #\,)))]
+					 [date rfc2822-parser:date]
+					 [rfc2822-parser:fws]
+					 [time rfc2822-parser:time]
+					 [%cfws-opt]
+		(parser:return 
+			(make-date 0
+				(date-second time)
+				(date-minute time)
+				(date-hour time)
+				(date-day date)
+				(date-month date)
+				(date-year date)
+				(date-zone-offset time)))))
 
 (define-parser rfc2822-parser:day-of-week
-  (parser:deep-choice
-    (parser:sequence %fws-opt rfc2822-parser:day-name)
-    obs-day-of-week))
+	(parser:deep-choice
+		(parser:sequence %fws-opt rfc2822-parser:day-name)
+		obs-day-of-week))
 
 (define-parser rfc2822-parser:day-name
-  (parser:deep-choice
-    (parser:string-ci= "mon")
-    (parser:string-ci= "tue")
-    (parser:string-ci= "wed")
-    (parser:string-ci= "thu")
-    (parser:string-ci= "fri")
-    (parser:string-ci= "sat")
-    (parser:string-ci= "sun")))
-    
+	(parser:deep-choice
+		(parser:string-ci= "mon")
+		(parser:string-ci= "tue")
+		(parser:string-ci= "wed")
+		(parser:string-ci= "thu")
+		(parser:string-ci= "fri")
+		(parser:string-ci= "sat")
+		(parser:string-ci= "sun")))
+		
 (define-parser rfc2822-parser:date
-  (*parser [day rfc2822-parser:day]
-           [month rfc2822-parser:month]
-           [year rfc2822-parser:year]
-    (parser:return
-      (make-date 0 0 0 0 day month year 0))))
-      
+	(*parser [day rfc2822-parser:day]
+					 [month rfc2822-parser:month]
+					 [year rfc2822-parser:year]
+		(parser:return
+			(make-date 0 0 0 0 day month year 0))))
+			
 (define-parser rfc2822-parser:year
-  (parser:deep-choice parser-4*digit obs-year))
+	(parser:deep-choice parser-4*digit obs-year))
 
 (define-parser rfc2822-parser:month
-  (parser:deep-choice
-    (parser:single-bracketed rfc2822-parser:fws 
-      (*parser [name rfc2822-parser:month-name]
-        (parser:return
-          (case (string->symbol name)
-            [(jan) 1]
-            [(feb) 2]
-            [(mar) 3]
-            [(apr) 4]
-            [(may) 5]
-            [(jun) 6]
-            [(jul) 7]
-            [(aug) 8]
-            [(sep) 9]
-            [(oct) 10]
-            [(nov) 11]
-            [(dec) 12]))))
-    obs-month))
-   
+	(parser:deep-choice
+		(parser:single-bracketed rfc2822-parser:fws 
+			(*parser [name rfc2822-parser:month-name]
+				(parser:return
+					(case (string->symbol name)
+						[(jan) 1]
+						[(feb) 2]
+						[(mar) 3]
+						[(apr) 4]
+						[(may) 5]
+						[(jun) 6]
+						[(jul) 7]
+						[(aug) 8]
+						[(sep) 9]
+						[(oct) 10]
+						[(nov) 11]
+						[(dec) 12]))))
+		obs-month))
+	 
 (define-parser rfc2822-parser:month-name
-  (parser:deep-choice
-    (parser:string-ci= "jan")
-    (parser:string-ci= "feb")
-    (parser:string-ci= "mar")
-    (parser:string-ci= "apr")
-    (parser:string-ci= "may")
-    (parser:string-ci= "jun")
-    (parser:string-ci= "jul")
-    (parser:string-ci= "aug")
-    (parser:string-ci= "sep")
-    (parser:string-ci= "oct")
-    (parser:string-ci= "nov")
-    (parser:string-ci= "dec")))
+	(parser:deep-choice
+		(parser:string-ci= "jan")
+		(parser:string-ci= "feb")
+		(parser:string-ci= "mar")
+		(parser:string-ci= "apr")
+		(parser:string-ci= "may")
+		(parser:string-ci= "jun")
+		(parser:string-ci= "jul")
+		(parser:string-ci= "aug")
+		(parser:string-ci= "sep")
+		(parser:string-ci= "oct")
+		(parser:string-ci= "nov")
+		(parser:string-ci= "dec")))
 
 (define-parser rfc2822-parser:day
-  (parser:deep-choice
-    (parser:sequence %fws-opt parser-1*parser-2digit)
-    obs-day))
+	(parser:deep-choice
+		(parser:sequence %fws-opt parser-1*parser-2digit)
+		obs-day))
 
 (define-parser rfc2822-parser:time
-  (*parser [time rfc2822-parser:time-of-day]
-           [rfc2822-parser:fws]
-           [zone rfc2822-parser:zone]
-    (parser:return
-      (make-date 0
-        (date-second time)
-        (date-minute time)
-        (date-hour time)
-        1 1 1901
-        zone))))
-    
+	(*parser [time rfc2822-parser:time-of-day]
+					 [rfc2822-parser:fws]
+					 [zone rfc2822-parser:zone]
+		(parser:return
+			(make-date 0
+				(date-second time)
+				(date-minute time)
+				(date-hour time)
+				1 1 1901
+				zone))))
+		
 (define-parser rfc2822-parser:time-of-day
-  (*parser [hour rfc2822-parser:hour]
-           [(parser:char= #\:)]
-           [minute rfc2822-parser:minute]
-           [second (parser:optional 0 
-                     (parser:sequence 
-                       (parser:char= #\:) 
-                       rfc2822-parser:second))]
-    (parser:return
-      (make-date 0 second minute hour
-        1 1 1901 0))))
+	(*parser [hour rfc2822-parser:hour]
+					 [(parser:char= #\:)]
+					 [minute rfc2822-parser:minute]
+					 [second (parser:optional 0 
+										 (parser:sequence 
+											 (parser:char= #\:) 
+											 rfc2822-parser:second))]
+		(parser:return
+			(make-date 0 second minute hour
+				1 1 1901 0))))
 
 (define-parser rfc2822-parser:hour
-  (parser:deep-choice parser-2digit obs-hour))
+	(parser:deep-choice parser-2digit obs-hour))
 (define-parser rfc2822-parser:minute
-  (parser:deep-choice parser-2digit obs-minute))
+	(parser:deep-choice parser-2digit obs-minute))
 (define-parser rfc2822-parser:second
-  (parser:deep-choice parser-2digit obs-second))
+	(parser:deep-choice parser-2digit obs-second))
 
 (define-parser rfc2822-parser:zone
-  (parser:deep-choice 
-    (*parser [sign (parser:choice 
-                     (parser:sequence  
-                       (parser:char= #\+) 
-                       (parser:return +))
-                     (parser:sequence 
-                       (parser:char= #\-) 
-                       (parser:return -)))]
-             [offset parser-4digit]
-      (parser:return (sign offset)))
-    obs-zone))
+	(parser:deep-choice 
+		(*parser [sign (parser:choice 
+										 (parser:sequence  
+											 (parser:char= #\+) 
+											 (parser:return +))
+										 (parser:sequence 
+											 (parser:char= #\-) 
+											 (parser:return -)))]
+						 [offset parser-4digit]
+			(parser:return (sign offset)))
+		obs-zone))
 
 @
 
@@ -525,19 +548,19 @@ They are defined below.
 
 <<Utilities>>=
 (define-parser (parser:string-number:between i j)
-  (*parser [digs (parser:string:between i j 
-                   (parser:char-in-set char-set:digit))]
-    (parser:return (string->number digs))))
+	(*parser [digs (parser:string:between i j 
+									 (parser:char-in-set char-set:digit))]
+		(parser:return (string->number digs))))
 
 (define-parser (parser:string-number:at-least k)
-  (*parser [digs (parser:string:at-least k
-                   (parser:char-in-set char-set:digit))]
-    (parser:return (string->number digs))))
+	(*parser [digs (parser:string:at-least k
+									 (parser:char-in-set char-set:digit))]
+		(parser:return (string->number digs))))
 
 (define-parser (parser:string-number:exactly k)
-  (*parser [digs (parser:string:exactly k
-                   (parser:char-in-set char-set:digit))]
-    (parser:return (string->number digs))))
+	(*parser [digs (parser:string:exactly k
+									 (parser:char-in-set char-set:digit))]
+		(parser:return (string->number digs))))
 
 @
 
@@ -549,28 +572,28 @@ but compliant programs must still be able to parse them.
 
 <<Obsolete>>=
 (define-parser obs-day-of-week
-  (parser:single-bracketed %cfws-opt rfc2822-parser:day-name))
+	(parser:single-bracketed %cfws-opt rfc2822-parser:day-name))
 
 (define-parser obs-year
-  (parser:single-bracketed %cfws-opt
-    (parser:string-number:at-least 2)))
+	(parser:single-bracketed %cfws-opt
+		(parser:string-number:at-least 2)))
 
 (define-parser obs-month
-  (parser:single-bracketed rfc2822-parser:cfws
-    rfc2822-parser:month-name))
+	(parser:single-bracketed rfc2822-parser:cfws
+		rfc2822-parser:month-name))
 
 (define-parser obs-day
-  (parser:single-bracketed %cfws-opt parser-1*parser-2digit))
+	(parser:single-bracketed %cfws-opt parser-1*parser-2digit))
 
 (define-parser obs-hour
-  (parser:single-bracketed %cfws-opt parser-2digit))
+	(parser:single-bracketed %cfws-opt parser-2digit))
 
 (define-parser obs-minute
-  (parser:single-bracketed %cfws-opt parser-2digit))
+	(parser:single-bracketed %cfws-opt parser-2digit))
 
 (define-parser obs-second
-  (parser:single-bracketed %cfws-opt parser-2digit))
-  
+	(parser:single-bracketed %cfws-opt parser-2digit))
+	
 @
 
 Note that when parsing time zones, 
@@ -584,22 +607,22 @@ how to treat the military time.
 
 <<Obsolete>>=
 (define-parser obs-zone
-  (parser:deep-choice
-    (zone-parser 0 "UT" "GMT")
-    (zone-parser -4 "EDT")
-    (zone-parser -5 "EST" "CDT")
-    (zone-parser -6 "CST" "MDT")
-    (zone-parser -7 "MST" "PDT")
-    (zone-parser -8 "PST")
-    (parser:sequence 
-      (parser:char-in-set char-set:letter)
-      (parser:return 0))))
+	(parser:deep-choice
+		(zone-parser 0 "UT" "GMT")
+		(zone-parser -4 "EDT")
+		(zone-parser -5 "EST" "CDT")
+		(zone-parser -6 "CST" "MDT")
+		(zone-parser -7 "MST" "PDT")
+		(zone-parser -8 "PST")
+		(parser:sequence 
+			(parser:char-in-set char-set:letter)
+			(parser:return 0))))
 
 (define (zone-parser offset . values)
-  (parser:sequence
-    (apply parser:deep-choice
-      (map parser:string-ci= values))
-    (parser:return offset)))
+	(parser:sequence
+		(apply parser:deep-choice
+			(map parser:string-ci= values))
+		(parser:return offset)))
 
 @
 
@@ -622,7 +645,7 @@ rfc2822-parser:address
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:address
-  (parser:deep-choice rfc2822-parser:mailbox rfc2822-parser:group))
+	(parser:deep-choice rfc2822-parser:mailbox rfc2822-parser:group))
 
 @
 
@@ -631,7 +654,7 @@ specifications.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:mailbox
-  (parser:deep-choice rfc2822-parser:name-addr rfc2822-parser:addr-spec))
+	(parser:deep-choice rfc2822-parser:name-addr rfc2822-parser:addr-spec))
 
 @
 
@@ -639,12 +662,12 @@ Named addresses are angled addresses prepended by an optional display name.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:name-addr
-  (*parser [name (parser:optional #f rfc2822-parser:display-name)]
-           [addr rfc2822-parser:angle-addr]
-    (parser:return
-      (make-rfc2822-address name
-        (rfc2822-address-local addr)
-        (rfc2822-address-domain addr)))))
+	(*parser [name (parser:optional #f rfc2822-parser:display-name)]
+					 [addr rfc2822-parser:angle-addr]
+		(parser:return
+			(make-rfc2822-address name
+				(rfc2822-address-local addr)
+				(rfc2822-address-domain addr)))))
 
 @
 
@@ -652,12 +675,12 @@ An angle address is just an angle delimited address specification.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:angle-addr
-  (parser:deep-choice
-    (parser:bracketed
-      (parser:sequence %cfws-opt (parser:char= #\<))
-      (parser:sequence (parser:char= #\>) %cfws-opt)
-      rfc2822-parser:addr-spec)
-    obs-angle-addr))
+	(parser:deep-choice
+		(parser:bracketed
+			(parser:sequence %cfws-opt (parser:char= #\<))
+			(parser:sequence (parser:char= #\>) %cfws-opt)
+			rfc2822-parser:addr-spec)
+		obs-angle-addr))
 
 @
 
@@ -666,17 +689,17 @@ at all.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:group
-  (*parser [name rfc2822-parser:display-name]
-           [(parser:char= #\:)]
-           [mailbox-list
-            (parser:optional #f
-              (parser:deep-choice 
-                rfc2822-parser:mailbox-list
-                rfc2822-parser:cfws))]
-           [(parser:char= #\;)]
-           [%cfws-opt]
-    (parser:return
-      (make-rfc2822-group name mailbox-list))))
+	(*parser [name rfc2822-parser:display-name]
+					 [(parser:char= #\:)]
+					 [mailbox-list
+						(parser:optional #f
+							(parser:deep-choice 
+								rfc2822-parser:mailbox-list
+								rfc2822-parser:cfws))]
+					 [(parser:char= #\;)]
+					 [%cfws-opt]
+		(parser:return
+			(make-rfc2822-group name mailbox-list))))
 
 @
 
@@ -691,24 +714,24 @@ Mailbox lists and address lists are comma separated mailboxes.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:mailbox-list
-  (parser:deep-choice
-    (*parser [first rfc2822-parser:mailbox]
-             [rest (parser:list:repeated
-                     (parser:sequence 
-                       (parser:char= #\,) 
-                       rfc2822-parser:mailbox))]
-      (parser:return (cons first rest)))
-    obs-mbox-list))
+	(parser:deep-choice
+		(*parser [first rfc2822-parser:mailbox]
+						 [rest (parser:list:repeated
+										 (parser:sequence 
+											 (parser:char= #\,) 
+											 rfc2822-parser:mailbox))]
+			(parser:return (cons first rest)))
+		obs-mbox-list))
 
 (define-parser rfc2822-parser:address-list
-  (parser:deep-choice
-    (*parser [first rfc2822-parser:address]
-             [rest (parser:list:repeated
-                     (parser:sequence 
-                       (parser:char= #\,) 
-                       rfc2822-parser:address))]
-      (parser:return (cons first rest)))
-    obs-addr-list))
+	(parser:deep-choice
+		(*parser [first rfc2822-parser:address]
+						 [rest (parser:list:repeated
+										 (parser:sequence 
+											 (parser:char= #\,) 
+											 rfc2822-parser:address))]
+			(parser:return (cons first rest)))
+		obs-addr-list))
 
 @
 
@@ -716,11 +739,11 @@ An address specification consistes of a local and a domain part.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:addr-spec
-  (*parser [local rfc2822-parser:local-part]
-           [(parser:char= #\@)]
-           [domain rfc2822-parser:domain]
-     (parser:return
-       (make-rfc2822-address #f local domain))))
+	(*parser [local rfc2822-parser:local-part]
+					 [(parser:char= #\@)]
+					 [domain rfc2822-parser:domain]
+		 (parser:return
+			 (make-rfc2822-address #f local domain))))
 
 @
 
@@ -728,10 +751,10 @@ Local parts are either atoms with dots or quoted strings.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:local-part
-  (parser:deep-choice 
-    rfc2822-parser:quoted-string 
-    rfc2822-parser:dot-atom
-    obs-local-part))
+	(parser:deep-choice 
+		rfc2822-parser:quoted-string 
+		rfc2822-parser:dot-atom
+		obs-local-part))
 
 @
 
@@ -739,10 +762,10 @@ Domains use the possible domain literal.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:domain
-  (parser:deep-choice
-    rfc2822-parser:dot-atom
-    rfc2822-parser:domain-literal
-    obs-domain))
+	(parser:deep-choice
+		rfc2822-parser:dot-atom
+		rfc2822-parser:domain-literal
+		obs-domain))
 
 @
 
@@ -754,17 +777,14 @@ A domain literal specifies an actual, specific host.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:domain-literal
-  (*parser 
-    [res 
-     (parser:bracketed
-       (parser:sequence %cfws-opt (parser:char= #\[))
-       (parser:sequence (parser:char= #\]) %cfws-opt)
-       (parser:string:append:repeated
-         (parser:sequence 
-           %fws-opt 
-           rfc2822-parser:dcontent 
-           %fws-opt)))]
-    (parser:return (make-rfc2822-domain-literal res))))
+	(*parser 
+		[res 
+		 (parser:bracketed
+			 (parser:sequence %cfws-opt (parser:char= #\[))
+			 (parser:sequence (parser:char= #\]) %cfws-opt)
+			 (parser:string:append:repeated
+				 (parser:single-bracketed %fws-opt rfc2822-parser:dcontent)))]
+		(parser:return (make-rfc2822-domain-literal res))))
 
 @
 
@@ -772,14 +792,14 @@ We handle quotes in dcontent.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:dcontent
-  (parser:string:at-least 1
-    (parser:choice rfc2822-parser:dtext rfc2822-parser:quoted-pair)))
+	(parser:string:at-least 1
+		(parser:choice rfc2822-parser:dtext rfc2822-parser:quoted-pair)))
 
 (define-parser rfc2822-parser:dtext
-  (parser:char-in-set
-    (char-set-difference char-set:full
-      char-set:whitespace
-      (char-set #\[ #\] #\\))))
+	(parser:char-in-set
+		(char-set-difference char-set:full
+			char-set:whitespace
+			(char-set #\[ #\] #\\))))
 
 @
 
@@ -794,81 +814,81 @@ It adds a route, which only exists in the old style.
 
 <<Datatypes>>=
 (define-record-type rfc2822-obsolete-address
-  (parent rfc2822-address)
-  (fields route))
+	(parent rfc2822-address)
+	(fields route))
 @
 
 <<Obsolete>>=
 (define-parser obs-angle-addr
-  (parser:bracketed
-    (parser:sequence %cfws-opt (parser:char= #\<))
-    (parser:sequence (parser:char= #\>) %cfws-opt)
-    (*parser [route (parser:optional #f obs-route)]
-             [addr rfc2822-parser:addr-spec]
-      (parser:return
-        (if route
-            (make-rfc2822-obsolete-address
-              #f
-              (rfc2822-address-local addr)
-              (rfc2822-address-domain addr)
-              route)
-            addr)))))
+	(parser:bracketed
+		(parser:sequence %cfws-opt (parser:char= #\<))
+		(parser:sequence (parser:char= #\>) %cfws-opt)
+		(*parser [route (parser:optional #f obs-route)]
+						 [addr rfc2822-parser:addr-spec]
+			(parser:return
+				(if route
+						(make-rfc2822-obsolete-address
+							#f
+							(rfc2822-address-local addr)
+							(rfc2822-address-domain addr)
+							route)
+						addr)))))
 
 (define-parser obs-route
-  (parser:bracketed
-    %cfws-opt
-    (parser:sequence (parser:char= #\:) %cfws-opt)
-    obs-domain-list))
+	(parser:bracketed
+		%cfws-opt
+		(parser:sequence (parser:char= #\:) %cfws-opt)
+		obs-domain-list))
 
 (define-parser obs-domain-list
-  (parser:list:at-least 1
-    (parser:sequence
-      (parser:repeated (lambda (x y) x) (parser:epsilon)
-        (parser:choice (parser:char= #\,) rfc2822-parser:cfws))
-      (parser:char= #\@)
-      rfc2822-parser:domain)))
+	(parser:list:at-least 1
+		(parser:sequence
+			(parser:repeated (lambda (x y) x) (parser:epsilon)
+				(parser:choice (parser:char= #\,) rfc2822-parser:cfws))
+			(parser:char= #\@)
+			rfc2822-parser:domain)))
 
 (define-parser obs-mbox-list
-  (*parser [lst (parser:list:at-least 1
-                  (*parser [box (parser:optional #f 
-                                  rfc2822-parser:mailbox)]
-                           [%cfws-opt]
-                           [(parser:char= #\,)]
-                           [%cfws-opt]
-                    (parser:return box)))]
-           [last (parser:optional #f rfc2822-parser:mailbox)]
-    (parser:return 
-      (filter (lambda (x) x) 
-        (append lst (list last))))))
+	(*parser [lst (parser:list:at-least 1
+									(*parser [box (parser:optional #f 
+																	rfc2822-parser:mailbox)]
+													 [%cfws-opt]
+													 [(parser:char= #\,)]
+													 [%cfws-opt]
+										(parser:return box)))]
+					 [last (parser:optional #f rfc2822-parser:mailbox)]
+		(parser:return 
+			(filter (lambda (x) x) 
+				(append lst (list last))))))
 
 (define-parser obs-addr-list
-  (*parser [lst (parser:list:at-least 1
-                  (*parser [box (parser:optional #f 
-                                  rfc2822-parser:address)]
-                           [%cfws-opt]
-                           [(parser:char= #\,)]
-                           [%cfws-opt]
-                    (parser:return box)))]
-           [last (parser:optional #f rfc2822-parser:address)]
-    (parser:return 
-      (filter (lambda (x) x) 
-        (append lst (list last))))))
+	(*parser [lst (parser:list:at-least 1
+									(*parser [box (parser:optional #f 
+																	rfc2822-parser:address)]
+													 [%cfws-opt]
+													 [(parser:char= #\,)]
+													 [%cfws-opt]
+										(parser:return box)))]
+					 [last (parser:optional #f rfc2822-parser:address)]
+		(parser:return 
+			(filter (lambda (x) x) 
+				(append lst (list last))))))
 
 (define-parser obs-local-part
-  (*parser [first rfc2822-parser:word]
-           [rest (parser:string:append:repeated
-                   (*parser [(parser:char= #\.)]
-                            [v rfc2822-parser:word]
-                     (parser:return (string-append "." v))))]
-    (parser:return (string-append first rest))))
+	(*parser [first rfc2822-parser:word]
+					 [rest (parser:string:append:repeated
+									 (*parser [(parser:char= #\.)]
+														[v rfc2822-parser:word]
+										 (parser:return (string-append "." v))))]
+		(parser:return (string-append first rest))))
 
 (define-parser obs-domain
-  (*parser [first rfc2822-parser:atom]
-           [rest (parser:string:append:repeated
-                   (*parser [(parser:char= #\.)]
-                            [v rfc2822-parser:atom]
-                     (parser:return (string-append "." v))))]
-    (parser:return (string-append first rest))))
+	(*parser [first rfc2822-parser:atom]
+					 [rest (parser:string:append:repeated
+									 (*parser [(parser:char= #\.)]
+														[v rfc2822-parser:atom]
+										 (parser:return (string-append "." v))))]
+		(parser:return (string-append first rest))))
 
 @
 
@@ -884,80 +904,58 @@ rfc2822-parser:message
 
 <<Message Parsing>>=
 (define-parser rfc2822-parser:message
-  (*parser [fields (parser:deep-choice 
-                     rfc2822-parser:fields
-                     obs-fields)]
-           [body (parser:optional #f rfc2822-parser:body)]
-    (parser:return
-      (make-rfc2822-message fields body))))
+	(*parser [fields (parser:deep-choice 
+										 rfc2822-parser:fields
+										 obs-fields)]
+					 [body (parser:optional #f rfc2822-parser:body)]
+		(parser:return
+			(make-rfc2822-message fields body))))
 
 (define-parser rfc2822-parser:body
-  (parser:string:append:repeated
-    (parser:sequence rfc2822-parser:crlf 
-      (parser:string:repeated rfc2822-parser:text))))
+	(parser:string:append:repeated
+		(parser:sequence rfc2822-parser:crlf 
+			(parser:string:repeated rfc2822-parser:text))))
 
 @
 
 \chapter{Field Definitions (3.6)}
 
-Parsing the fields does no error checking of the order or type of 
-fields that exist. 
-Validating whether a given field list is a valid RFC 2822 message 
-header is left to another procedure.
+Parsing the fields does no error checking of the order or type of fields
+that exist.  Validating whether a given field list is a valid RFC 2822
+message header is left to another procedure.  Please note that we also
+deviate from the RFC in that we don't distinguish between the obsolete
+field style here. Instead we read in the entire set of fields without
+checking whether the trace fields come first. Since this is just parsing,
+we can do this.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:fields
-  (*parser [traces (parser:list:repeated %traces)]
-           [other (parser:list:repeated %fields)]
-     (parser:return (append traces other))))
-     
-(define-parser %fields
-  (parser:deep-choice
-    rfc2822-parser:orig-date
-    rfc2822-parser:from
-    rfc2822-parser:sender
-    rfc2822-parser:reply-to
-    rfc2822-parser:to
-    rfc2822-parser:cc
-    rfc2822-parser:bcc
-    rfc2822-parser:message-id
-    rfc2822-parser:in-reply-to
-    rfc2822-parser:references
-    rfc2822-parser:subject
-    rfc2822-parser:comments
-    rfc2822-parser:keywords
-    rfc2822-parser:optional-field))
-    
-@
-
-Since traces need to be grouped with resent- fields and 
-their fields are always paired together, we have a single 
-structure for handling them.
-
-<<Datatypes>>=
-(define-record-type rfc2822-trace (fields return received resent))
-@
-
-<<Field Parsing>>=
-(define-parser %traces
-  (*parser [trace rfc2822-parser:trace]
-           [resends 
-            (parser:list:repeated
-              (parser:deep-choice
-                rfc2822-parser:resent-date
-                rfc2822-parser:resent-from
-                rfc2822-parser:resent-sender
-                rfc2822-parser:resent-to
-                rfc2822-parser:resent-cc
-                rfc2822-parser:resent-bcc
-                rfc2822-parser:resent-msg-id))]
-    (parser:return 
-      (cons 'trace
-        (make-rfc2822-trace
-          (rfc2822-trace-return trace)
-          (rfc2822-trace-received trace)
-          resends)))))
-
+	(parser:list:repeated
+	  (parser:deep-choice
+			rfc2822-parser:return
+			rfc2822-parser:received
+	    rfc2822-parser:resent-date
+			rfc2822-parser:resent-from
+			rfc2822-parser:resent-sender
+			rfc2822-parser:resent-to
+			rfc2822-parser:resent-cc
+			rfc2822-parser:resent-bcc
+			rfc2822-parser:resent-msg-id
+			rfc2822-parser:orig-date
+			rfc2822-parser:from
+			rfc2822-parser:sender
+			rfc2822-parser:reply-to
+			rfc2822-parser:to
+			rfc2822-parser:cc
+			rfc2822-parser:bcc
+			rfc2822-parser:message-id
+			rfc2822-parser:in-reply-to
+			rfc2822-parser:references
+			rfc2822-parser:subject
+			rfc2822-parser:comments
+			rfc2822-parser:keywords
+			rfc2822-parser:optional-field)))
+		
 @
 
 \section{Validating Messages}
@@ -977,43 +975,43 @@ error if the message is not valid.
 
 <<Message Parsing>>=
 (define (validate-rfc2822-field-counts fields)
-  (define field-names
-    '(orig-date from sender reply-to to cc bcc message-id 
-      in-reply-to references subject comments
-      keywords optional-field))
-  (define field-index
-    (enum-set-indexer (make-enumeration field-names)))
-  (define field-counts (make-vector (length field-names) 0))
-  (define (field-count field)
-    (vector-ref field-counts (field-index field)))
-  (define (field-inc! field)
-    (when (memq field field-names)
-      (let ([i (field-index field)])
-        (vector-set! field-counts i (+ 1 (field-count field))))))
-  (define multiple-from? #f)
-  (define non-trace-fields
-    (loop ([for field rest (in-list fields)]
-           [while (eq? 'trace (car field))])
-      => (cdr rest)))
-  (loop ([for field (in-list non-trace-fields)])
-    (case (car field)
-      [(from)
-       (when (null? (cdr field))
-         (set! multiple-from? #t))]
-      [(trace) 
-       (assertion-violation 'validate-rfc2822-field-counts
-         "Trace field occurs after regular fields.")]
-      [else (field-inc! (car field))])
-    (field-inc! (car field)))
-  (assert (= 1 (field-count 'orig-date)))
-  (assert (= 1 (field-count 'from)))
-  (assert (if multiple-from? 
-              (= 1 (field-count 'sender))
-              (<= 0 (field-count 'sender) 1)))
-  (assert
-    (for-all (lambda (x) (<= 0 (field-count x) 1))
-      '(reply-to to cc bcc message-id in-reply-to 
-        references subject))))
+	(define field-names
+		'(orig-date from sender reply-to to cc bcc message-id 
+			in-reply-to references subject comments
+			keywords optional-field))
+	(define field-index
+		(enum-set-indexer (make-enumeration field-names)))
+	(define field-counts (make-vector (length field-names) 0))
+	(define (field-count field)
+		(vector-ref field-counts (field-index field)))
+	(define (field-inc! field)
+		(when (memq field field-names)
+			(let ([i (field-index field)])
+				(vector-set! field-counts i (+ 1 (field-count field))))))
+	(define multiple-from? #f)
+	(define non-trace-fields
+		(loop ([for field rest (in-list fields)]
+					 [while (eq? 'trace (car field))])
+			=> (cdr rest)))
+	(loop ([for field (in-list non-trace-fields)])
+		(case (car field)
+			[(from)
+			 (when (null? (cdr field))
+				 (set! multiple-from? #t))]
+			[(trace) 
+			 (assertion-violation 'validate-rfc2822-field-counts
+				 "Trace field occurs after regular fields.")]
+			[else (field-inc! (car field))])
+		(field-inc! (car field)))
+	(assert (= 1 (field-count 'orig-date)))
+	(assert (= 1 (field-count 'from)))
+	(assert (if multiple-from? 
+							(= 1 (field-count 'sender))
+							(<= 0 (field-count 'sender) 1)))
+	(assert
+		(for-all (lambda (x) (<= 0 (field-count x) 1))
+			'(reply-to to cc bcc message-id in-reply-to 
+				references subject))))
 
 @
 
@@ -1031,54 +1029,56 @@ to let them know that they have to do things the harder way.
 
 <<Obsolete>>=
 (define-parser obs-fields
-  (parser:list:repeated
-    (parser:deep-choice
-      obs-return
-      obs-received
-      obs-orig-date
-      obs-from
-      obs-sender
-      obs-reply-to
-      obs-to
-      obs-cc
-      obs-bcc
-      obs-message-id
-      obs-in-reply-to
-      obs-references
-      obs-subject
-      obs-comments
-      obs-keywords
-      obs-resent-date
-      obs-resent-from
-      obs-resent-send
-      obs-resent-reply
-      obs-resent-to
-      obs-resent-cc
-      obs-resent-bcc
-      obs-resent-mid
-      obs-optional)))
+	(parser:list:repeated
+		(parser:deep-choice
+			obs-return
+			obs-received
+			obs-orig-date
+			obs-from
+			obs-sender
+			obs-reply-to
+			obs-to
+			obs-cc
+			obs-bcc
+			obs-message-id
+			obs-in-reply-to
+			obs-references
+			obs-subject
+			obs-comments
+			obs-keywords
+			obs-resent-date
+			obs-resent-from
+			obs-resent-send
+			obs-resent-reply
+			obs-resent-to
+			obs-resent-cc
+			obs-resent-bcc
+			obs-resent-mid
+			obs-optional)))
 
 @
+
+\section{Field Parser Conveniences}
 
 The next sections deal with the actual field definitions. 
 The following is a convenience parser for fields.
 
 <<Utilities>>=
 (define (parser:rfc2822-header name head-str parser)
-  (*parser [(parser:string-ci= head-str)]
-           [(parser:char= #\:)]
-           [res parser]
-           [rfc2822-parser:crlf]
-    (parser:return
-      (cons name res))))
-      
+	(*parser [(parser:string-ci= head-str)]
+					 [(parser:char= #\:)]
+					 [res parser]
+					 [rfc2822-parser:crlf]
+		(parser:return
+			(cons name res))))
+			
 (define (parser:obs-header name field parser)
-  (*parser [(parser:string-ci= field)]
-           [(parser:string:repeated rfc2822-parser:wsp)]
-           [(parser:char= #\:)]
-           [res parser]
-           [rfc2822-parser:crlf]
-    (parser:return (cons name res))))
+	(*parser [(parser:string-ci= field)]
+					 [(parser:string:repeated rfc2822-parser:wsp)]
+					 [(parser:char= #\:)]
+					 [res parser]
+					 [rfc2822-parser:crlf]
+		(parser:return (cons name res))))
 
 @
 
@@ -1086,7 +1086,7 @@ The following is a convenience parser for fields.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:orig-date
-  (parser:rfc2822-header 'orig-date "Date" rfc2822-parser:date-time))
+	(parser:rfc2822-header 'orig-date "Date" rfc2822-parser:date-time))
 
 @
 
@@ -1094,7 +1094,7 @@ The following is a convenience parser for fields.
 
 <<Obsolete>>=
 (define-parser obs-orig-date
-  (parser:obs-header 'orig-date "Date" rfc2822-parser:date-time))
+	(parser:obs-header 'orig-date "Date" rfc2822-parser:date-time))
 
 @
 
@@ -1102,14 +1102,14 @@ The following is a convenience parser for fields.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:from
-  (parser:rfc2822-header 'from "From" rfc2822-parser:mailbox-list))
+	(parser:rfc2822-header 'from "From" rfc2822-parser:mailbox-list))
 
 (define-parser rfc2822-parser:sender
-  (parser:rfc2822-header 'sender "Sender" rfc2822-parser:mailbox))
+	(parser:rfc2822-header 'sender "Sender" rfc2822-parser:mailbox))
 
 (define-parser rfc2822-parser:reply-to
-  (parser:rfc2822-header 'reply-to "Reply-To" 
-    rfc2822-parser:address-list))
+	(parser:rfc2822-header 'reply-to "Reply-To" 
+		rfc2822-parser:address-list))
 
 @
 
@@ -1117,14 +1117,14 @@ The following is a convenience parser for fields.
 
 <<Obsolete>>=
 (define-parser obs-from
-  (parser:obs-header 'from "From" rfc2822-parser:mailbox-list))
+	(parser:obs-header 'from "From" rfc2822-parser:mailbox-list))
 
 (define-parser obs-sender
-  (parser:obs-header 'sender "Sender" rfc2822-parser:mailbox))
+	(parser:obs-header 'sender "Sender" rfc2822-parser:mailbox))
 
 (define-parser obs-reply-to
-  (parser:obs-header 'reply-to "Reply-To" 
-    rfc2822-parser:mailbox-list))
+	(parser:obs-header 'reply-to "Reply-To" 
+		rfc2822-parser:mailbox-list))
 
 @
 
@@ -1133,14 +1133,14 @@ The following is a convenience parser for fields.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:to
-  (parser:rfc2822-header 'to "To" rfc2822-parser:address-list))
+	(parser:rfc2822-header 'to "To" rfc2822-parser:address-list))
 
 (define-parser rfc2822-parser:cc
-  (parser:rfc2822-header 'cc "Cc" rfc2822-parser:address-list))
-  
+	(parser:rfc2822-header 'cc "Cc" rfc2822-parser:address-list))
+	
 (define-parser rfc2822-parser:bcc
-  (parser:rfc2822-header 'bcc "Bcc"
-    (parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
+	(parser:rfc2822-header 'bcc "Bcc"
+		(parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
 
 @
 
@@ -1148,14 +1148,14 @@ The following is a convenience parser for fields.
 
 <<Obsolete>>=
 (define-parser obs-to
-  (parser:obs-header 'to "To" rfc2822-parser:address-list))
+	(parser:obs-header 'to "To" rfc2822-parser:address-list))
 
 (define-parser obs-cc
-  (parser:obs-header 'cc "Cc" rfc2822-parser:address-list))
-  
+	(parser:obs-header 'cc "Cc" rfc2822-parser:address-list))
+	
 (define-parser obs-bcc
-  (parser:obs-header 'bcc "Bcc"
-    (parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
+	(parser:obs-header 'bcc "Bcc"
+		(parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
 
 @
 
@@ -1163,53 +1163,53 @@ The following is a convenience parser for fields.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:message-id
-  (parser:rfc2822-header 'message-id "Message-ID" 
-    rfc2822-parser:msg-id))
+	(parser:rfc2822-header 'message-id "Message-ID" 
+		rfc2822-parser:msg-id))
 
 (define-parser rfc2822-parser:in-reply-to
-  (parser:rfc2822-header 'in-reply-to "In-Reply-To"
-    (parser:list:at-least 1 rfc2822-parser:msg-id)))
+	(parser:rfc2822-header 'in-reply-to "In-Reply-To"
+		(parser:list:at-least 1 rfc2822-parser:msg-id)))
 
 (define-parser rfc2822-parser:references
-  (parser:rfc2822-header 'references "References"
-    (parser:list:at-least 1 rfc2822-parser:msg-id)))
+	(parser:rfc2822-header 'references "References"
+		(parser:list:at-least 1 rfc2822-parser:msg-id)))
 
 (define-parser rfc2822-parser:msg-id
-  (parser:bracketed
-    (parser:sequence %cfws-opt (parser:char= #\<))
-    (parser:sequence (parser:char= #\> %cfws-opt))
-    (*parser [left id-left]
-             [(parser:char= #\@)]
-             [right id-right]
-      (parser:return
-        (string-append left "@" right)))))
+	(parser:bracketed
+		(parser:sequence %cfws-opt (parser:char= #\<))
+		(parser:sequence (parser:char= #\>) %cfws-opt)
+		(*parser [left id-left]
+						 [(parser:char= #\@)]
+						 [right id-right]
+			(parser:return
+				(string-append left "@" right)))))
 
 (define-parser id-left
-  (parser:deep-choice
-    rfc2822-parser:dot-atom-text
-    rfc2822-parser:no-fold-quote
-    obs-id-left))
+	(parser:deep-choice
+		rfc2822-parser:dot-atom-text
+		rfc2822-parser:no-fold-quote
+		obs-id-left))
 
 (define-parser id-right
-  (parser:deep-choice
-    rfc2822-parser:dot-atom-text
-    rfc2822-parser:no-fold-literal
-    obs-id-right))
+	(parser:deep-choice
+		rfc2822-parser:dot-atom-text
+		rfc2822-parser:no-fold-literal
+		obs-id-right))
 
 (define-parser rfc2822-parser:no-fold-quote
-  (parser:single-bracketed (parser:char= #\")
-    (parser:string:repeated
-      (parser:choice 
-        rfc2822-parser:qtext 
-        rfc2822-parser:quoted-pair))))
+	(parser:single-bracketed (parser:char= #\")
+		(parser:string:repeated
+			(parser:choice 
+				rfc2822-parser:qtext 
+				rfc2822-parser:quoted-pair))))
 
 (define-parser rfc2822-parser:no-fold-literal
-  (parser:bracketed
-    (parser:char= #\[)
-    (parser:char= #\])
-    (parser:string:repeated
-      rfc2822-parser:dtext
-      rfc2822-parser:quoted-pair)))
+	(parser:bracketed
+		(parser:char= #\[)
+		(parser:char= #\])
+		(parser:string:repeated
+			rfc2822-parser:dtext
+			rfc2822-parser:quoted-pair)))
 
 @
 
@@ -1217,22 +1217,22 @@ The following is a convenience parser for fields.
 
 <<Obsolete>>=
 (define-parser obs-message-id
-  (parser:obs-header 'message-id "Message-ID"
-    rfc2822-parser:msg-id))
+	(parser:obs-header 'message-id "Message-ID"
+		rfc2822-parser:msg-id))
 
 (define-parser obs-in-reply-to
-  (parser:obs-header 'in-reply-to "In-Reply-To"
-    (parser:list:repeated
-      (parser:deep-choice
-        rfc2822-parser:phrase
-        rfc2822-parser:msg-id))))
+	(parser:obs-header 'in-reply-to "In-Reply-To"
+		(parser:list:repeated
+			(parser:deep-choice
+				rfc2822-parser:phrase
+				rfc2822-parser:msg-id))))
 
 (define-parser obs-references
-  (parser:obs-header 'references "References"
-    (parser:list:repeated
-      (parser:deep-choice
-        rfc2822-parser:phrase
-        rfc2822-parser:msg-id))))
+	(parser:obs-header 'references "References"
+		(parser:list:repeated
+			(parser:deep-choice
+				rfc2822-parser:phrase
+				rfc2822-parser:msg-id))))
 
 (define-parser obs-id-left rfc2822-parser:local-part)
 (define-parser obs-id-right rfc2822-parser:domain)
@@ -1243,20 +1243,20 @@ The following is a convenience parser for fields.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:subject
-  (parser:rfc2822-header 'subject "Subject" 
-    rfc2822-parser:unstructured))
+	(parser:rfc2822-header 'subject "Subject" 
+		rfc2822-parser:unstructured))
 
 (define-parser rfc2822-parser:comments
-  (parser:rfc2822-header 'comments "Comments"
-    rfc2822-parser:unstructured))
+	(parser:rfc2822-header 'comments "Comments"
+		rfc2822-parser:unstructured))
 
 (define-parser rfc2822-parser:keywords
-  (parser:rfc2822-header 'keywords "Keywords"
-    (*parser [first rfc2822-parser:phrase]
-             [rest (parser:list:repeated
-                     (parser:sequence (parser:char= #\,)
-                       rfc2822-parser:phrase))]
-      (parser:return (cons first rest)))))
+	(parser:rfc2822-header 'keywords "Keywords"
+		(*parser [first rfc2822-parser:phrase]
+						 [rest (parser:list:repeated
+										 (parser:sequence (parser:char= #\,)
+											 rfc2822-parser:phrase))]
+			(parser:return (cons first rest)))))
 
 @
 
@@ -1264,15 +1264,15 @@ The following is a convenience parser for fields.
 
 <<Obsolete>>=
 (define-parser obs-subject
-  (parser:obs-header 'subject "Subject"
-    rfc2822-parser:unstructured))
+	(parser:obs-header 'subject "Subject"
+		rfc2822-parser:unstructured))
 
 (define-parser obs-comments
-  (parser:obs-header 'comments "Comments"
-    rfc2822-parser:unstructured))
+	(parser:obs-header 'comments "Comments"
+		rfc2822-parser:unstructured))
 
 (define-parser obs-keywords
-  (parser:obs-header 'keywords "Keywords" obs-phrase-list))
+	(parser:obs-header 'keywords "Keywords" obs-phrase-list))
 
 @
 
@@ -1280,32 +1280,32 @@ The following is a convenience parser for fields.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:resent-date
-  (parser:rfc2822-header 'resent-date "Resent-Date"
-    rfc2822-parser:date-time))
+	(parser:rfc2822-header 'resent-date "Resent-Date"
+		rfc2822-parser:date-time))
 
 (define-parser rfc2822-parser:resent-from
-  (parser:rfc2822-header 'resent-from "Resent-From"
-    rfc2822-parser:mailbox-list))
+	(parser:rfc2822-header 'resent-from "Resent-From"
+		rfc2822-parser:mailbox-list))
 
 (define-parser rfc2822-parser:resent-sender
-  (parser:rfc2822-header 'resent-sender "Resent-Sender"
-    rfc2822-parser:mailbox))
+	(parser:rfc2822-header 'resent-sender "Resent-Sender"
+		rfc2822-parser:mailbox))
 
 (define-parser rfc2822-parser:resent-to
-  (parser:rfc2822-header 'resent-to "Resent-To"
-    rfc2822-parser:address-list))
+	(parser:rfc2822-header 'resent-to "Resent-To"
+		rfc2822-parser:address-list))
 
 (define-parser rfc2822-parser:resent-cc
-  (parser:rfc2822-header 'resent-cc "Resent-Cc"
-    rfc2822-parser:address-list))
+	(parser:rfc2822-header 'resent-cc "Resent-Cc"
+		rfc2822-parser:address-list))
 
 (define-parser rfc2822-parser:resent-bcc
-  (parser:rfc2822-header 'resent-bcc "Resent-Bcc"
-    (parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
+	(parser:rfc2822-header 'resent-bcc "Resent-Bcc"
+		(parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
 
 (define-parser rfc2822-parser:resent-msg-id
-  (parser:rfc2822-header 'resent-msg-id "Resent-Msg-ID"
-    rfc2822-parser:msg-id))
+	(parser:rfc2822-header 'resent-msg-id "Resent-Msg-ID"
+		rfc2822-parser:msg-id))
 
 @
 
@@ -1313,66 +1313,59 @@ The following is a convenience parser for fields.
 
 <<Obsolete>>=
 (define-parser obs-resent-date
-  (parser:obs-header 'resent-date "Resent-Date"
-    rfc2822-parser:date-time))
+	(parser:obs-header 'resent-date "Resent-Date"
+		rfc2822-parser:date-time))
 
 (define-parser obs-resent-from
-  (parser:obs-header 'resent-from "Resent-From"
-    rfc2822-parser:mailbox-list))
+	(parser:obs-header 'resent-from "Resent-From"
+		rfc2822-parser:mailbox-list))
 
 (define-parser obs-resent-send
-  (parser:obs-header 'resent-sender "Resent-Sender"
-    rfc2822-parser:mailbox))
+	(parser:obs-header 'resent-sender "Resent-Sender"
+		rfc2822-parser:mailbox))
 
 (define-parser obs-resent-to
-  (parser:obs-header 'resent-to "Resent-To"
-    rfc2822-parser:address-list))
+	(parser:obs-header 'resent-to "Resent-To"
+		rfc2822-parser:address-list))
 
 (define-parser obs-resent-cc
-  (parser:obs-header 'resent-cc "Resent-Cc"
-    rfc2822-parser:address-list))
+	(parser:obs-header 'resent-cc "Resent-Cc"
+		rfc2822-parser:address-list))
 
 (define-parser obs-resent-bcc
-  (parser:obs-header 'resent-bcc "Resent-Bcc"
-    (parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
+	(parser:obs-header 'resent-bcc "Resent-Bcc"
+		(parser:deep-choice rfc2822-parser:address-list %cfws-opt)))
 
 (define-parser obs-resent-mid
-  (parser:obs-header 'resent-msg-id "Resent-Msg-ID"
-    rfc2822-parser:msg-id))
-    
+	(parser:obs-header 'resent-msg-id "Resent-Msg-ID"
+		rfc2822-parser:msg-id))
+		
 (define-parser obs-resent-reply
-  (parser:obs-header 'resent-reply-to "Resent-Reply-To"
-    rfc2822-parser:address-list))
+	(parser:obs-header 'resent-reply-to "Resent-Reply-To"
+		rfc2822-parser:address-list))
 
 @
 
 \section{Trace Fields (3.6.7)}
 
-Tracing here grabs all the trace fields into one structure. 
-This only works if the fields are not obsolete fields. 
+Note that we stray from the RFC slightly here to simplify 
+the parsing. We just provide the field parsers, rather than 
+a general parser for trace fields that would presumably 
+return some sort of structure related to it.
 
 <<Field Parsing>>=
-(define-parser rfc2822-parser:trace
-  (*parser [return (parser:optional #f rfc2822-parser:return)]
-           [received 
-            (parser:list:at-least 1 rfc2822-parser:received)]
-    (make-rfc2822-trace return received #f)))
-
 (define-parser rfc2822-parser:return
-  (parser:bracketed
-    (parser:string-ci= "Return-Path:")
-    rfc2822-parser:crlf
-    rfc2822-parser:path))
+  (parser:rfc2822-header 'return-path "Return-Path" rfc2822-parser:path))
 
 (define-parser rfc2822-parser:path
-  (parser:deep-choice
-    (parser:bracketed
-      (parser:sequence %cfws-opt (parser:char= #\<))
-      (parser:sequence (parser:char= #\>) %cfws-opt)
-      (parser:deep-choice
-        rfc2822-parser:addr-spec
-        %cfws-opt))
-    obs-path))
+	(parser:deep-choice
+		(parser:bracketed
+			(parser:sequence %cfws-opt (parser:char= #\<))
+			(parser:sequence (parser:char= #\>) %cfws-opt)
+			(parser:deep-choice
+				rfc2822-parser:addr-spec
+				%cfws-opt))
+		obs-path))
 
 @
 
@@ -1385,42 +1378,43 @@ we provide an additional structure.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:received
-  (*parser [(parser:string-ci= "Received:")]
-           [entries rfc2822-parser:name-val-list]
-           [(parser:char= #\:)]
-           [date rfc2822-parser:date-time]
-           [rfc2822-parser:crlf]
-    (parser:return (make-rfc2822-received entries date))))
+	(parser:rfc2822-header 'received "Received"
+		(*parser
+				[entries rfc2822-parser:name-val-list]
+				[%cfws-opt]
+				[(parser:char= #\;)]
+				[date rfc2822-parser:date-time]
+			(parser:return (make-rfc2822-received entries date)))))
 
 (define-parser rfc2822-parser:name-val-list
-  (*parser [%cfws-opt]
-           [first rfc2822-parser:name-val-pair]
-           [rest (parser:list:repeated 
-                   rfc2822-parser:cfws
-                   rfc2822-parser:name-val-pair)]
-    (parser:return (cons first rest))))
+	(parser:list:repeated
+		(parser:sequence %cfws-opt rfc2822-parser:name-val-pair)))
 
 (define-parser rfc2822-parser:name-val-pair
-  (*parser [name rfc2822-parser:item-name]
-           [rfc2822-parser:cfws]
-           [value rfc2822-parser:item-value]
-    (parser:return (cons name value))))
+	(*parser 
+			[name rfc2822-parser:item-name]
+			[rfc2822-parser:cfws]
+			[value rfc2822-parser:item-value]
+		(parser:return (cons name value))))
 
 (define-parser rfc2822-parser:item-name
-  (*parser [first-char rfc2822-parser:alpha]
-           [rest (parser:string:repeated
-                   (parser:choice (parser:char= #\-)
-                     rfc2822-parser:alpha
-                     rfc2822-parser:digit))]
-    (parser:return (string-append (string first-char) rest))))
+	(*parser 
+			[first-char rfc2822-parser:alpha]
+			[rest 
+				(parser:string:repeated
+					(parser:choice 
+						(parser:char= #\-)
+						rfc2822-parser:alpha
+						rfc2822-parser:digit))]
+		(parser:return (string-append (string first-char) rest))))
 
 (define-parser rfc2822-parser:item-value
-  (parser:deep-choice
-    (parser:list:repeated rfc2822-parser:angle-addr)
-    rfc2822-parser:addr-spec
-    rfc2822-parser:atom
-    rfc2822-parser:domain
-    rfc2822-parser:msg-id))
+	(parser:deep-choice
+		(parser:list:at-least 1 rfc2822-parser:angle-addr)
+		rfc2822-parser:addr-spec
+		rfc2822-parser:msg-id
+		rfc2822-parser:domain
+		rfc2822-parser:atom))
 
 @
 
@@ -1428,12 +1422,12 @@ we provide an additional structure.
 
 <<Obsolete>>=
 (define-parser obs-return
-  (parser:obs-header 'return-path "Return-Path"
-    rfc2822-parser:path))
+	(parser:obs-header 'return-path "Return-Path"
+		rfc2822-parser:path))
 
 (define-parser obs-received
-  (parser:obs-header 'received "Received"
-    rfc2822-parser:name-val-list))
+	(parser:obs-header 'received "Received"
+		rfc2822-parser:name-val-list))
 
 (define-parser obs-path obs-angle-addr)
 
@@ -1447,22 +1441,22 @@ we provide an additional structure.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:optional-field
-  (*parser [field-name rfc2822-parser:field-name]
-           [(parser:char= #\:)]
-           [contents rfc2822-parser:unstructured]
-           [rfc2822-parser:crlf]
-    (parser:return 
-      (cons (string->symbol (string-downcase field-name))
-        contents))))
+	(*parser [field-name rfc2822-parser:field-name]
+					 [(parser:char= #\:)]
+					 [contents rfc2822-parser:unstructured]
+					 [rfc2822-parser:crlf]
+		(parser:return 
+			(cons (string->symbol (string-downcase field-name))
+				contents))))
 
 (define-parser rfc2822-parser:field-name
-  (parser:string:at-least 1 rfc2822-parser:ftext))
+	(parser:string:at-least 1 rfc2822-parser:ftext))
 
 (define-parser rfc2822-parser:ftext
-  (parser:char-in-set
-    (char-set-difference char-set:full
-      char-set:iso-control
-      (char-set #\nul #\space #\:))))
+	(parser:char-in-set
+		(char-set-difference char-set:full
+			char-set:iso-control
+			(char-set #\nul #\space #\:))))
 
 @
 
@@ -1470,11 +1464,11 @@ we provide an additional structure.
 
 <<Obsolete>>=
 (define-parser obs-optional
-  (*parser [name rfc2822-parser:field-name]
-           [(parser:string:repeated rfc2822-parser:wsp)]
-           [(parser:char= #\:)]
-           [val rfc2822-parser:unstructured]
-    (parser:return (cons name val))))
+	(*parser [name rfc2822-parser:field-name]
+					 [(parser:string:repeated rfc2822-parser:wsp)]
+					 [(parser:char= #\:)]
+					 [val rfc2822-parser:unstructured]
+		(parser:return (cons name val))))
 
 @
 

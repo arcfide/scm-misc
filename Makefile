@@ -9,4 +9,4 @@
 
 .nw.tex:
 	mkdir -p doc
-	noweave -tex $< > doc/$@
+	noweave -tex -t2 $< > doc/$@
