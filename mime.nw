@@ -1,7 +1,6 @@
 \title{MIME Message Parsing}
 
-\chapter{Introduction}
-
+\chapter{Introduction}%
 MIME messages are mostly compatible with RFC 2822 messages, but they
 define new headers and a new means of processing the body. This library is
 designed to extend the RFC 2822 parsers defined in [[(arcfide rfc2822)]]
@@ -13,8 +12,7 @@ not messages, such as the body of POST HTTP transmissions.  These
 transmissions send out a MIME body type of [[multipart/form-data]]
 and ought to be parsed by a real MIME parser.
 
-\chapter{Basic Imports}
-
+\chapter{Basic Imports}%
 These are basic imports that nearly all of the other chapters 
 require.
 
@@ -23,8 +21,7 @@ require.
 (riastradh parscheme)
 @
 
-\chapter{Parsing MIME Entities}
-
+\chapter{Parsing MIME Entities}%
 MIME entities are either messages or parts of a composite message. 
 They look like regular messages, but may not have the entire 
 set of headers that a regular message would have. The parser 
@@ -58,14 +55,15 @@ an entity are binary or non-textual data, a bytevector should be used.
 			(make-mime-entity fields contents))))
 @
 
-\chapter{Parsing MIME Fields}
-
+\chapter{Parsing MIME Fields}%
 MIME fields are nearly identifical to RFC2822 fields, except that with a
 MIME entity, fields other than "Content-" fields can be entirely ignored,
 and may be dropped. This is not true for messages, however, and probably
 only occurs in entities that are part of multipart entities.
 
 <<Fields>>=
+<<Headers>>
+
 (define-parser mime-parser:fields
 	(parser:list:repeated
 		(parser:deep-choice
@@ -83,4 +81,32 @@ entities, messages, and parts, which the MIME standard (RFC 2045)
 distinguishes.
 
 \chapter{MIME Header Definitions}
+
+\section{Content Header}%
+
+\section{Encoding Header}%
+
+\section{ID Header}%
+
+\section{Description Header}%
+
+\section{Extensions Fields}%
+
+\section{Version Header}%
+The version header field should return a field with a pair value whose
+first element ([[car]]) is the major version, and whose second element
+([[cdr]]) is the minor version.
+
+<<Headers>>=
+(define-parser mime-parser:version
+	(parser:rfc2822-header 'mime-version "MIME-Version"
+		(*parser 
+				[major (parser:single-bracketed rfc2822-parser:cfws-opt parser:1*digit)]
+				[(parser:char= #\.)]
+				[minor (parser:single-bracketed rfc2822-parser:cfws-opt parser:1*digit)]
+			(parser:return (cons major minor)))))
+
+(define-parser parser:1*digit (parser:string-number:at-least 1))
+
+@
 
