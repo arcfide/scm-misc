@@ -873,8 +873,10 @@ rfc2822-parser:body
 
 (define-parser rfc2822-parser:body
 	(parser:string:append:repeated
-		(parser:sequence rfc2822-parser:crlf 
-			(parser:string:repeated rfc2822-parser:text))))
+		(*parser 
+				[rfc2822-parser:crlf] 
+				[line (parser:string:repeated rfc2822-parser:text)]
+			(parser:return (string-append "\r\n" line)))))
 
 @
 
