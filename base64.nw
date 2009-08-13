@@ -149,7 +149,8 @@ the proper fields.
 			(and c3
 				(fx+ (fxarithmetic-shift-left (fxand 15 c2) 4)
 					(fxand 15 (fxarithmetic-shift-right c3 2))))
-			(and c4 (fx+ (fxand 3 c3) c4)))))
+			(and c4 
+				(fx+ (fxarithmetic-shift-left (fxand 3 c3) 6) c4)))))
 
 @
 

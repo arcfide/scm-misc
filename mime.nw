@@ -1,7 +1,6 @@
 \title{MIME Message Parsing}
 
-\chapter{Introduction}
-
+\chapter{Introduction}%
 MIME messages are mostly compatible with RFC 2822 messages, but they
 define new headers and a new means of processing the body. This library is
 designed to extend the RFC 2822 parsers defined in [[(arcfide rfc2822)]]
@@ -13,8 +12,7 @@ not messages, such as the body of POST HTTP transmissions.  These
 transmissions send out a MIME body type of [[multipart/form-data]]
 and ought to be parsed by a real MIME parser.
 
-\chapter{Basic Imports}
-
+\chapter{Basic Imports}%
 These are basic imports that nearly all of the other chapters 
 require.
 
@@ -23,8 +21,7 @@ require.
 (riastradh parscheme)
 @
 
-\chapter{Parsing MIME Entities}
-
+\chapter{Parsing MIME Entities}%
 MIME entities are either messages or parts of a composite message. 
 They look like regular messages, but may not have the entire 
 set of headers that a regular message would have. The parser 
@@ -59,14 +56,15 @@ an entity are binary or non-textual data, a bytevector should be used.
 			(make-mime-entity fields contents))))
 @
 
-\chapter{Parsing MIME Fields}
-
+\chapter{Parsing MIME Fields}%
 MIME fields are nearly identifical to RFC2822 fields, except that with a
 MIME entity, fields other than "Content-" fields can be entirely ignored,
 and may be dropped. This is not true for messages, however, and probably
 only occurs in entities that are part of multipart entities.
 
 <<Fields>>=
+<<Headers>>
+
 (define-parser mime-parser:fields
 	(parser:list:repeated
 		(parser:deep-choice
@@ -85,3 +83,248 @@ distinguishes.
 
 \chapter{MIME Header Definitions}
 
+\section{Content Header}%
+Specifies the Content-Type of a MIME entity.
+
+<<Datatypes>>=
+(define-record-type mime-type (fields main subtype parameters))
+@
+
+<<Headers>>=
+(define-parser mime-parser:content
+	(parser:rfc2822-header 'content-type "Content-Type"
+		(*parser
+				[type (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
+				[(parser:char= #\/)]
+				[subtype (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
+				[params 
+					(parser:list:repeated 
+						(parser:sequence (parser:char= #\;) 
+							(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:parameter)))]
+			(parser:return (make-mime-type type subtype params)))))
+
+@
+
+Tokens are case-insensitive elements of a MIME type. We achieve this 
+by downcasing all strings and converting them to symbols. 
+
+<<Headers>>=
+(define-parser mime-parser:token
+	(*parser
+			[val (parser:string:at-least 1 mime-parser:token-char)]
+		(parser:return (string->symbol (string-downcase val)))))
+
+(define-parser mime-parser:token-char
+	(parser:char-in-set 
+		(char-set-difference char-set:ascii
+			char-set:whitespace
+			char-set:iso-control
+			(char-set 
+				#\( #\) #\< #\> #\@ #\, #\; #\: #\\ #\" #\/
+				#\[ #\] #\? #\=))))
+
+@
+
+Parameters are tokens followed by a value string separated by an [[=]] 
+character.
+
+<<Headers>>=
+(define-parser mime-parser:parameter
+	(*parser 
+			[attr mime-parser:token]
+			[(parser:single-bracketed rfc2822-parser:cfws-opt (parser:char= #\=))]
+			[val (parser:choice rfc2822-parser:quoted-string mime-parser:token)]
+		(parser:return (cons attr val))))
+
+@
+
+\section{Encoding Header}%
+Encoding specifies the method of storing the data that is in the entity.
+
+<<Headers>>=
+(define-parser mime-parser:encoding
+	(parser:rfc2822-header 'content-transfer-encoding "Content-Transfer-Encoding"
+		(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)))
+
+@
+
+\section{ID Header}%
+Uniquely identifies a MIME Entity.
+
+<<Headers>>=
+(define-parser mime-parser:id
+	(parser:rfc2822-header 'content-id "Content-ID" rfc2822-parser:msg-id))
+
+@
+
+\section{Description Header}%
+
+<<Headers>>=
+(define-parser mime-parser:description
+	(parser:rfc2822-header 'content-description "Content-Description"
+		rfc2822-parser:unstructured))
+
+@
+
+\section{Extensions Fields}%
+
+\section{Version Header}%
+The version header field should return a field with a pair value whose
+first element ([[car]]) is the major version, and whose second element
+([[cdr]]) is the minor version.
+
+<<Headers>>=
+(define-parser mime-parser:version
+	(parser:rfc2822-header 'mime-version "MIME-Version"
+		(*parser 
+				[major (parser:single-bracketed rfc2822-parser:cfws-opt parser:1*digit)]
+				[(parser:char= #\.)]
+				[minor (parser:single-bracketed rfc2822-parser:cfws-opt parser:1*digit)]
+			(parser:return (cons major minor)))))
+
+(define-parser parser:1*digit (parser:string-number:at-least 1))
+
+@
+
+\chapter{MIME Entity Contents}%
+Parsing the MIME Entity contents consists of first decoding the data
+according to some method (possibly an identify function), followed by
+conversion or the proper treatment of that functions output into a data
+structure appropriate to the mime type of the entity.
+
+Here, this is accomplished by a parser that examines two databases,
+one containing MIME types, and the other containing encoding schemes.
+The MIME type database associates mime types with functions going from
+a decoded data stream (usually either a string or a bytevector) and
+the mime-type parameters into the appropriate form. Encoding Schemes
+associate a given scheme with a parser.
+
+<<Exports>>=
+mime-parser:contents
+@
+
+<<Content Parsing>>=
+(define (mime-parser:contents fields)
+	(let (
+			[decode (lookup-mime-decoder (assq 'content-transfer-encoding fields))]
+			[convert (lookup-mime-type-converter (assq 'content-type fields))])
+		(*parser [res decode]
+			(parser:return (convert res)))))
+
+@
+
+The MIME types database is nested association list. The first level 
+identifies the main content type, but the head of this list contains the 
+default parser if no MIME type is defined. The second level 
+contains a similar pair, where the first element contains the default 
+parser for that main type if no subtype is recognized, and the 
+second element contains an association list of subtypes to parsers. 
+
+<<Content Parsing>>=
+<<Converters>>
+
+(define mime-type-db
+	(make-parameter
+		`(,convert-text/plain
+			(text ,convert-text/plain 
+				(plain ,convert-text/plain))
+			(image ,identity-converter)
+			(audio ,identity-converter)
+			(video ,identity-converter)
+			(application ,identity-converter))))
+
+@
+
+Here are some predefined converters.
+
+<<Converters>>=
+(define (convert-text/plain data params)
+	(cond
+		[(string? data) data]
+		[(bytevector? data) (string->bytevector data (native-transcoder))]
+		[else (error 'convert-text/plain "Unknown data stream type.")]))
+
+(define (identity-converter data params)
+	data)
+@
+
+Use the following procedure to register new converters.
+
+<<Content Parsing>>=
+(define (register-mime-type-converter! type subtype converter)
+	(let ([db (mime-type-db)])
+		(if type
+			(let ([res (assq type db)])
+				(if res
+					(if subtype
+						(let ([subres (assq subtype res)])
+							(if subres
+								(set-car! (cdr subres) converter)
+								(set-cdr! (cdr res)
+									(cons `(,subtype ,converter) (cddr res)))))
+						(set-car! (cdr res) converter))
+					(set-cdr! db
+						(cons `(,type ,converter (,subtype ,converter))
+							(cdr db)))))
+			(set-car! db converter))))
+
+@
+
+It is necessary to use a parser instead of a procedure for the 
+Encoding Schemes database because we may not be sure how to grab 
+the data out of the parsing stream. For example, a [[binary]] encoding 
+may require us to grab the data out directly as a bytevector, whereas 
+a base64 encoding may require us to extract the relevant characters 
+and ignore things like line breaks, and subsequently decode these using 
+a base64 decoder.
+
+<<Content Parsing>>=
+<<Decoders>>
+
+(define mime-decoder-db
+	(make-parameter
+		'((7bit . ,rfc2822-parser:body)
+			(8bit . ,rfc2822-parser:body)
+			(binary . ,rfc2822-parser:binary)
+			(quoted-printable . ,mime-parser:quoted-printable)
+			(base64 . ,mime-parser:base64))))
+
+@
+
+Here are the basic decoders.
+
+<<Decoders>>=
+(define-parser mime-parser:quoted-printable
+	rfc2822-parser:body)
+
+(define-parser mime-parser:binary
+	(parser:string:repeated (parser:char-in-set char-set:full)))
+
+(define-parser mime-parser:base64
+	(*parser [body rfc2822-parser:body]
+		(parser:return
+			(base64-decode
+				(string->bytevector
+					(with-input-from-string body
+						(lambda ()
+							(let loop ([s ""])
+								(let ([line (get-line (current-input-port))])
+									(if (eof-object? line)
+										s
+										(loop (string-append s line)))))))
+					(native-transcoder))))))
+
+@
+
+The follow procedure allows for registration to the decoder database.
+
+<<Content Parsing>>=
+(define (register-mime-decoder! type decoder)
+	(let ([res (and type (assq type (mime-decoder-db)))])
+		(if res
+			(set-cdr! res decoder)
+			(mime-decoder-db
+				(cons (cons type decoder)
+					(mime-decoder-db))))))
+
+@
