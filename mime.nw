@@ -152,11 +152,18 @@ Uniquely identifies a MIME Entity.
 
 <<Headers>>=
 (define-parser mime-parser:id
-	(parser:rfc2822-parser 'content-id "Content-ID" rfc2822-parser:msg-id))
+	(parser:rfc2822-header 'content-id "Content-ID" rfc2822-parser:msg-id))
 
 @
 
 \section{Description Header}%
+
+<<Headers>>=
+(define-parser mime-parser:description
+	(parser:rfc2822-header 'content-description "Content-Description"
+		rfc2822-parser:unstructured))
+
+@
 
 \section{Extensions Fields}%
 

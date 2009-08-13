@@ -283,6 +283,10 @@ It is also necessary to parse unstructured fields,
 which do not have the same tokenization as above.
 In particular, white space and comments are not collapsed. 
 
+<<Exports>>=
+rfc2822-parser:unstructured
+@
+
 <<Tokenization>>=
 (define-parser rfc2822-parser:utext
 	(parser:choice 
