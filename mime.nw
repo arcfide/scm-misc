@@ -1,0 +1,86 @@
+\title{MIME Message Parsing}
+
+\chapter{Introduction}
+
+MIME messages are mostly compatible with RFC 2822 messages, but they
+define new headers and a new means of processing the body. This library is
+designed to extend the RFC 2822 parsers defined in [[(arcfide rfc2822)]]
+and provide the ability to parse messages that could potentially contain
+MIME data.
+
+MIME handling is also convenient for handling things that are
+not messages, such as the body of POST HTTP transmissions.  These
+transmissions send out a MIME body type of [[multipart/form-data]]
+and ought to be parsed by a real MIME parser.
+
+\chapter{Basic Imports}
+
+These are basic imports that nearly all of the other chapters 
+require.
+
+<<Imports>>=
+(rnrs base)
+(riastradh parscheme)
+@
+
+\chapter{Parsing MIME Entities}
+
+MIME entities are either messages or parts of a composite message. 
+They look like regular messages, but may not have the entire 
+set of headers that a regular message would have. The parser 
+should return a [[mime-entity]].
+
+Generally, a [[mime-entity]] should contain fields like a message,
+as well as either a string or a bytevector for the contents. If the
+contents fit naturally into a string format, such as textual data, then
+strings should be used. If however, the media type of the contents of
+an entity are binary or non-textual data, a bytevector should be used.
+
+
+<<Datatypes>>=
+(define-record-type mime-entity (fields fields contents))
+@
+
+<<Imports>>=
+(arcfide rfc2822)
+@
+
+<<Entities>>=
+<<Fields>>
+
+<<Contents>>
+
+(define-parser mime-parser:entity
+	(*parser 
+			[fields mime-parser:fields]
+			[contents (mime-parser:contents fields)]
+		(parser:return
+			(make-mime-entity fields contents))))
+@
+
+\chapter{Parsing MIME Fields}
+
+MIME fields are nearly identifical to RFC2822 fields, except that with a
+MIME entity, fields other than "Content-" fields can be entirely ignored,
+and may be dropped. This is not true for messages, however, and probably
+only occurs in entities that are part of multipart entities.
+
+<<Fields>>=
+(define-parser mime-parser:fields
+	(parser:list:repeated
+		(parser:deep-choice
+			mime-parser:content
+			mime-parser:encoding
+			mime-parser:id
+			mime-parser:description
+			mime-parser:extension-field
+			mime-parser:version
+			rfc2822-parser:field)))
+@
+
+Notice that we simplify the MIME definitions a bit by mixing together
+entities, messages, and parts, which the MIME standard (RFC 2045)
+distinguishes.
+
+\chapter{MIME Header Definitions}
+
