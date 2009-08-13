@@ -118,6 +118,10 @@ then nil is returned.
 The RFC doesn't give an explicit parser for CRLF and WSP, 
 but this is useful.
 
+<<Exports>>=
+rfc2822-parser:crlf
+@
+
 <<Utilities>>=
 (define-parser rfc2822-parser:crlf
 	(parser:sequence 

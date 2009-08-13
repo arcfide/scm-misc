@@ -53,6 +53,7 @@ an entity are binary or non-textual data, a bytevector should be used.
 (define-parser mime-parser:entity
 	(*parser 
 			[fields mime-parser:fields]
+			[rfc2822-parser:crlf]
 			[contents (mime-parser:contents fields)]
 		(parser:return
 			(make-mime-entity fields contents))))
