@@ -185,3 +185,145 @@ first element ([[car]]) is the major version, and whose second element
 
 @
 
+\chapter{MIME Entity Contents}%
+Parsing the MIME Entity contents consists of first decoding the data
+according to some method (possibly an identify function), followed by
+conversion or the proper treatment of that functions output into a data
+structure appropriate to the mime type of the entity.
+
+Here, this is accomplished by a parser that examines two databases,
+one containing MIME types, and the other containing encoding schemes.
+The MIME type database associates mime types with functions going from
+a decoded data stream (usually either a string or a bytevector) and
+the mime-type parameters into the appropriate form. Encoding Schemes
+associate a given scheme with a parser.
+
+<<Exports>>=
+mime-parser:contents
+@
+
+<<Content Parsing>>=
+(define (mime-parser:contents fields)
+	(let (
+			[decode (lookup-mime-decoder (assq 'content-transfer-encoding fields))]
+			[convert (lookup-mime-type-converter (assq 'content-type fields))])
+		(*parser [res decode]
+			(parser:return (convert res)))))
+
+@
+
+The MIME types database is nested association list. The first level 
+identifies the main content type, but the head of this list contains the 
+default parser if no MIME type is defined. The second level 
+contains a similar pair, where the first element contains the default 
+parser for that main type if no subtype is recognized, and the 
+second element contains an association list of subtypes to parsers. 
+
+<<Content Parsing>>=
+<<Converters>>
+
+(define mime-type-db
+	(make-parameter
+		`(,convert-text/plain
+			(text ,convert-text/plain 
+				(plain ,convert-text/plain))
+			(image ,identity-converter)
+			(audio ,identity-converter)
+			(video ,identity-converter)
+			(application ,identity-converter))))
+
+@
+
+Here are some predefined converters.
+
+<<Converters>>=
+(define (convert-text/plain data params)
+	(cond
+		[(string? data) data]
+		[(bytevector? data) (string->bytevector data (native-transcoder))]
+		[else (error 'convert-text/plain "Unknown data stream type.")]))
+
+(define (identity-converter data params)
+	data)
+@
+
+Use the following procedure to register new converters.
+
+<<Content Parsing>>=
+(define (register-mime-type-converter! type subtype converter)
+	(let ([db (mime-type-db)])
+		(if type
+			(let ([res (assq type db)])
+				(if res
+					(if subtype
+						(let ([subres (assq subtype res)])
+							(if subres
+								(set-car! (cdr subres) converter)
+								(set-cdr! (cdr res)
+									(cons `(,subtype ,converter) (cddr res)))))
+						(set-car! (cdr res) converter))
+					(set-cdr! db
+						(cons `(,type ,converter (,subtype ,converter))
+							(cdr db)))))
+			(set-car! db converter))))
+
+@
+
+It is necessary to use a parser instead of a procedure for the 
+Encoding Schemes database because we may not be sure how to grab 
+the data out of the parsing stream. For example, a [[binary]] encoding 
+may require us to grab the data out directly as a bytevector, whereas 
+a base64 encoding may require us to extract the relevant characters 
+and ignore things like line breaks, and subsequently decode these using 
+a base64 decoder.
+
+<<Content Parsing>>=
+<<Decoders>>
+
+(define mime-decoder-db
+	(make-parameter
+		'((7bit . ,rfc2822-parser:body)
+			(8bit . ,rfc2822-parser:body)
+			(binary . ,rfc2822-parser:binary)
+			(quoted-printable . ,mime-parser:quoted-printable)
+			(base64 . ,mime-parser:base64))))
+
+@
+
+Here are the basic decoders.
+
+<<Decoders>>=
+(define-parser mime-parser:quoted-printable
+	rfc2822-parser:body)
+
+(define-parser mime-parser:binary
+	(parser:string:repeated (parser:char-in-set char-set:full)))
+
+(define-parser mime-parser:base64
+	(*parser [body rfc2822-parser:body]
+		(parser:return
+			(base64-decode
+				(string->bytevector
+					(with-input-from-string body
+						(lambda ()
+							(let loop ([s ""])
+								(let ([line (get-line (current-input-port))])
+									(if (eof-object? line)
+										s
+										(loop (string-append s line)))))))
+					(native-transcoder))))))
+
+@
+
+The follow procedure allows for registration to the decoder database.
+
+<<Content Parsing>>=
+(define (register-mime-decoder! type decoder)
+	(let ([res (and type (assq type (mime-decoder-db)))])
+		(if res
+			(set-cdr! res decoder)
+			(mime-decoder-db
+				(cons (cons type decoder)
+					(mime-decoder-db))))))
+
+@
