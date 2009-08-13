@@ -1,11 +1,11 @@
 .SUFFIXES: .so .sls .ss .scm .tex .nw
 
 .nw.sls:
-	notangle -R$@ $< > $@
+	notangle -R$@ -t2 $< > $@
 .nw.ss:
-	notangle -R$@ $< > $@
+	notangle -R$@ -t2 $< > $@
 .nw.scm:
-	notangle -R$@ $< > $@
+	notangle -R$@ -t2 $< > $@
 
 .nw.tex:
 	mkdir -p doc
