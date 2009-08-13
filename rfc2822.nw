@@ -24,8 +24,8 @@ if they have not already been imported previously in the document.
 <<rfc2822.sls>>=
 <<License>>
 
-;(library (arcfide rfc2822)
-	#;(export <<Exports>>)
+(library (arcfide rfc2822)
+	(export <<Exports>>)
 	(import (rnrs base)
 		<<Imports>>)
 
@@ -41,7 +41,7 @@ if they have not already been imported previously in the document.
 
 <<Obsolete>>
 
-;)
+)
 @
 
 Exported procedures will be documented in the following format:
@@ -920,6 +920,10 @@ rfc2822-parser:message
 
 \chapter{Field Definitions (3.6)}
 
+<<Exports>>=
+rfc2822-parser:fields rfc2822-parser:field
+@
+
 Parsing the fields does no error checking of the order or type of fields
 that exist.  Validating whether a given field list is a valid RFC 2822
 message header is left to another procedure.  Please note that we also
@@ -930,31 +934,33 @@ we can do this.
 
 <<Field Parsing>>=
 (define-parser rfc2822-parser:fields
-	(parser:list:repeated
-	  (parser:deep-choice
-			rfc2822-parser:return
-			rfc2822-parser:received
-	    rfc2822-parser:resent-date
-			rfc2822-parser:resent-from
-			rfc2822-parser:resent-sender
-			rfc2822-parser:resent-to
-			rfc2822-parser:resent-cc
-			rfc2822-parser:resent-bcc
-			rfc2822-parser:resent-msg-id
-			rfc2822-parser:orig-date
-			rfc2822-parser:from
-			rfc2822-parser:sender
-			rfc2822-parser:reply-to
-			rfc2822-parser:to
-			rfc2822-parser:cc
-			rfc2822-parser:bcc
-			rfc2822-parser:message-id
-			rfc2822-parser:in-reply-to
-			rfc2822-parser:references
-			rfc2822-parser:subject
-			rfc2822-parser:comments
-			rfc2822-parser:keywords
-			rfc2822-parser:optional-field)))
+	(parser:list:repeated rfc2822-parser:field))
+
+(define-parser rfc2822-parser:field
+  (parser:deep-choice
+		rfc2822-parser:return
+		rfc2822-parser:received
+    rfc2822-parser:resent-date
+		rfc2822-parser:resent-from
+		rfc2822-parser:resent-sender
+		rfc2822-parser:resent-to
+		rfc2822-parser:resent-cc
+		rfc2822-parser:resent-bcc
+		rfc2822-parser:resent-msg-id
+		rfc2822-parser:orig-date
+		rfc2822-parser:from
+		rfc2822-parser:sender
+		rfc2822-parser:reply-to
+		rfc2822-parser:to
+		rfc2822-parser:cc
+		rfc2822-parser:bcc
+		rfc2822-parser:message-id
+		rfc2822-parser:in-reply-to
+		rfc2822-parser:references
+		rfc2822-parser:subject
+		rfc2822-parser:comments
+		rfc2822-parser:keywords
+		rfc2822-parser:optional-field))
 		
 @
 
