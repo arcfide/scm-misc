@@ -85,6 +85,10 @@ distinguishes.
 \section{Content Header}%
 Specifies the Content-Type of a MIME entity.
 
+<<Datatypes>>=
+(define-record-type mime-type (fields main subtype parameters))
+@
+
 <<Headers>>=
 (define-parser mime-parser:content
 	(parser:rfc2822-header 'content-type "Content-Type"
