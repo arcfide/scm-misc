@@ -134,6 +134,14 @@ character.
 @
 
 \section{Encoding Header}%
+Encoding specifies the method of storing the data that is in the entity.
+
+<<Headers>>=
+(define-parser mime-parser:encoding
+	(parser:rfc2822-header 'content-transfer-encoding "Content-Transfer-Encoding"
+		(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)))
+
+@
 
 \section{ID Header}%
 
