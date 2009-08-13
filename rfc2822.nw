@@ -1122,6 +1122,10 @@ parser:rfc2822-header
 
 \section{Identification Fields (3.6.4)}
 
+<<Exports>>=
+rfc2822-parser:msg-id
+@
+
 <<Field Parsing>>=
 (define-parser rfc2822-parser:message-id
 	(parser:rfc2822-header 'message-id "Message-ID" 

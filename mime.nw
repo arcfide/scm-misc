@@ -144,6 +144,13 @@ Encoding specifies the method of storing the data that is in the entity.
 @
 
 \section{ID Header}%
+Uniquely identifies a MIME Entity.
+
+<<Headers>>=
+(define-parser mime-parser:id
+	(parser:rfc2822-parser 'content-id "Content-ID" rfc2822-parser:msg-id))
+
+@
 
 \section{Description Header}%
 
