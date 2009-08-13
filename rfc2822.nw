@@ -241,6 +241,10 @@ such as when this text can not be expressed with just the atom syntax.
 A Quoted String can be folded, and is treated as a single unit 
 modulo quote characters and surrounding CWFS.
 
+<<Exports>>=
+rfc2822-parser:quoted-string
+@
+
 <<Tokenization>>=
 (define-parser rfc2822-parser:qtext
 	(parser:char-in-set
