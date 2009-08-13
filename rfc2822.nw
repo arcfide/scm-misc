@@ -855,6 +855,7 @@ It adds a route, which only exists in the old style.
 
 <<Exports>>=
 rfc2822-parser:message
+rfc2822-parser:body
 @
 
 <<Datatypes>>=
