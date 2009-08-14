@@ -20,6 +20,7 @@ require.
 (rnrs base)
 (riastradh parscheme)
 (rnrs records syntactic)
+(arcfide parser-util)
 @
 
 \chapter{Parsing MIME Entities}%
@@ -75,7 +76,6 @@ only occurs in entities that are part of multipart entities.
 			mime-parser:encoding
 			mime-parser:id
 			mime-parser:description
-			mime-parser:extension-field
 			mime-parser:version
 			rfc2822-parser:field)))
 @
@@ -110,6 +110,11 @@ Specifies the Content-Type of a MIME entity.
 
 Tokens are case-insensitive elements of a MIME type. We achieve this 
 by downcasing all strings and converting them to symbols. 
+
+<<Imports>>=
+(srfi :14)
+(rnrs unicode)
+@
 
 <<Headers>>=
 (define-parser mime-parser:token
@@ -170,6 +175,12 @@ Uniquely identifies a MIME Entity.
 @
 
 \section{Extensions Fields}%
+The RFC for MIME indicates a new extension field production, but this
+is really a duplicate of the RFC 2822 unstructured field parser for
+all intents and purposes here. Instead of creating a separate parser to
+handle these things, we presume that the user of this library will have a
+parser to handle the unstructured data returned from the RFC 2822 parser.
+
 
 \section{Version Header}%
 The version header field should return a field with a pair value whose
@@ -224,6 +235,10 @@ contains a similar pair, where the first element contains the default
 parser for that main type if no subtype is recognized, and the 
 second element contains an association list of subtypes to parsers. 
 
+<<Imports>>=
+(only (scheme) make-parameter)
+@
+
 <<Content Parsing>>=
 <<Converters>>
 
@@ -241,6 +256,10 @@ second element contains an association list of subtypes to parsers.
 
 Here are some predefined converters.
 
+<<Imports>>=
+(rnrs bytevectors)
+@
+
 <<Converters>>=
 (define (convert-text/plain data params)
 	(cond
@@ -254,6 +273,11 @@ Here are some predefined converters.
 
 \subsection{Registering MIME types}%
 Use the following procedure to register new converters.
+
+<<Imports>>=
+(rnrs lists)
+(rnrs mutable-pairs)
+@
 
 <<Content Parsing>>=
 (define (register-mime-type-converter! type subtype converter)
@@ -316,6 +340,12 @@ a base64 decoder.
 @
 
 Here are the basic decoders.
+
+<<Imports>>=
+(arcfide base64)
+(rnrs io ports)
+(only (scheme) with-input-from-string)
+@
 
 <<Decoders>>=
 (define-parser mime-parser:quoted-printable
