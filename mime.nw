@@ -35,6 +35,9 @@ contents fit naturally into a string format, such as textual data, then
 strings should be used. If however, the media type of the contents of
 an entity are binary or non-textual data, a bytevector should be used.
 
+<<Exports>>=
+mime-parser:entity
+@
 
 <<Datatypes>>=
 (define-record-type mime-entity (fields fields contents))
@@ -54,7 +57,6 @@ an entity are binary or non-textual data, a bytevector should be used.
 (define-parser mime-parser:entity
 	(*parser 
 			[fields mime-parser:fields]
-			[rfc2822-parser:crlf]
 			[contents (mime-parser:contents fields)]
 		(parser:return
 			(make-mime-entity fields contents))))
@@ -219,11 +221,17 @@ mime-parser:contents
 
 <<Content Parsing>>=
 (define (mime-parser:contents fields)
+	(define (grab-field type)
+		(let ([res (assq type fields)])
+			(and res (cdr res))))
 	(let (
-			[decode (lookup-mime-decoder (assq 'content-transfer-encoding fields))]
-			[convert (lookup-mime-type-converter (assq 'content-type fields))])
+			[decode (lookup-mime-decoder (grab-field 'content-transfer-encoding))]
+			[convert (lookup-mime-type-converter (grab-field 'content-type))])
 		(*parser [res decode]
-			(parser:return (convert res)))))
+			(parser:return 
+				(convert res 
+					(let ([type (grab-field 'content-type)])
+						(or (and type (mime-type-parameters type)) '())))))))
 
 @
 
@@ -331,9 +339,9 @@ a base64 decoder.
 
 (define mime-decoder-db
 	(make-parameter
-		'((7bit . ,rfc2822-parser:body)
+		`((7bit . ,rfc2822-parser:body)
 			(8bit . ,rfc2822-parser:body)
-			(binary . ,rfc2822-parser:binary)
+			(binary . ,mime-parser:binary)
 			(quoted-printable . ,mime-parser:quoted-printable)
 			(base64 . ,mime-parser:base64))))
 
@@ -401,15 +409,15 @@ the appropriate decoder.
 <<mime.sls>>=
 <<License>>
 
-(library (arcfide mime)
-	(export
+;(library (arcfide mime)
+	#;(export
 		<<Exports>>)
 	(import
 		<<Imports>>)
 
 <<Entities>>
 
-)
+;)
 @
 
 \chapter{Vanilla File}
