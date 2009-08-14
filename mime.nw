@@ -272,7 +272,7 @@ Here are some predefined converters.
 (define (convert-text/plain data params)
 	(cond
 		[(string? data) data]
-		[(bytevector? data) (string->bytevector data (native-transcoder))]
+		[(bytevector? data) (bytevector->string data (native-transcoder))]
 		[else (error 'convert-text/plain "Unknown data stream type.")]))
 
 (define (identity-converter data params)
@@ -366,15 +366,13 @@ Here are the basic decoders.
 	(*parser [body rfc2822-parser:body]
 		(parser:return
 			(base64-decode
-				(string->bytevector
-					(with-input-from-string body
-						(lambda ()
-							(let loop ([s ""])
-								(let ([line (get-line (current-input-port))])
-									(if (eof-object? line)
-										s
-										(loop (string-append s line)))))))
-					(native-transcoder))))))
+				(with-input-from-string body
+					(lambda ()
+						(let loop ([s ""])
+							(let ([line (get-line (current-input-port))])
+								(if (eof-object? line)
+									s
+									(loop (string-append s line)))))))))))
 
 @
 
