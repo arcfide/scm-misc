@@ -22,7 +22,6 @@ grabbed in order from the 3-byte packet.
 (rnrs bytevectors)
 (rnrs mutable-strings)
 (riastradh foof-loop)
-(only (scheme) trace-define break printf)
 @
 
 <<Code>>=
