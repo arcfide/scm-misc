@@ -19,6 +19,7 @@ require.
 <<Imports>>=
 (rnrs base)
 (riastradh parscheme)
+(rnrs records syntactic)
 @
 
 \chapter{Parsing MIME Entities}%
@@ -43,9 +44,11 @@ an entity are binary or non-textual data, a bytevector should be used.
 @
 
 <<Entities>>=
+<<Datatypes>>
+
 <<Fields>>
 
-<<Contents>>
+<<Content Parsing>>
 
 (define-parser mime-parser:entity
 	(*parser 
@@ -213,6 +216,7 @@ mime-parser:contents
 
 @
 
+\section{MIME Types}%
 The MIME types database is nested association list. The first level 
 identifies the main content type, but the head of this list contains the 
 default parser if no MIME type is defined. The second level 
@@ -227,7 +231,7 @@ second element contains an association list of subtypes to parsers.
 	(make-parameter
 		`(,convert-text/plain
 			(text ,convert-text/plain 
-				(plain ,convert-text/plain))
+				(plain . ,convert-text/plain))
 			(image ,identity-converter)
 			(audio ,identity-converter)
 			(video ,identity-converter)
@@ -248,6 +252,7 @@ Here are some predefined converters.
 	data)
 @
 
+\subsection{Registering MIME types}%
 Use the following procedure to register new converters.
 
 <<Content Parsing>>=
@@ -259,7 +264,7 @@ Use the following procedure to register new converters.
 					(if subtype
 						(let ([subres (assq subtype res)])
 							(if subres
-								(set-car! (cdr subres) converter)
+								(set-cdr! subres converter)
 								(set-cdr! (cdr res)
 									(cons `(,subtype ,converter) (cddr res)))))
 						(set-car! (cdr res) converter))
@@ -270,6 +275,25 @@ Use the following procedure to register new converters.
 
 @
 
+\subsection{Retreiving MIME type converters}%
+[[lookup-mime-type-converter]] takes a mime-type structure and locates 
+the appropriate converter in the mime-type database.
+
+<<Content Parsing>>=
+(define (lookup-mime-type-converter mt)
+	(or 
+		(and mt
+			(let ([type (mime-type-main mt)] [subtype (mime-type-subtype mt)])
+				(let ([res (and type (assq type (cdr (mime-type-db))))])
+					(if res
+						(let ([subres (and subtype (assq subtype (cddr res)))])
+							(if subres (cdr subres) (cadr res)))
+						(car (mime-type-db))))))
+		(car (mime-type-db))))
+
+@
+
+\section{MIME Content Decoders}%
 It is necessary to use a parser instead of a procedure for the 
 Encoding Schemes database because we may not be sure how to grab 
 the data out of the parsing stream. For example, a [[binary]] encoding 
@@ -316,6 +340,7 @@ Here are the basic decoders.
 
 @
 
+\section{Registering MIME Content Decoders}%
 The follow procedure allows for registration to the decoder database.
 
 <<Content Parsing>>=
@@ -327,4 +352,64 @@ The follow procedure allows for registration to the decoder database.
 				(cons (cons type decoder)
 					(mime-decoder-db))))))
 
+@
+
+\section{Retreiving MIME Content Decoders}%
+[[lookup-mime-decoder]] takes an encoding value and returns 
+the appropriate decoder.
+
+<<Content Parsing>>=
+(define (lookup-mime-decoder encoding)
+	(and encoding
+		(let ([res (assq encoding (mime-decoder-db))])
+			(and res (cdr res)))))
+
+@
+
+\chapter{R6RS Form}
+
+<<mime.sls>>=
+<<License>>
+
+(library (arcfide mime)
+	(export
+		<<Exports>>)
+	(import
+		<<Imports>>)
+
+<<Entities>>
+
+)
+@
+
+\chapter{Vanilla File}
+
+<<mime.scm>>=
+<<License>>
+
+<<Entities>>
+@
+
+\chapter{Licensing}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; MIME Parsing 
+;;; Version: 1
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
 @
