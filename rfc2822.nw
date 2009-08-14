@@ -858,6 +858,10 @@ rfc2822-parser:message
 rfc2822-parser:body
 @
 
+<<Imports>>=
+(only (scheme) format)
+@
+
 <<Datatypes>>=
 (define-record-type rfc2822-message (fields fields body))
 @
@@ -872,11 +876,12 @@ rfc2822-parser:body
 			(make-rfc2822-message fields body))))
 
 (define-parser rfc2822-parser:body
-	(parser:string:append:repeated
-		(*parser 
-				[rfc2822-parser:crlf] 
-				[line (parser:string:repeated rfc2822-parser:text)]
-			(parser:return (string-append "\r\n" line)))))
+	(*parser 
+			[lines 
+				(parser:list:repeated
+					(parser:sequence rfc2822-parser:crlf
+						(parser:string:repeated rfc2822-parser:text)))]
+		(parser:return (format "~{~a~^\r\n~}" lines))))
 
 @
 
