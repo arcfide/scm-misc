@@ -76,6 +76,43 @@ parser:string-number:exactly
 
 @
 
+\chapter{Generic Parsers}%
+Most of the time parsers will operate on strings, ports, or files, so we 
+make it easy to make normal parse procedures for this.
+
+<<Exports>>=
+make-generic-parser
+@
+
+<<Code>>=
+(define (make-generic-parser parser transcoder)
+	(lambda (input)
+		(parse-input-chars parser
+			(cond 
+				[(string? input) (open-file-input-port input (file-options) 'block transcoder)]
+				[(bytevector? input) (open-bytevector-input-port input transcoder)]
+				[(textual-port? input) input]
+				[(binary-port? input) (transcoded-port input transcoder)]
+				[else (error #f "Unknown input source." input)])
+			#f
+			(lambda (res con stream) res)
+			(lambda (err con stream)
+				(raise
+					(condition
+						(make-message-condition "Parse error")
+						(make-irritants-condition (parse-error/position err))
+						(make-message-condition
+							(with-output-to-string
+								(lambda ()
+									(for-each 
+										(lambda (x) 
+											(if (pair? x)
+												(printf "~{~a~^ ~}~%" x)
+												(printf "~a~%" x)))
+										(parse-error/messages err)))))))))))
+
+@
+
 \chapter{Library Form}
 
 <<parser-util.sls>>=
@@ -87,7 +124,12 @@ parser:string-number:exactly
 	(import
 		(rnrs base)
 		(srfi :14)
-		(riastradh parscheme))
+		(riastradh parscheme)
+		(rnrs conditions)
+		(rnrs exceptions)
+		(rnrs io ports)
+		(rnrs bytevectors)
+		(only (scheme) with-output-to-string printf))
 
 <<Code>>
 

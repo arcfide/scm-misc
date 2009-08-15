@@ -23,6 +23,21 @@ require.
 (arcfide parser-util)
 @
 
+\chapter{Convenient Parsing of Files, Ports, and Strings}%
+These procedures provide nice conveniences for the most common usages 
+of parsing MIME entities.
+
+<<Exports>>=
+parse-mime-entity parse-mime-body
+@
+
+<<Convenience Procedures>>=
+(define parse-mime-entity
+	(make-generic-parser mime-parser:entity rfc2822-transcoder))
+(define (parse-mime-contents params)
+	(make-generic-parser (mime-parser:contents params) rfc2822-transcoder))
+@
+
 \chapter{Parsing MIME Entities}%
 MIME entities are either messages or parts of a composite message. 
 They look like regular messages, but may not have the entire 
@@ -106,7 +121,11 @@ Specifies the Content-Type of a MIME entity.
 					(parser:list:repeated 
 						(parser:sequence (parser:char= #\;) 
 							(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:parameter)))]
-			(parser:return (make-mime-type type subtype params)))))
+			(parser:return 
+				(make-mime-type 
+					(string->symbol type) 
+					(string->symbol subtype) 
+					params)))))
 
 @
 
@@ -122,7 +141,7 @@ by downcasing all strings and converting them to symbols.
 (define-parser mime-parser:token
 	(*parser
 			[val (parser:string:at-least 1 mime-parser:token-char)]
-		(parser:return (string->symbol (string-downcase val)))))
+		(parser:return (string-downcase val))))
 
 (define-parser mime-parser:token-char
 	(parser:char-in-set 
@@ -144,7 +163,7 @@ character.
 			[attr mime-parser:token]
 			[(parser:single-bracketed rfc2822-parser:cfws-opt (parser:char= #\=))]
 			[val (parser:choice rfc2822-parser:quoted-string mime-parser:token)]
-		(parser:return (cons attr val))))
+		(parser:return (cons (string->symbol attr) val))))
 
 @
 
@@ -154,7 +173,9 @@ Encoding specifies the method of storing the data that is in the entity.
 <<Headers>>=
 (define-parser mime-parser:encoding
 	(parser:rfc2822-header 'content-transfer-encoding "Content-Transfer-Encoding"
-		(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)))
+		(*parser 
+				[val (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
+			(parser:return (string->symbol val)))))
 
 @
 
@@ -565,6 +586,8 @@ the appropriate decoder.
 
 <<Entities>>
 
+<<Convenience Procedures>>
+
 ;)
 @
 
@@ -574,6 +597,8 @@ the appropriate decoder.
 <<License>>
 
 <<Entities>>
+
+<<Convenience Procedures>>
 @
 
 \chapter{Licensing}

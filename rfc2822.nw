@@ -41,8 +41,38 @@ if they have not already been imported previously in the document.
 
 <<Obsolete>>
 
+<<Convenience Procedures>>
+
 )
 @
+
+\chapter{Convenience Procedures}%
+
+<<Exports>>=
+parse-rfc2822-message rfc2822-transcoder
+@
+
+<<Convenience Procedures>>=
+<<Transcoder>>
+
+(define parse-rfc2822-message
+	(make-generic-parser rfc2822-parser:message rfc2822-transcoder))
+@
+
+All RFC2822 parsers expect streams without any newline modification, 
+so we make a transcoder to help people get their input streams 
+right.
+
+<<Imports>>=
+(rnrs io ports)
+@
+
+<<Transcoder>>=
+(define rfc2822-transcoder
+	(make-transcoder (utf-8-codec) (eol-style none)))
+@
+
+\chapter{Documentation Format}
 
 Exported procedures will be documented in the following format:
 
