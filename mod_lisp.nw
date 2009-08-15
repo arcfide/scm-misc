@@ -1,0 +1,144 @@
+\tite{Mod_lisp for Scheme}
+
+\chapter{Overview}%
+The following library hopes to become the de facto standard mod_lisp
+library for Scheme programs. It aims for the following goals:
+
+\unorderedlist
+\li Portability
+\li Functionality and Generatlity
+\li Efficiency
+\li Freedom of Use and License
+\endunorderedlist
+
+This project came about after the author became dissatisfied with the 
+existing implementation available in MIT Scheme, and wanted something 
+more flexible that didn't have as much of a hackish feel.
+
+\section{Portability}%
+This library tries to make sure that each part is easily exchanged with another. 
+It may not happen this way, but this goal will eventually be achieved.
+
+\section{Functionality and Generality}%
+People should not have to avoid using something like mod_lisp because of a 
+lack of features. Specifically, there was no POST support in the old MIT 
+Scheme library.
+
+\section{Efficiency}%
+This library aims to be useful by maintaining a low memory footprint 
+where it makes sense, using functional and referentially transparent algorithms 
+where possible, and encouraging clean approaches.
+
+\section{Freedom of Use}%
+This code is licensed under the ISC license for maximum usability in both 
+free and commercial software.
+
+\chapter{Structure of mod_lisp requests}%
+Mod_lisp requests and responses have the same format: a set of key value 
+lines ending with [[end\n]] and followed by the body contents. The pairs 
+consist of two lines each, where the first line contains the key, and the second 
+line the value.
+
+The process of a mod_lisp server is to accept a request, send a response, 
+and repeat. There are two means of doing so. The server may handle each 
+request in a single socket, using the [[keep-alive]] parameter to multiplex 
+requests, or it may accept a new socket each time and dispatch. 
+
+This library supports both of these methods, since some implementations may 
+not supports multiple threads which make it easy to handle the latter method. 
+
+\chapter{The Request/Response Record}%
+Both requests and response have a similar format, consisting of a set of 
+key/value pairs (symbol and string, respectively), and a body. These are 
+called packets.
+
+<<Imports>>=
+(rnrs base)
+(rnrs records syntactic)
+@
+
+<<Exports>>=
+make-modlisp-packet modlisp-packet-headers modlisp-packet-contents
+@
+
+<<Datatypes>>=
+(define-record-type modlisp-packet (fields headers contents))
+@
+
+\section{Input/Ouput of Packets}%
+The following procedures read and write packets to a given port.
+
+<<Imports>>=
+(rnrs io ports)
+(rnrs unicode)
+(riastradh foof-loop)
+@
+
+<<Packet I/O>>=
+(define (put-packet packet port)
+	(for-each 
+		(lambda (x) 
+			(put-datum port (car x))
+			(put-char port #\newline)
+			(put-string port (cdr x))
+			(put-char port #\newline))
+		(modlisp-packet-headers packet))
+	(put-string port "end\n")
+	(put-string port (modlisp-packet-contents packet)))
+
+(define (get-packet port)
+	(define (get-header)
+		(let ([key (get-line port)])
+			(and (not (string=? "end" key))
+				(cons (string->symbol (string-downcase key))
+					(get-line port)))))
+	(loop (
+			[with header (get-header) (get-header)]
+			[for headers (listing header)]
+			[while header])
+		=> (make-modlisp-packet headers
+					(let ([len (assq 'content-length headers)])
+						(and len (get-string-n port (string->number (cdr len))))))))
+@
+
+\chapter{R6RS Form}
+
+<<mod_lisp.sls>>=
+<<License>>
+
+;(library (arcfide mod-lisp)
+	#;(export
+		<<Exports>>)
+	(import
+		<<Imports>>)
+
+<<Datatypes>>
+
+<<Packet I/O>>
+
+;)
+@
+
+\chapter{License}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Mod_lisp for Scheme
+;;; Version: 1 Alpha
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@
