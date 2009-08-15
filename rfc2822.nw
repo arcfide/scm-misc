@@ -69,6 +69,10 @@ here just in case.
 
 {\it XXX: Decide whether these are actually needed.}
 
+<<Exports>>=
+rfc2822-parser:text
+@
+
 <<Tokenization>>=
 (define-parser rfc2822-parser:no-ws-ctl
 	(parser:char-in-set

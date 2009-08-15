@@ -258,7 +258,8 @@ second element contains an association list of subtypes to parsers.
 			(image ,identity-converter)
 			(audio ,identity-converter)
 			(video ,identity-converter)
-			(application ,identity-converter))))
+			(application ,identity-converter)
+			(multipart ,convert-multipart))))
 
 @
 
@@ -277,6 +278,153 @@ Here are some predefined converters.
 
 (define (identity-converter data params)
 	data)
+@
+
+\subsection{Handling Multipart bodies}%
+Multiparts bodies are more complex than normal converters. They 
+basically divide a body (which must come in as either 7bit, 8bit, 
+or binary, and use the appropriate characters for the delimiters, 
+that is, 7bit ASCII) by the delimiters, and then parse each body 
+as its own entity.
+
+<<Converters>>=
+<<Multipart Parser>>
+
+(define (convert-multipart data params)
+	(assert (or (string? data) (bytevector? data)))
+	(let (
+			[buf 
+				(or (and (string? data) data) 
+					(bytevector->string data (native-transcoder)))])
+		(parse-string (mime-parser:multipart params)
+			(or (and (string? data) data) 
+				(bytevector->string data (native-transcoder)))
+			#f
+			(lambda (res con strm) res)
+			(lambda (perr con strm)
+				(raise
+					(condition (make-lexical-condition)
+						(make-who-condition 'mime-parser:multipart)
+						(make-message-condition "Parse error")
+						(make-irritants-condition
+							(list (parse-error/position perr) buf))
+						(make-message-condition
+							(with-output-to-string
+								(lambda ()
+									(for-each 
+										(lambda (x)
+											(if (pair? x)
+												(printf "~{~a~^ ~}~%" x)
+												(printf "~a~%" x)))
+										(parse-error/messages perr)))))))))))
+
+@
+
+RFC 2046 Sec. 5.1.1 details a formal BNF grammar for multipart
+messages. We follow this general outline, but cheat slightly by permitting
+entities to be treated the same as messages, as in the above section.
+This is technically incorrect, but simplifies parsing a bit, and shouldn't
+matter in real life.
+
+<<Multipart Parser>>=
+(define-parser mime-parser:wsp
+	(parser:repeated (lambda (y x) x) (parser:return #f)
+		(parser:char-in-set (char-set #\space #\tab))))
+
+(define (mime-parser:multipart params)
+	(let ([boundary (let ([res (assq 'boundary params)]) (and res (cdr res)))])
+		(assert (string? boundary))
+		(parser:bracketed
+			(mime-parser:preamble boundary)
+			(mime-parser:epilogue boundary)
+			(*parser
+					[first
+						(parser:sequence mime-parser:wsp rfc2822-parser:crlf
+							(mime-parser:body-part boundary))]
+					[rest
+						(parser:list:repeated
+							(parser:backtrackable
+								(parser:sequence
+									(mime-parser:delimiter boundary)
+									mime-parser:wsp rfc2822-parser:crlf
+									(mime-parser:body-part boundary))))]
+				(parser:return (cons first rest))))))
+
+@
+
+The formal grammar has a bunch of stuff separated out into different 
+targets, but this makes things more difficult to read in the code.
+Instead, we just define preamble, epilogue, boundary, and body parsers. 
+
+The [[mime-parser:preamble]] consumes everything except the boundary.
+
+<<Multipart Parser>>=
+(define (mime-parser:preamble boundary)
+	(parser:repeated-until (parser:backtrackable (mime-parser:boundary boundary))
+		(lambda (y x) x) (parser:return #f)
+		(parser:char-in-set char-set:full)))
+
+@
+
+The [[mime-parser:epilogue]] grabs the closing delimiter and any text 
+that follows it.
+
+<<Multipart Parser>>=
+(define (mime-parser:epilogue boundary)
+	(parser:sequence
+		(mime-parser:delimiter boundary)
+		(parser:string= "--")
+		mime-parser:wsp
+		rfc2822-parser:crlf
+		(parser:repeated-until (parser:end)
+			(lambda (y x) x) (parser:return #f)
+			(parser:char-in-set char-set:full))))
+
+@
+
+The [[mime-parser:delimiter]] just checks for the parsers boundary.
+
+<<Multipart Parser>>=
+(define (mime-parser:boundary boundary)
+	(parser:sequence (parser:string= "--") (parser:string= boundary)))
+
+(define (mime-parser:delimiter boundary)
+	(parser:sequence rfc2822-parser:crlf (mime-parser:boundary boundary)))
+
+@
+
+The [[mime-parser:body-part]] parser should construct the fields, and 
+parse the body, passing it to the right entity parser. We have to be 
+careful that the parser does not consume a delimiter.
+
+{\it XXX: It would be nice if we did not have to use [[parse-string]] 
+to do this.}
+
+<<Multipart Parser>>=
+(define (mime-parser:body-part boundary)
+	(*parser 
+			[buf 
+				(parser:string:repeated-until 
+					(parser:peek (parser:backtrackable (mime-parser:delimiter boundary)))
+					(parser:char-in-set char-set:full))]
+		(parser:return
+			(parse-string mime-parser:entity buf #f
+				(lambda (res c s) res)
+				(lambda (err c s)
+					(raise
+						(condition (make-who-condition 'mime-parser:entity)
+							(make-message-condition "Parse error in MIME part")
+							(make-irritants-condition (list (parse-error/position err) buf))
+							(make-message-condition
+								(with-output-to-string
+									(lambda ()
+										(for-each 
+											(lambda (x) 
+												(if (pair? x)
+													(printf "~{~a~^ ~}~%" x)
+													(printf "~a~%" x)))
+											(parse-error/messages err))))))))))))
+
 @
 
 \subsection{Registering MIME types}%
@@ -396,9 +544,11 @@ the appropriate decoder.
 
 <<Content Parsing>>=
 (define (lookup-mime-decoder encoding)
-	(and encoding
-		(let ([res (assq encoding (mime-decoder-db))])
-			(and res (cdr res)))))
+	(let ([enc (or encoding '7bit)])
+		(let ([res (assq enc (mime-decoder-db))])
+			(unless res
+				(error 'lookup-mime-decoder "Unknown encoding." enc))
+			(cdr res))))
 
 @
 
