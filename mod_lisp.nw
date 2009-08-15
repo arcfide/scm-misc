@@ -187,6 +187,7 @@ packet.
 
 <<Imports>>=
 (foof irregex)
+(only (scheme) make-paramter)
 @
 
 <<Exports>>=
@@ -225,6 +226,8 @@ compared against the URL in order to grab a given handler.
 			(error 'lookup-request-handler "Failed to find handler!" 
 				url (request-handlers)))))
 @
+
+
 
 \chapter{R6RS Form}
 
