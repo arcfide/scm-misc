@@ -28,7 +28,7 @@ These procedures provide nice conveniences for the most common usages
 of parsing MIME entities.
 
 <<Exports>>=
-parse-mime-entity parse-mime-body
+parse-mime-entity parse-mime-contents
 @
 
 <<Convenience Procedures>>=
@@ -308,6 +308,12 @@ or binary, and use the appropriate characters for the delimiters,
 that is, 7bit ASCII) by the delimiters, and then parse each body 
 as its own entity.
 
+<<Imports>>=
+(rnrs exceptions)
+(rnrs conditions)
+(only (scheme) with-output-to-string printf)
+@
+
 <<Converters>>=
 <<Multipart Parser>>
 
@@ -559,6 +565,10 @@ The follow procedure allows for registration to the decoder database.
 [[lookup-mime-decoder]] takes an encoding value and returns 
 the appropriate decoder.
 
+<<Imports>>=
+(rnrs control)
+@
+
 <<Content Parsing>>=
 (define (lookup-mime-decoder encoding)
 	(let ([enc (or encoding '7bit)])
@@ -574,8 +584,8 @@ the appropriate decoder.
 <<mime.sls>>=
 <<License>>
 
-;(library (arcfide mime)
-	#;(export
+(library (arcfide mime)
+	(export
 		<<Exports>>)
 	(import
 		<<Imports>>)
@@ -584,7 +594,7 @@ the appropriate decoder.
 
 <<Convenience Procedures>>
 
-;)
+)
 @
 
 \chapter{Vanilla File}
