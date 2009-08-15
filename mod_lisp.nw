@@ -166,6 +166,66 @@ to handle the url-parameters.
 	(lambda (data params) (cgi:url-unquote data)))
 @
 
+\chapter{Serving Requests}%
+Serving requests consists of reading in a request, applying the right handler 
+to the request object, and then writing out the packet that is returned by 
+the handler. 
+
+<<Serving Requests>>=
+(define (serve-request port)
+	(let ([incoming (get-packet port)])
+		(let ([res (assq 'url (modlisp-packet-headers incoming))])
+			(if res 
+				(put-packet ((lookup-request-handler (cdr res)) incoming) port)
+				(error 'server-request "Failed to find URL header" incoming)))))
+@
+
+\chapter{Request Handlers}%
+Request handlers are unary procedures that are applied to an incoming 
+request and are expected to return a packet that responds to the incoming 
+packet. 
+
+<<Imports>>=
+(foof irregex)
+@
+
+<<Exports>>=
+handle-404 register-request-handler!
+@
+
+<<Handlers>>=
+(define (handle-404 incoming)
+	(define contents 
+"<html><head><title>404 Resource not found</title></head>
+<body><h1>404</h1><h2>Resource not found</h2>
+<p>Unable to find the resource. Please check the URL.</p></body></html>")
+	(make-modlisp-packet
+		`((status . "200 OK")
+			(content-type . "text/html")
+			(content-length . ,(string-length contents)))
+		contents))
+
+(define request-handlers
+	(make-parameter `((,(irregex ".*") ,handle-404))))
+
+(define (register-request-handler! match proc)
+	(request-handlers
+		(cons (cons (irregex match) proc) 
+			(request-handlers))))
+
+@
+
+Handlers are associated with a given regular expression, which is 
+compared against the URL in order to grab a given handler.
+
+<<Handlers>>=
+(define (lookup-request-handler url)
+	(let ([res (find (lambda (x) (irregex-match url (car x))) (request-handlers))])
+		(if res (cdr res)
+			(error 'lookup-request-handler "Failed to find handler!" 
+				url (request-handlers)))))
+@
+
 \chapter{R6RS Form}
 
 <<mod_lisp.sls>>=
