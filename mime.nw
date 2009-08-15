@@ -123,8 +123,8 @@ Specifies the Content-Type of a MIME entity.
 							(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:parameter)))]
 			(parser:return 
 				(make-mime-type 
-					(string->symbol type) 
-					(string->symbol subtype) 
+					(string->symbol (string-downcase type)) 
+					(string->symbol (string-downcase subtype))
 					params)))))
 
 @
@@ -141,7 +141,7 @@ by downcasing all strings and converting them to symbols.
 (define-parser mime-parser:token
 	(*parser
 			[val (parser:string:at-least 1 mime-parser:token-char)]
-		(parser:return (string-downcase val))))
+		(parser:return val)))
 
 (define-parser mime-parser:token-char
 	(parser:char-in-set 
@@ -163,7 +163,7 @@ character.
 			[attr mime-parser:token]
 			[(parser:single-bracketed rfc2822-parser:cfws-opt (parser:char= #\=))]
 			[val (parser:choice rfc2822-parser:quoted-string mime-parser:token)]
-		(parser:return (cons (string->symbol attr) val))))
+		(parser:return (cons (string->symbol (string-downcase attr)) val))))
 
 @
 
@@ -175,7 +175,7 @@ Encoding specifies the method of storing the data that is in the entity.
 	(parser:rfc2822-header 'content-transfer-encoding "Content-Transfer-Encoding"
 		(*parser 
 				[val (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
-			(parser:return (string->symbol val)))))
+			(parser:return (string->symbol (string-downcase val))))))
 
 @
 
@@ -319,12 +319,12 @@ as its own entity.
 					(bytevector->string data (native-transcoder)))])
 		(parse-string (mime-parser:multipart params)
 			(or (and (string? data) data) 
-				(bytevector->string data (native-transcoder)))
+				(bytevector->string data rfc2822-transcoder))
 			#f
 			(lambda (res con strm) res)
 			(lambda (perr con strm)
 				(raise
-					(condition (make-lexical-condition)
+					(condition (make-lexical-violation)
 						(make-who-condition 'mime-parser:multipart)
 						(make-message-condition "Parse error")
 						(make-irritants-condition
@@ -521,6 +521,7 @@ Here are the basic decoders.
 <<Imports>>=
 (arcfide base64)
 (rnrs io ports)
+(riastradh foof-loop)
 (only (scheme) with-input-from-string)
 @
 
@@ -533,15 +534,10 @@ Here are the basic decoders.
 
 (define-parser mime-parser:base64
 	(*parser [body rfc2822-parser:body]
-		(parser:return
-			(base64-decode
-				(with-input-from-string body
-					(lambda ()
-						(let loop ([s ""])
-							(let ([line (get-line (current-input-port))])
-								(if (eof-object? line)
-									s
-									(loop (string-append s line)))))))))))
+		(let* (
+				[cs (char-set-union char-set:letter char-set:digit (char-set #\+ #\- #\=))]
+				[s (collect-string (for c (in-string body)) (if (char-set-contains? cs c)) c)])
+			(parser:return (base64-decode s)))))
 
 @
 
