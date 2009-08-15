@@ -222,8 +222,8 @@ Atoms are returned as strings.
 	(parser:char-in-set
 		(char-set-difference char-set:full
 			char-set:iso-control
-			char-set:whitespace
-			(char-set #\nul #\( #\) #\< #\> #\[ #\] #\: #\; #\@ #\\ #\, #\. #\"))))
+			(char-set #\space #\tab #\nul #\( #\) #\< #\> #\[ #\] 
+				#\: #\; #\@ #\\ #\, #\. #\"))))
 
 (define-parser %1*atext
 	(parser:string:at-least 1 rfc2822-parser:atext))
@@ -316,7 +316,7 @@ rfc2822-parser:unstructured
 					rfc2822-parser:crlf 
 					(parser:choice 
 						(parser:end) 
-						(parser:char-not-in-set char-set:whitespace))))
+						(parser:char-not-in-set (char-set #\space #\tab)))))
 			(parser:end))
 		(parser:deep-choice 
 			rfc2822-parser:fws
