@@ -86,6 +86,10 @@ The following procedures read and write packets to a given port.
 	(put-string port "end\n")
 	(put-string port (modlisp-packet-contents packet)))
 
+<<Header Processing>>
+
+<<Content Processing>>
+
 (define (get-packet port)
 	(define (get-header)
 		(let ([key (get-line port)])
@@ -96,9 +100,70 @@ The following procedures read and write packets to a given port.
 			[with header (get-header) (get-header)]
 			[for headers (listing header)]
 			[while header])
-		=> (make-modlisp-packet headers
+		=> (make-modlisp-packet (process-headers headers)
 					(let ([len (assq 'content-length headers)])
-						(and len (get-string-n port (string->number (cdr len))))))))
+						(and len 
+							(process-contents headers 
+								(get-string-n port (string->number (cdr len)))))))))
+@
+
+\chapter{Processing Headers}%
+At the moment, we just handle unquoting the urls. Otherwise, there 
+may be some more things that we could do.
+
+{\it XXX: We may want to do some kind of handler based processing 
+here for customization of mod_lisp.}
+
+<<Imports>>=
+(rnrs lists)
+(rnrs mutable-pairs)
+(oleg cgi processing)
+@
+
+<<Header Processing>>=
+(define (process-headers headers)
+	(let ([res (assq 'url-params headers)])
+		(when res (set-cdr! res (cgi:url-unquote (cdr res))))
+		headers))
+@
+
+\chapter{Processing Contents}%
+There are normally three different things that can happen with parameters 
+or data submitted to the server. Either it was submitted as part of the URL 
+in a GET request, in which case it will show up as part of the headers 
+and the contents will be false, or it was submitted as a POST request and 
+will be contained in the body. 
+
+When it is in the body, it could come in any number of forms, the two 
+most common of which are [[multipart/form-data]] and 
+[[application/x-www-form-urlencoded]]. These two should be parsed differently, 
+so we use the MIME parsing utilities to parse the body. There is already a 
+default parser for multipart bodies so we just need to define a parser for the 
+URL encoded post messages.
+
+<<Imports>>=
+(riastradh parscheme)
+(arcfide mime)
+@
+
+<<Content Processing>>=
+(define (process-content headers contents)
+	(parse-string (mime-parser:contents headers) contents #f
+		(lambda (res c s) res)
+		(lambda (err c s)
+			(error 'process-contents "Failed to parse contents" 
+				headers contents 
+				(parse-error/position err) 
+				(parse-error/messages err)))))
+
+@
+
+To parse [[application/x-www-form-urlencoded]] we use Oleg's [[cgi:url-unquote]] 
+to handle the url-parameters. 
+
+<<MIME Registration>>=
+(register-mime-type-converter! 'application 'x-www-form-urlencoded
+	(lambda (data params) (cgi:url-unquote data)))
 @
 
 \chapter{R6RS Form}
@@ -115,6 +180,8 @@ The following procedures read and write packets to a given port.
 <<Datatypes>>
 
 <<Packet I/O>>
+
+<<MIME Registration>>
 
 ;)
 @
