@@ -34,8 +34,9 @@ parse-mime-entity parse-mime-contents
 <<Convenience Procedures>>=
 (define parse-mime-entity
 	(make-generic-parser mime-parser:entity rfc2822-transcoder))
-(define (parse-mime-contents params)
-	(make-generic-parser (mime-parser:contents params) rfc2822-transcoder))
+(define (parse-mime-contents params contents)
+	((make-generic-parser (mime-parser:contents params) rfc2822-transcoder)
+	 contents))
 @
 
 \chapter{Parsing MIME Entities}%
