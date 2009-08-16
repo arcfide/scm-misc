@@ -196,7 +196,7 @@ packet.
 
 <<Imports>>=
 (foof irregex)
-(only (scheme) make-paramter)
+(only (scheme) make-parameter)
 @
 
 <<Exports>>=
@@ -256,7 +256,7 @@ start-multiplexed-mod-lisp-server
 
 <<Serving Requests>>
 
-(define keep-alive? (define-parameter #f))
+(define keep-alive? (make-parameter #f))
 
 (define (start-threaded-mod-lisp-server port)
 	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
