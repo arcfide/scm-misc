@@ -261,7 +261,7 @@ start-multiplexed-mod-lisp-server
 (define (start-threaded-mod-lisp-server port)
 	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
 		(bind-socket s 
-			(string->internet-address (string-append "127.0.0.1:" (string->number port))))
+			(string->internet-address (string-append "127.0.0.1:" (number->string port))))
 		(listen-socket s (socket-maximum-connections))
 		(loop ()
 			(let-values ([(sock addr) (accept-socket s)])
@@ -273,7 +273,7 @@ start-multiplexed-mod-lisp-server
 (define (start-multiplexed-mod-lisp-server port)
 	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
 		(bind-socket s
-			(stirng->internet-address (string-append "127.0.0.1:" (string->number port))))
+			(string->internet-address (string-append "127.0.0.1:" (number->string port))))
 		(listen-socket s (socket-maximum-connections))
 		(loop ()
 			(let-values ([(sock addr) (accept-socket s)])
