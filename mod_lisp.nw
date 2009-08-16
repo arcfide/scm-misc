@@ -172,11 +172,20 @@ to the request object, and then writing out the packet that is returned by
 the handler. 
 
 <<Serving Requests>>=
+<<Handlers>>
+
 (define (serve-request port)
 	(let ([incoming (get-packet port)])
 		(let ([res (assq 'url (modlisp-packet-headers incoming))])
 			(if res 
-				(put-packet ((lookup-request-handler (cdr res)) incoming) port)
+				(put-packet 
+					(let ([packet ((lookup-request-handler (cdr res)) incoming)])
+						(if (keep-alive?) 
+							(make-modlisp-packet
+								`((keep-socket . 1) ,@(modlisp-packet-headers packet))
+								(modlisp-packet-contents packet))
+							packet))
+					port)
 				(error 'server-request "Failed to find URL header" incoming)))))
 @
 
@@ -227,7 +236,54 @@ compared against the URL in order to grab a given handler.
 				url (request-handlers)))))
 @
 
+\chapter{Server Application}%
+The following allows you to start a server that performs a read-handle-write 
+loop on the socket. Two types of servers are supported, a multiplexing 
+server, which does everything on a single sockets, and a threaded server, 
+which spawns a new thread for each connection.
 
+<<Imports>>=
+(arcfide sockets)
+@
+
+<<Exports>>=
+start-threaded-mod-lisp-server
+start-multiplexed-mod-lisp-server
+@
+
+<<Server>>=
+<<Packet I/O>>
+
+<<Serving Requests>>
+
+(define keep-alive? (define-parameter #f))
+
+(define (start-threaded-mod-lisp-server port)
+	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
+		(bind-socket s 
+			(string->internet-address (string-append "127.0.0.1:" (string->number port))))
+		(listen-socket s (socket-maximum-connections))
+		(loop ()
+			(let-values ([(sock addr) (accept-socket s)])
+				(let* (
+						[bp (socket->port sock)]
+						[tp (transcoded-port bp (make-transcoder (utf-8-codec) (eol-style none)))])
+					(fork-thread (lambda () (parameterize ([keep-alive? #f]) (serve-request tp)))))))))
+
+(define (start-multiplexed-mod-lisp-server port)
+	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
+		(bind-socket s
+			(stirng->internet-address (string-append "127.0.0.1:" (string->number port))))
+		(listen-socket s (socket-maximum-connections))
+		(loop ()
+			(let-values ([(sock addr) (accept-socket s)])
+				(let* (
+						[bp (socket->port sock)]
+						[tp (transcoded-port bp (make-transcoder (utf-8-codec) (eol-style none)))])
+					(loop ([until (port-closed? tp)])
+						(parameterize ([keep-alive? #t])
+							(serve-request tp))))))))
+@
 
 \chapter{R6RS Form}
 
@@ -242,7 +298,7 @@ compared against the URL in order to grab a given handler.
 
 <<Datatypes>>
 
-<<Packet I/O>>
+<<Server>>
 
 <<MIME Registration>>
 
