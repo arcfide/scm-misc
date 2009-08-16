@@ -182,7 +182,7 @@ the handler.
 					(let ([packet ((lookup-request-handler (cdr res)) incoming)])
 						(if (keep-alive?) 
 							(make-modlisp-packet
-								`((keep-socket . 1) ,@(modlisp-packet-headers packet))
+								`((keep-socket . "1") ,@(modlisp-packet-headers packet))
 								(modlisp-packet-contents packet))
 							packet))
 					port)
@@ -212,7 +212,7 @@ handle-404 register-request-handler!
 	(make-modlisp-packet
 		`((status . "200 OK")
 			(content-type . "text/html")
-			(content-length . ,(string-length contents)))
+			(content-length . (number->string ,(string-length contents))))
 		contents))
 
 (define request-handlers
