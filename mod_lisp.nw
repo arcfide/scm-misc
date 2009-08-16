@@ -216,7 +216,7 @@ handle-404 register-request-handler!
 		contents))
 
 (define request-handlers
-	(make-parameter `((,(irregex ".*") ,handle-404))))
+	(make-parameter `((,(irregex ".*") . ,handle-404))))
 
 (define (register-request-handler! match proc)
 	(request-handlers
@@ -230,7 +230,7 @@ compared against the URL in order to grab a given handler.
 
 <<Handlers>>=
 (define (lookup-request-handler url)
-	(let ([res (find (lambda (x) (irregex-match url (car x))) (request-handlers))])
+	(let ([res (find (lambda (x) (irregex-match (car x) url)) (request-handlers))])
 		(if res (cdr res)
 			(error 'lookup-request-handler "Failed to find handler!" 
 				url (request-handlers)))))

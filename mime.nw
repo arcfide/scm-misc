@@ -458,6 +458,10 @@ to do this.}
 \subsection{Registering MIME types}%
 Use the following procedure to register new converters.
 
+<<Exports>>=
+register-mime-type-converter!
+@
+
 <<Imports>>=
 (rnrs lists)
 (rnrs mutable-pairs)
@@ -467,10 +471,10 @@ Use the following procedure to register new converters.
 (define (register-mime-type-converter! type subtype converter)
 	(let ([db (mime-type-db)])
 		(if type
-			(let ([res (assq type db)])
+			(let ([res (assq type (cdr db))])
 				(if res
 					(if subtype
-						(let ([subres (assq subtype res)])
+						(let ([subres (assq subtype (cddr res))])
 							(if subres
 								(set-cdr! subres converter)
 								(set-cdr! (cdr res)
@@ -551,6 +555,10 @@ Here are the basic decoders.
 \section{Registering MIME Content Decoders}%
 The follow procedure allows for registration to the decoder database.
 
+<<Exports>>=
+register-mime-decoder!
+@
+
 <<Content Parsing>>=
 (define (register-mime-decoder! type decoder)
 	(let ([res (and type (assq type (mime-decoder-db)))])
@@ -585,6 +593,7 @@ the appropriate decoder.
 <<mime.sls>>=
 <<License>>
 
+#!chezscheme
 (library (arcfide mime)
 	(export
 		<<Exports>>)
