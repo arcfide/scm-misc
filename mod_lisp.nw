@@ -83,6 +83,11 @@ The following procedures read and write packets to a given port.
 			(put-string port (cdr x))
 			(put-char port #\newline))
 		(modlisp-packet-headers packet))
+	(when (keep-alive?)
+		(put-string port "Keep-Socket\n1\n"))
+	(put-string port "Content-Length\n")
+	(put-string port (number->string (string-length (modlisp-packet-contents packet))))
+	(put-string port "\n")
 	(put-string port "end\n")
 	(put-string port (modlisp-packet-contents packet)))
 
@@ -91,20 +96,25 @@ The following procedures read and write packets to a given port.
 <<Content Processing>>
 
 (define (get-packet port)
-	(define (get-header)
-		(let ([key (get-line port)])
-			(and (not (string=? "end" key))
-				(cons (string->symbol (string-downcase key))
-					(get-line port)))))
-	(loop (
-			[with header (get-header) (get-header)]
-			[for headers (listing header)]
-			[while header])
-		=> (make-modlisp-packet (process-headers headers)
-					(let ([len (assq 'content-length headers)])
-						(and len 
-							(process-contents headers 
-								(get-string-n port (string->number (cdr len)))))))))
+	(call-with-current-continuation
+		(lambda (return)
+			(define (return-on-disconnect x)
+				(if (eof-object? x) (return #f) x))
+			(define (get-header)
+				(let ([key (return-on-disconnect (get-line port))])
+					(and (not (string=? "end" key))
+						(cons (string->symbol (string-downcase key))
+							(return-on-disconnect (get-line port))))))
+			(loop (
+					[with header (get-header) (get-header)]
+					[for headers (listing header)]
+					[while header])
+				=> (make-modlisp-packet (process-headers headers)
+							(let ([len (assq 'content-length headers)])
+								(and len 
+									(process-contents headers 
+										(return-on-disconnect 
+											(get-string-n port (string->number (cdr len))))))))))))
 @
 
 \chapter{Processing Headers}%
@@ -175,18 +185,14 @@ the handler.
 <<Handlers>>
 
 (define (serve-request port)
+	(define (packet-url p) (assq 'url (modlisp-packet-headers p)))
+	(define (get-response url p) 
+		(if url ((lookup-request-handler url) p) (make-500-response)))
 	(let ([incoming (get-packet port)])
-		(let ([res (assq 'url (modlisp-packet-headers incoming))])
-			(if res 
-				(put-packet 
-					(let ([packet ((lookup-request-handler (cdr res)) incoming)])
-						(if (keep-alive?) 
-							(make-modlisp-packet
-								`((keep-socket . "1") ,@(modlisp-packet-headers packet))
-								(modlisp-packet-contents packet))
-							packet))
-					port)
-				(error 'server-request "Failed to find URL header" incoming)))))
+		(and incoming
+			(begin 
+				(put-packet (get-response (packet-url incoming) incoming) port)
+				#t))))
 @
 
 \chapter{Request Handlers}%
@@ -211,8 +217,7 @@ handle-404 register-request-handler!
 <p>Unable to find the resource. Please check the URL.</p></body></html>")
 	(make-modlisp-packet
 		`((status . "200 OK")
-			(content-type . "text/html")
-			(content-length . (number->string ,(string-length contents))))
+			(content-type . "text/html"))
 		contents))
 
 (define request-handlers
@@ -256,33 +261,20 @@ start-multiplexed-mod-lisp-server
 
 <<Serving Requests>>
 
-(define keep-alive? (make-parameter #f))
+(define keep-alive? (make-parameter #t))
+(define modlisp-transcoder (make-transcoder (utf-8-codec) (eol-style none)))
 
-(define (start-threaded-mod-lisp-server port)
+(define (start-modlisp-server port)
 	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
-		(bind-socket s 
-			(string->internet-address (string-append "127.0.0.1:" (number->string port))))
+		(bind-socket s (string->internet-address (format "127.0.0.1:~d" port)))
 		(listen-socket s (socket-maximum-connections))
 		(loop ()
 			(let-values ([(sock addr) (accept-socket s)])
 				(let* (
 						[bp (socket->port sock)]
-						[tp (transcoded-port bp (make-transcoder (utf-8-codec) (eol-style none)))])
-					(fork-thread (lambda () (parameterize ([keep-alive? #f]) (serve-request tp)))))))))
-
-(define (start-multiplexed-mod-lisp-server port)
-	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
-		(bind-socket s
-			(string->internet-address (string-append "127.0.0.1:" (number->string port))))
-		(listen-socket s (socket-maximum-connections))
-		(loop ()
-			(let-values ([(sock addr) (accept-socket s)])
-				(let* (
-						[bp (socket->port sock)]
-						[tp (transcoded-port bp (make-transcoder (utf-8-codec) (eol-style none)))])
-					(loop ([until (port-closed? tp)])
-						(parameterize ([keep-alive? #t])
-							(serve-request tp))))))))
+						[tp (transcoded-port bp modlisp-transcoder)])
+					(fork-thread (lambda () (loop ([while (serve-request tp)])))))))))
+					
 @
 
 \chapter{R6RS Form}
