@@ -1,4 +1,4 @@
-DEPS=header.tex main.tex bnf.tex 
+DEPS=nwmac.tex main.tex bnf.tex 
 FILENAME=descot_techdoc
 
 ${FILENAME}.dvi: ${FILENAME}.tex ${DEPS}
