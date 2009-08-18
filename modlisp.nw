@@ -108,9 +108,9 @@ The following procedures read and write packets to a given port.
 							(return-on-disconnect (get-line port))))))
 			(loop (
 					[with header (get-header) (get-header)]
-					[for headers (listing header)]
+					[for headers (listing (process-header header))]
 					[while header])
-				=> (make-modlisp-packet (process-headers headers)
+				=> (make-modlisp-packet headers
 							(let ([len (assq 'content-length headers)])
 								(and len 
 									(process-contents headers 
@@ -132,10 +132,20 @@ here for customization of mod_lisp.}
 @
 
 <<Header Processing>>=
-(define (process-headers headers)
-	(let ([res (assq 'url-params headers)])
-		(when res (set-cdr! res (cgi:url-unquote (cdr res))))
-		headers))
+(define (parse-content-type buf)
+	(parse-string mime-parser:content-value buf #f
+		(lambda (res con s) res)
+		(lambda (err con s)
+			(error 'parse-content-type
+				"Failed to parse content-type header"
+				(parse-error/position err)
+				(parse-error/messages err)))))
+
+(define (process-header header)
+	(case (car header)
+		[(url-params) (cons 'url-params (cgi:url-unquote (cdr header)))]
+		[(content-type) (cons 'content-type (parse-content-type (cdr header)))]
+		[else header]))
 @
 
 \chapter{Processing Contents}%
@@ -158,8 +168,8 @@ URL encoded post messages.
 @
 
 <<Content Processing>>=
-(define (process-content headers contents)
-	(parse-string (mime-parser:contents headers) contents #f
+(define (process-contents headers contents)
+	(parse-string (mime-parser:contents headers) (string-append "\r\n" contents) #f
 		(lambda (res c s) res)
 		(lambda (err c s)
 			(error 'process-contents "Failed to parse contents" 
@@ -253,8 +263,7 @@ which spawns a new thread for each connection.
 @
 
 <<Exports>>=
-start-threaded-mod-lisp-server
-start-multiplexed-mod-lisp-server
+start-modlisp-server start-modlisp-server/synchronous
 @
 
 <<Server>>=

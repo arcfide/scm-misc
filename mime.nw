@@ -111,22 +111,29 @@ Specifies the Content-Type of a MIME entity.
 (define-record-type mime-type (fields main subtype parameters))
 @
 
+<<Exports>>=
+mime-parser:content-value
+@
+
 <<Headers>>=
 (define-parser mime-parser:content
 	(parser:rfc2822-header 'content-type "Content-Type"
-		(*parser
-				[type (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
-				[(parser:char= #\/)]
-				[subtype (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
-				[params 
-					(parser:list:repeated 
-						(parser:sequence (parser:char= #\;) 
-							(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:parameter)))]
-			(parser:return 
-				(make-mime-type 
-					(string->symbol (string-downcase type)) 
-					(string->symbol (string-downcase subtype))
-					params)))))
+		mime-parser:content-value))
+
+(define-parser mime-parser:content-value
+	(*parser
+			[type (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
+			[(parser:char= #\/)]
+			[subtype (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
+			[params 
+				(parser:list:repeated 
+					(parser:sequence (parser:char= #\;) 
+						(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:parameter)))]
+		(parser:return 
+			(make-mime-type 
+				(string->symbol (string-downcase type)) 
+				(string->symbol (string-downcase subtype))
+				params))))
 
 @
 
@@ -324,10 +331,7 @@ as its own entity.
 			[buf 
 				(or (and (string? data) data) 
 					(bytevector->string data (native-transcoder)))])
-		(parse-string (mime-parser:multipart params)
-			(or (and (string? data) data) 
-				(bytevector->string data rfc2822-transcoder))
-			#f
+		(parse-string (mime-parser:multipart params) buf #f
 			(lambda (res con strm) res)
 			(lambda (perr con strm)
 				(raise
@@ -478,10 +482,10 @@ register-mime-type-converter!
 							(if subres
 								(set-cdr! subres converter)
 								(set-cdr! (cdr res)
-									(cons `(,subtype ,converter) (cddr res)))))
+									(cons `(,subtype . ,converter) (cddr res)))))
 						(set-car! (cdr res) converter))
 					(set-cdr! db
-						(cons `(,type ,converter (,subtype ,converter))
+						(cons `(,type ,converter (,subtype . ,converter))
 							(cdr db)))))
 			(set-car! db converter))))
 
