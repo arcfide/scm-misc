@@ -1,0 +1,21 @@
+         Tackling Library Distribution in a Chaotic Land
+
+Scheme has seen a host of attempts to create the equivalent to CPAN 
+for Scheme.  Snow is one of the more famous attempts. Others include 
+CSAN, CxAN, SLIB, PlaneT, Chicken's Eggs, Bigloo Repository, and 
+others. Each of these has failed to garner enough support by the 
+Scheme community to make it the de facto repository of Scheme code. 
+I argue that each of these has "failed" to achieve this role because 
+each of them relies on a set of presumptions about library repositories 
+that does not consider Scheme's diverse and chaotic nature. Instead 
+of a single, authoritarian repository of code, I submit that a 
+decentralized protocol that permits the coordinated sharing of the 
+massively divergent code base existing in the Scheme world allows for 
+all the necessary elements of library distribution, while making it 
+possible to avoid restricting the use of library metadata to one 
+specific frameowrk or platform. I present the preliminary elements 
+of such a system -- Descot -- for feedback.  Such a system holds the 
+promise of making Scheme more attractive to newcomers, as well as 
+easier to use for experienced Schemers, all while facilitating the 
+shared cooperation between differing repositories and library 
+retrieval mechanisms. 

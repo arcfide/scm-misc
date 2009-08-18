@@ -1,0 +1,156 @@
+\chapter{Printing RDF Graphs}
+
+[[rdf-printing]] is a module for printing rdf graphs and triples. It
+outputs them in simplistic Turtle based format, but does not use 
+nearly the features that turtle has.  It is much easier to just 
+print a single triple per line, without any attempts at prefixing 
+or other Turtle syntaxes.  That is, these procedures were designed to 
+output computer parsible RDF Graphs in Turtle format, without any 
+consideration to human readability. Take note!
+
+Each procedure takes the datum to print, and optionally a port 
+to which it should print.  If no port is given, then the 
+[[current-output-port]] is used.
+
+<<rdf-print.ss>>=
+<<License>>
+
+<<Module Form>>
+@
+
+\section{Exports and Name}
+
+<<Module Form>>=
+(module rdf-printing
+  (write-rdf-triple->turtle write-rdf-graph->turtle write-rdf-triples->turtle)
+
+<<Imports>>
+
+<<Output Procedures>>
+
+)
+@
+
+\section{Dependencies}
+
+[[rdf-printing]] requires Taylor Campbell's RDF Graphs and foof loop 
+libraries.
+
+<<Imports>>=
+(import scheme)
+(import rdf-list-graphs)
+(import rdf)
+(import foof-loop)
+(import nested-foof-loop)
+@
+
+\section{Output Procedures}
+
+<<Output Procedures>>=
+<<RDFs to Strings>>
+
+<<Printing Triples>>
+
+<<Printing Triple Lists>>
+
+<<Printing RDF Graphs>>
+@
+
+The three main output procedures do essentially the same thing on 
+three different data structures: [[write-rdf-triple->turtle]], 
+[[write-rdf-graph->turtle]], and [[write-rdf-triples->turtle]].  They are 
+supported by a means of converting an rdf-node into its appropriate 
+textual representation in turtle format called [[rdf-node->string]].
+
+<<RDFs to Strings>>=
+(define rdf-node->string
+  (lambda (node)
+    (cond
+      [(rdf-uri-ref? node) (rdf-uri-ref->string node)]
+      [(rdf-plain-literal? node) 
+       (format #f "~a~@[@~a~]"
+	 (rdf-literal/lexical-form node)
+	 (rdf-plain-literal/language-tag node))]
+      [(rdf-bnode? node) (string-append "_:" (rdf-bnode/name node))]
+      [(rdf-typed-literal? node)
+       (format #f "~a^^~a"
+	 (rdf-literal/lexical-form node)
+	 (rdf-typed-literal/datatype-uri node))]
+      [else (error 'rdf-node->string "Bad node ~a" node)])))
+@
+
+When printing a triple, Turtle notation just has whitespace between 
+the Subject, Predicate, and Object, with a single period at the end. 
+
+<<Printing Triples>>=
+(define write-rdf-triple->turtle
+  (case-lambda 
+    [(triple)
+     (%write-rdf-triple triple (current-output-port))]
+    [(triple port)
+     (%write-rdf-triple triple port)]))
+
+(define %write-rdf-triple
+  (lambda (triple port)
+    (format port "~a ~a ~a.~n"
+      (rdf-node->string (rdf-triple/subject triple))
+      (rdf-node->string (rdf-triple/predicate triple))
+      (rdf-node->string (rdf-triple/object triple)))))
+@
+
+Printing a triple list is a trivial iteration over the triples 
+in a list.
+
+<<Printing Triple Lists>>=
+(define write-rdf-triples->turtle
+  (case-lambda 
+    [(triple)
+     (%write-rdf-triple-list triple (current-output-port))]
+    [(triple port)
+     (%write-rdf-triple-list triple port)]))
+
+(define %write-rdf-triple-list
+  (lambda (triple-list port)
+    (for-each (lambda (e) (write-rdf-triple e port)) triple-list)))
+@
+
+To print a graph, we should simply use the [[rdf-graph/for-each-triple]] 
+function made available to use from Taylor Campbell's RDF Graphs.
+
+<<Printing RDF Graphs>>=
+(define write-rdf-graph->turtle
+  (case-lambda 
+    [(graph)
+     (%write-rdf-graph graph (current-output-port))]
+    [(graph port)
+     (%write-rdf-graph graph port)]))
+
+(define %write-rdf-graph
+  (lambda (graph port)
+    (rdf-graph/for-each-triple graph
+      (lambda (e) (write-rdf-triple e port)))))
+@
+
+\section{Licensing}
+
+[[rdf-printing]] is licensed under an ISC License.
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Output RDF Graphs to Turtle
+;;; 
+;;; Copyright (c) 2009 Aaron Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.

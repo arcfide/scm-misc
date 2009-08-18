@@ -1,0 +1,522 @@
+\chapter{Descot Web Application}
+
+The Descot Web Application provides a web-based interface for accessing 
+the Descot System for search, browsing, and submission.  It is designed 
+to permit easy use for those who do not wish to have a special client 
+that integrates with their system. 
+
+\section{Pages}
+
+There are two main dynamic pages defined for Descot at the moment: 
+Browsing and Searching. Browsing includes the display of normal 
+library descriptions and information in HTML form.  Submitting is 
+also handled dynamically, so we should take care of that here as 
+well.
+
+<<Pages>>=
+<<Browsing>>
+
+<<Searching>>
+
+<<Submitting>>
+@
+
+Pages that should be added are submissions and RDF Library Retreival, 
+where each library is exported with its actual properties.  These 
+are a major TODO.
+
+Browsing includes displaying the library, showing a navigatible 
+category list, and showing the libraries in a given category. 
+We give three separate page procedures to handle each of these 
+functions individually.
+
+<<Browsing>>=
+<<Library>>
+
+<<Category Browse>>
+
+<<Category List>>
+@
+
+The simplest library page to do, and the most used, is the library 
+rendering page, which will simply display the results of querying 
+for a specific library URL.
+
+<<Library>>=
+(define library-page
+  (lambda (url)
+    (descot-wrapper "Browse" descot-stylesheet
+      (library->html (current-store) url))))
+@
+
+[Notice the use of [[descot-wrapper]] to help everything go along.]
+
+Next, we use our iterators and the like to get the listing of 
+libraries for each category. We always try to make sure that category 
+names are capitalized when they are displayed, but lower-cased when 
+they are stored. 
+
+<<Category Browse>>=
+(define category-page
+  (lambda (category)
+    (descot-wrapper (format #f "Category ~a" (capitalize-string category))
+      descot-stylesheet
+      (collect-list
+	(for lib-name (in-list (libraries-in-category category)))
+	(library->short-html (string-append descot-browse-path "?id=")
+	  (current-store) 
+	  lib-name)))))
+@
+
+Here we do have a little bit of a hack since we know the browsing 
+interface, and we pass a parameter ``?id='' explicitly.  This will be 
+okay, and I want to avoid over engineering something before it even 
+gets off the ground. 
+
+When someone first goes to the browse link, if they do not enter any 
+kind of query parameter in the URL, they will be shown a list of the 
+available package categories, on which they can click and navigate. 
+We use [[make-column-table-with-size]] to layout the table for us, 
+expecting that it will lay them out in downward alphabetical order 
+according to the columns we specify.  This column width is set 
+externally to help with different layouts.
+
+<<Category List>>=
+(define browse-page
+  (lambda ()
+    (descot-wrapper "Browse" descot-stylesheet
+      (let ([cats (store-categories (current-store))])
+	(if (null? cats)
+	    `(p "No Categories are available.")
+	    (make-column-table-with-size 
+	      (browser-column-width)
+	      (categories->links cats)))))))
+@
+
+Now, we progress to searching, which isn't nearly so complicated 
+in its overall layout, even though it does use some procedures in 
+the back to hide some complexity. Overall, there is the basic 
+search results page, and the Advanced Search page, which is the 
+landing page for search.
+
+<<Searching>>=
+<<Search Results>>
+
+<<Advanced Search>>
+@
+
+Advanced search is not yet implemented, 
+so we just use a place holder there. 
+
+<<Advanced Search>>=
+(define advanced-search-page
+  (lambda ()
+    (descot-wrapper "Advanced Search" descot-stylesheet
+      `(p "Sorry, advanced search is not yet implemented."))))
+@
+
+To implement the search results, we have to take the [[match?]] 
+procedure that we are given and use it on every single library 
+that we can find.  We expect the [[match?]] procedure to be of the kind 
+that we can apply just to a library node/ID. 
+
+We use [[libary->short-html]] to print our results in a more succinct 
+fashion from the main library browsing page.
+
+<<Search Results>>=
+(define search-page
+  (lambda (match?)
+    (define search
+      (lambda ()
+	(collect-list 
+	  (for name 
+	    (in-list (matching-libraries match? (library-ids (current-store)))))
+	  (library->short-html 
+	    (string-append descot-browse-path "?id=")
+	    (current-store) 
+	    name))))
+    (descot-wrapper "Search Results" descot-stylesheet
+      (let ([results (search)])
+	(if (null? results)
+	    '(p "Sorry, no results found.")
+	    results)))))
+@
+
+\section{Library Submission}
+
+When someone wishes to submit a new library, at the moment, we will 
+allow them to do so without much help. Right now, the submission on 
+the DWA is merely a form with fields that are not checked or anything. 
+The submissions will then be saved in a special folder that is given 
+by the web parameters module. We will use gensym printing for handling 
+the unique names for each submission. However, normal [[write]] 
+form gensyms come out with funny characters in them, so we will 
+need to convert them to something nicer:
+
+<<Submitting>>=
+(define format-gensym
+  (lambda (id)
+    (define cleaner (make-char-quotator '((#\space . ":"))))
+    (let ([id-string (with-output-to-string (lambda () (write id)))])
+      (apply string-append 
+	(cleaner (substring id-string 2 (1- (string-length id-string))))))))
+@
+
+[[submit-page]] will return out the basic form used to accept submissions.
+
+<<Submitting>>=
+(define submit-page
+  (lambda ()
+    (descot-wrapper "Submit a New Library" descot-stylesheet
+      `(form (@ (method "POST") (enctype "multipart/form-data") 
+		(action ,descot-submit-path))
+	 (p (input (@ (name "code") (type "file")))
+	    (input (@ (name "file-type") (type "radio") (value "srdf") 
+	              (checked "checked")))
+	    "SRDF"
+	    (input (@ (name "file-type") (type "radio") (value "turtle")))
+	    "Turtle")
+	 (p (button (@ (type "submit")) "Submit Library"))))))
+
+@
+
+On a successful submission, we need to let them know they succeeded.
+
+<<Submitting>>=
+(define successful-submit-page
+  (lambda ()
+    (descot-wrapper "Success!" descot-stylesheet
+      '(p 
+	 "Thank you for submitting a library to Descot and helping "
+	 "us to grow! At the moment, submissions are not updated "
+	 "automatically in the database; they must first be reviewed "
+	 "and if they are approved, they will show up in the database "
+	 "within a couple of days [hopefully].  Please bear with us "
+	 "as we continue to improve Descot!"))))
+
+@
+
+On failure, we should print out an error, and if debugging is enabled,
+we should print out the error message.
+
+<<Submitting>>=
+(define submit-failure-page
+  (lambda (name fmts . vals)
+    (descot-wrapper "Failure!" descot-stylesheet
+      '(p 
+	 "An error occured when submitting your library. "
+	 "It is possible that the Library is not formatted "
+	 "correctly, or that there was a server error. "
+	 "Please examine your library for errors and try again. "
+	 "If this error persists, please contact "
+	 (descot-maintainer)
+	 "."))))
+
+@
+
+The maintainer comes from the web parameters [[descot-maintainer-email]] 
+and [[descot-maintainer-name]].
+
+<<Submitting>>=
+(define descot-maintainer
+  (lambda ()
+    `(a (@ (href ,descot-maintainer-email)) ,descot-maintainer-name)))
+@
+
+See the next section for information about how we actually handle the 
+submission when it comes in.
+
+\section{Page Handlers}
+
+Page handlers in MIT Scheme mod\_lisp handle the urls and mime-types that 
+are requested from the server. Here we use mostly URL based dispatch 
+with default mime types.  Generally, other things should be served 
+statically by the Apache Web Server if it can for various reasons.  
+
+There are really only two search URLs defined, the browse and the 
+search path.  Each one is expected to take some parameters to 
+help determine what page should be returned. 
+
+Additionally, we have a general RDF handler for those URLs that should 
+return some kind of Turtle representation of the sentences containing 
+that URL as the root.
+
+<<Handlers>>=
+<<Browse Handler>>
+
+<<Search Handler>>
+
+<<RDF Handler>>
+
+<<Submission Handler>>
+@
+
+For the browse URL the two mutually exclusive parameter [[id]] 
+and [[cat]] tell us whether we should be displaying a library 
+or a category listing.  If neither of those are used, then we 
+use the basic category listing. 
+
+<<Browse Handler>>=
+(define-subtree-handler descot-browse-path 'application/xhtml+xml
+  (lambda (path port)
+    (let ([id (http-request-url-parameter 'id)]
+	  [cat (http-request-url-parameter 'cat)])
+      (write-html-page
+	(cond
+	  [id (lambda () (library-page id))]
+	  [cat (lambda () (category-page cat))]
+	  [else browse-page])
+	port))))
+@
+
+For search, we use the Advanced Search page as our landing page, 
+or, if we are given a query, we try to list the results. 
+
+<<Search Handler>>=
+(define-subtree-handler descot-search-path 'application/xhtml+xml
+  (lambda (path port)
+    (let ([query (http-request-url-parameter 'q)])
+      (write-html-page
+	(cond
+	  [query (lambda () (search-page (make-search-proc query)))]
+	  [else advanced-search-page])
+	port))))
+@
+
+\section{Serving RDF Sentences for a Library}
+
+When a user tries to retrieve a URL which corresponds to the 
+URL of a given RDF entity, they should be presented with the 
+set of RDF sentences that make up that library.  If they want 
+this information in another form, they can use the browse 
+pages to get that.  For now, this is the paradigm I want to use, 
+but this may change, since technically it is possible to serve 
+the HTML with the RDF depending on what the client requests. 
+
+At any rate, right now, the easiest way to do this is to 
+take the url request and reconsitute the entire URL from the 
+pieces in mod\_lisp, and check to see whether such a thing 
+exists as a subject in the current store.  If it does, then 
+we just print out all the sentences that have it as a subject. 
+
+We need to get around some other ``features'' of Apache and 
+mod\_lisp in order to serve all the right URLs, since we 
+can't assign the lisp-handler to take everything and then 
+leave out one specific file set; root lisp-handlers don't 
+seem to be working the way they should.  However, since 
+all of our RDF files are in libs/, impls/, \&c., we can 
+workaround this problem by explicitly listing these in the 
+httpd.conf file. 
+
+This won't make a difference in our default handler here, 
+except that it will never have to serve static content. 
+
+<<RDF Handler>>=
+(define-subtree-handler descot-rdf-path 'application/x-srdf
+  (lambda (path port)
+    (write-descot-request 
+      (format #f "http://~a~a" (http-request-header 'host) (http-request-url))
+      port)))
+@
+
+It should be noted that RDF URLs coming in with fragments in them 
+must be encoded.  That is, the \# character in the URL must be 
+encoded using the \%23 string, or else the URL will come through 
+without the fragment.  This appears to be an artifact of mod\_lisp, 
+but I have not confirmed this yet.
+
+\section{Accepting Submissions}
+
+When handling Submissions, we will grab the post parameters and 
+check if they are null. If it isn't, then we have a submission and 
+we can go ahead and write out the library.  Otherwise, we'll just 
+display the main submit landing page.
+
+<<Submission Handler>>=
+(define-subtree-handler descot-submit-path 'application/xhtml+xml
+  (lambda (path port)
+    (let ([params (http-request-post-parameter-bindings)])
+      (if (or (not params) (null? params))
+	  (write-html-page submit-page port)
+	  (begin 
+	    (http-response-header 'content-type "text/plain")
+	    (format port "Would write to: ~a~%"
+	      (string-append 
+		descot-submit-store 
+		(string (directory-separator))
+		(format-gensym (gensym "submission"))))
+	    (format port "Submitted by ~a on ~a.~%" 
+	      (http-request-header 'remote-ip-addr)
+	      (date-and-time))
+	    (newline port)
+	    (pretty-print params port))))))
+@
+
+\section{Optimization/Initialization/Running}
+
+DWA is configured with standard unsafe optimizations, and the entire 
+program is run from one nested LET expression. All definitions must 
+come before the handlers, since the handlers are actually expressions 
+rather than definitions.
+
+<<web-app.ss>>=
+<<Web App License>>
+
+(eval-when (compile) 
+  (generate-inspector-information #f)
+  (optimize-level 3))
+
+<<Shared Objects>>
+
+(let ()
+
+<<Imports>>
+
+<<Pages>>
+
+<<Handlers>>
+
+<<Initialization>>
+
+)
+@
+
+To initialize the program, we first make sure that we are using 
+XHTML generators [Ed. -- This is a Chez Libs specific adjustment to 
+Oleg's SXML code to allow the correct ending tags to work].  
+
+<<Initialization>>=
+;; We are using XML
+(xml-tags? #t)
+@
+
+We need to make sure that we initialize the server api the way we 
+want. The default SRDF format will be used for the store, but 
+we specify the store location from our parameters:
+
+<<Initialization>>=
+(descot-store descot-store-root)
+@
+
+At the moment, we read in the entire store into memory for simplicity. 
+this makes our accessor functions much easier to write, so we assume 
+this. However, this could have ramifications in the future if the size 
+of the stores grows too large.  Instead of doing this, it would be 
+better if the stores were grabbed directly from the filesystem when 
+they were needed, assuming we have a heavy memory constraint.  On 
+the other hand, I have an inkling thought that this won't matter on 
+today's high memory systems. At least, I hope not.
+
+<<Initialization>>=
+(current-store (read-descot-store (descot-store)))
+@
+
+Now we can safely start the mod\_lisp server.
+
+<<Initialization>>=
+(start-mod-lisp-server)
+@
+
+Right now, the server is meant to be launched using something like 
+nohup(1) with backgrounding so that the process can be thrown into the 
+background and it will run with output to some file. 
+
+\section{Imports/Dependencies}
+
+DWA requires a few libraries to work, including normal Chez Scheme 
+features, plus SRFIs 14 and 13, MIT Scheme compatible mod\_lisp interface, 
+Descot's RDF utilities and tools, Taylor Campbell's RDF libraries, 
+foof loop by the same, Alex Shinn's Irregular Expressions, and 
+Oleg's SXML transformers. 
+
+<<Imports>>=
+(include "lib/sockets.ss")
+(include "lib/assert.ss")
+(include "lib/syn-param.ss")
+(include "lib/srfi-8.ss")
+(include "lib/foof-loop.ss")
+(include "lib/nested-foof-loop.ss")
+(include "lib/io-util.ss")
+(include "lib/srfi-45.ss")
+(include "lib/stream.ss")
+(include "lib/perror.ss")
+(include "lib/let-opt.ss")
+(include "lib/check-arg.ss")
+(include "lib/srfi-1.ss")
+(include "lib/matcomb.ss")
+(include "lib/srfi-14.ss")
+(include "lib/mattext.ss")
+(include "lib/parcomb.ss")
+(include "lib/partext.ss")
+(include "lib/char-utils.ss")
+(include "lib/srfi-13.ss")
+(include "lib/srfi-23.ss") 
+(include "lib/uri.ss")
+(include "lib/irregex.ss")
+(include "lib/myenv-chez.ss")
+(include "lib/oleg-util.ss")
+(include "lib/oleg-sxml-tree-trans.ss")
+(include "lib/oleg-sxml-to-html.ss")
+(include "lib/mod-lisp.ss")
+(include "lib/rdf.ss")
+(include "lib/rdf-list-graph.ss")
+(include "lib/rdf-turtle-parser.ss")
+(include "lib/rdf-map.ss")
+(include "rdf-util.ss")
+(include "rdf2html.ss")
+(include "web-param.ss")
+(include "web-util.ss")
+(include "web-gen.ss")
+(include "srdf.ss")
+(include "server.ss")
+
+(import scheme)
+(import mod-lisp)
+(import sxml-to-html)
+(import rdf2html)
+(import descot-rdf-utilities)
+(import rdf-list-graphs)
+(import foof-loop)
+(import nested-foof-loop)
+(import rdf)
+(import srfi-14)
+(import srfi-13)
+(import irregular-expressions)
+(import descot-web-parameters)
+(import descot-web-generators)
+(import descot-web-utilities)
+(import oleg-util)
+(import descot-server)
+@
+
+this also means that DWA requires a few shared objects to be loaded 
+into Chez Scheme in order to be used successfully.
+
+<<Shared Objects>>=
+(load-shared-object "libc.so")
+(load-shared-object "./lib/sockets.so.1.0")
+@
+
+\section{Licensing}
+
+Descot's Web Application is licensed under an ISC License.
+
+<<Web App License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Web Application Component of Descot
+;;; 
+;;; Copyright (c) 2009 Aaron Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.

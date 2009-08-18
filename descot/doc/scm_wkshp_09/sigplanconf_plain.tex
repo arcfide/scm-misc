@@ -1,0 +1,153 @@
+\ifx\eplain\undefined \input eplain \fi
+\input TXSdcol.tex
+
+%% Requirements:
+%% Your submissions should be no longer than 12 pages, including
+%% bibliography and appendices. Papers may be shorter than this limit,
+%% and the Program Committee encourages authors to submit shorter
+%% papers where appropriate.
+%% 
+%% Prepare your papers in standard ACM format: two columns, nine point
+%% font on ten point baseline, page 20pc (3.33in) wide and 54pc (9in)
+%% tall with a column gutter of 2pc (0.33in), suitable for printing
+%% on US Letter sized paper. We recommend (but do not require) that
+%% citations be put into author-date form.
+
+%% Define the fonts
+\font\rm = cmr9
+\font\bf = cmbx9
+\font\it = cmti9
+\font\sl = cmsl9
+\font\tt = cmtt9
+\font\titlef = cmbx12 scaled \magstep 2
+\font\authf = cmr10
+\font\affif = cmr9
+\font\mailf = cmtt9
+\font\conff = cmr7
+\font\cnfnf = cmti7
+\font\headf = cmbx12
+\font\sectf = cmbx12
+\font\subsectf = cmbx10
+
+%% Counters
+\newcount\sectnum
+\newcount\subsectnum
+\newcount\tablenum
+\newcount\appendixnum
+
+%% Define Header stuffs
+\def\title#1{\def\titlev{#1}}
+
+\def\authorinfo#1#2#3{
+  \def\authorv{#1}
+  \def\affillv{#2}
+  \def\aemailv{#3}}
+
+\def\conferenceinfo#1#2{
+  \def\confname{#1}
+  \def\confdate{#2}}
+
+\def\makeconfcopy{
+  {\parindent = 0in \baselineskip = 7pt
+    \footnote{}
+      {\conff Permission to make digital or hard copies of all or
+      part of this work for personal or classroom use is granted without
+      fee provided that copies are not made or distributed for profit or
+      commercial advantage and that copies bear this notice and the full
+      citation on the first page.  To copy otherwise, to republish, to
+      post on servers or to redistribute to lists, requires prior specific
+      permission and/or a fee.\hfil\break
+      {\cnfnf \confname}}}
+}
+
+\def\maketitle{
+  \bigskip
+  \centerline{{\titlef \titlev}}
+  \bigskip\bigskip
+  \centerline{{\authf \authorv}}
+  \medskip
+  \centerline{{\affif \affillv}}
+  \centerline{{\mailf \aemailv}}
+  \bigskip
+  \doublecolumns
+}
+
+\def\beginabstract{%
+  \noindent{\headf Abstract\makeconfcopy}
+  \smallskip\noindent
+}
+\def\endabstract{}
+
+\def\sectionword{Section}
+
+\def\section#1#2{%
+  \bigskip
+  \advance\sectnum by 1
+  \subsectnum = 0
+  {\noindent\sectf\the\sectnum .\quad #2}
+  \definexref{#1}{\the\sectnum}{section}
+  \par\nobreak\smallskip\noindent}
+
+\def\subsection#1#2{%
+  \bigskip
+  \advance\subsectnum by 1
+  {\subsectf\noindent\the\sectnum .\the\subsectnum .\quad #2}
+  \definexref{#1}{\the\sectnum{}.\the\subsectnum}{section}
+  \par\nobreak\smallskip\noindent}
+
+\appendixnum = 64
+\def\appendixword{Appendix}
+\def\appendix#1#2{%
+  \bigskip
+  \advance\appendixnum by 1
+  {\sectf\noindent Appendix \char\appendixnum: \quad #2}
+  \definexref{#1}{\char\the\appendixnum}{appendix}
+  \par\nobreak\smallskip\noindent}
+
+\long\def\makereferences#1#2{%
+  {\noindent\sectf References}
+  \par\nobreak\smallskip\raggedright
+  \bibliography{#1}
+  \bibliographystyle{#2}}
+
+\def\tableword{Table}
+\long\def\maketable#1#2#3{%
+  \global\advance\tablenum by 1
+  \definexref{#1}{\the\tablenum}{table}
+  $$\vbox{
+    \offinterlineskip
+    \halign{#3}
+    \smallskip\hrule\smallskip
+    \centerline{Table \the\tablenum : #2}
+    }$$}
+
+%% Some uber cool blank testing stuff
+% Usage: \if\blank{#1}...\else...\fi
+
+\catcode`\@=11 % as in plain.tex
+\long\def\blank#1{\bl@nk#1@@..\bl@nk}%
+\long\def\bl@nk#1#2@#3#4\bl@nk{#3#4}
+\catcode`\@=12
+
+\long\def\test#1{\begingroup \toks0{[#1]}%
+  \newlinechar`\/\message{/\the\toks0:
+    \if\blank{#1}EMPTY\else NOT empty\fi%
+    }\endgroup}
+
+\def\var#1{$\langle${\it #1}$\rangle$}
+\def\procsig#1#2#3{\leftline{{#1} : #2 $\to$ \if\blank{#3}\unspec\else #3\fi}}
+\def\dprocsig#1#2#3{\medskip\procsig{#1}{#2}{#3}\medskip}
+\def\unspec{\#$\langle$void$\rangle$}
+
+% rendering URLs
+
+\def\url#1{{\it #1}}
+
+%% Startup Configuration
+\baselineskip = 10pt
+\nopagenumbers
+\hsize = 42pc
+\vsize = 54pc
+\hoffset = -.25 in
+\SetDoubleColumns{20pc}
+\def\footnoterule{}

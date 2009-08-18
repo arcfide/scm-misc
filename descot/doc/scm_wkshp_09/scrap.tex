@@ -1,0 +1,143 @@
+SRDF is an s-expression based format for describing RDF Graphs.  It is
+meant to be mostly equivalent in its form to Turtle. Since the language
+is S-expression based, it is easier for Scheme and Lisp parsers to
+parse it. Parsers for other languages can also be written very
+easily. This makes it particularly nice for use in automated systems
+or in areas where S-expressions are the natural representation format.
+SRDF is designed to work for most Scheme's {\tt read} procedure. 
+
+SRDF documents are composed of a series of RDF triples and possibly,
+prefix definitions. Prefixes take the form
+{\tt (= name "uri")}, and associate a given Scheme
+symbol with a URI string. Otherwise, the form is an RDF triple or a set
+of triples.
+
+Normal triples are just a list of three elements, each a URI. However,
+it is possible to have a subject associated with more predicate
+and objects by replacing the list that would hold the single
+predicate and object with a list of such predicates and objects.
+Likewise, one can specify more objects to be associated with a
+given subject and predicate by doing the same thing with the
+object list, and replacing the {\tt cdr} that would normally hold the
+object with a list of such objects.
+
+If the {\tt cadr} of a predicate pair contains a list of objects, this
+represents a collection of objects, and is created in the same
+way that a turtle collection syntax is created: by associating
+a series of blank nodes with the right predicates with each of
+the objects listed.
+
+It is important to note the difference between an object that
+is a collection, and a list of objects that are each associated
+with the subject and predicate. The following is an instance of
+the former:
+
+\medskip\verbatim
+("subject-uri" "predicate-uri"
+  ("object1" "object2" ...))
+|endverbatim
+\medskip
+
+\noindent Whereas the following is an instance of the latter:
+
+\medskip\verbatim
+("subject-uri" "predicate-uri"
+  "object1"
+  "object2"
+  "object3")
+|endverbatim
+\medskip
+
+Normal RDF triples take the form:
+
+\medskip\verbatim
+("subject-uri" "predicate-uri" "object-uri")
+|endverbatim
+\medskip
+
+A blank node may be inlined into the graph by using a `*' as the
+beginning symbol in an object context like so:
+
+\medskip\verbatim
+("subject" "pred" (* "pred" "object"))
+|endverbatim
+\medskip
+
+Of course, blank nodes may have anything that is a valid predicate
+{\tt cdr} as its {\tt cdr} so the following is also valid:
+
+\medskip\verbatim
+("subject" "pred" 
+ (* ("pred1" "object1") ("pred2" "object2")))
+|endverbatim
+\medskip
+
+URIs may be described by their full path names as strings,
+as prefix combined paths, or as blank node paths. The following
+are all valid URIs:
+
+\medskip\verbatim
+"http://some.domain/path/to#blah"
+"blah"
+(: prefix "blah")
+(_ "uniqueid")
+|endverbatim
+\medskip
+
+We use `:' for prefixes and `\_' for blank nodes.
+
+In addition to URIs, we permit literals as valid {\tt car}s for objects.
+Literals can be strings, numbers, booleans, or may be strings
+with either languages or types associated with them. The following
+are examples of languages and types, respectively:
+
+\medskip\verbatim
+($ "Language unspecified.")
+(& "English Sentence lies here." en)
+(^ "2008/01/03 14:00" (: xsd "date"))
+|endverbatim
+\medskip
+
+The following is a fairly formal BNF grammar with the exception of
+tokens such as strings, numbers, and booleans being undefined and
+presumed to be defined lexical values. Additionally, we define
+S-expression in terms of atoms and pairs, so the BNF grammar is
+also defined in the ``longhand'' notation for pairs and lists.
+This means that while the BNF Grammar states something
+like {\tt ("subj" . ("pred" . ("obj" . ())))} as the
+valid simplistic RDF triple, it is also legal in practice to use
+the shorthand version of this: {\tt ("subj" "pred" "obj")}
+
+\begingroup\narrower
+\begingrammar
+%
+<rdf sexp>:     <rdf triple> | <rdf triple> <rdf sexp>.\par
+
+<rdf triple>:   "(" <uri> "." <rdf subject tail> ")" ; | "(" "=" name string ")".
+
+<rdf subject tail: <rdf predicate> ; | <rdf predicate list> .
+
+<rdf pred list>: "()" ; | "(" <rdf predicate> "." <rdf pred list> ")".
+
+<rdf predicate>: "(" <uri> "." <rdf object list> ")".
+
+<rdf object list>: "()" ; | "(" <rdf object> "." <rdf object list> ")".
+
+<rdf object>: <uri> | <literal>
+        ; | <rdf object list> | <blank node list> .
+
+<blank node list>: "(" "*" "." <rdf subject tail> ")".
+
+<uri>: uri ; | "(" ":" "." <uri list> ")" ; | "(" "\_" name ")" .
+
+<uri list>: "()" ; | "(" <uri name> "." <uri list> ")".
+
+<uri name>: uri | name.
+
+<literal>: number | boolean ; | "(" "\$" string ")" ; |
+        "(" "\&" string name ")" ; | "(" "\^{}" string <uri> ")".
+
+\endgrammar
+\endgroup
+\endgroup
+\medskip

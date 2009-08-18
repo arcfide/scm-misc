@@ -1,0 +1,382 @@
+\chapter{Descot Server API}
+
+\section{Overview}
+
+The Descot Server API provides a ready-made API for storing Descot RDF 
+graphs and accessing them in the basic manners required for the Descot 
+Server Protocol.  That is, it is a library upon which Descot Servers 
+can be built, such as a Web Application or a GUI. It has the following 
+module declaration:
+
+<<server.ss>>=
+<<License>>
+
+(module descot-server
+  (<<Exports>>)
+  <<Imports>>
+
+<<URI Resolution>>
+
+<<Parameters>>
+
+<<Requests>>
+
+<<Updates>>
+
+<<Submitting>>
+
+<<Whole Store>>
+
+)
+@
+
+\section{The Descot Server Protocol}
+
+<<Imports>>=
+(import scheme)
+(import rdf-list-graphs)
+(import rdf)
+@
+
+The following describes the Descot Server Protocol
+and its implementation requirements. It does not implement the actual 
+server itself, but provides the necessary background information to do 
+so. This is because the protocol may be communicated over many different 
+underlying protocols. For example, this system could be implemented 
+using HTTP or Gopher, and either one would work fine.
+
+\subsection{Handling Incoming Requests}
+
+<<Exports>>=
+write-descot-request
+@
+
+A Descot Server has two required functions.  It must firstly respond 
+to requests for subjects and provide the necessary pieces. This API 
+provides the means to output rdf subject requests according to the 
+requirements of the Descot Protocol, which is that all the objects who have 
+the given subject as their own are printed out, and every object of 
+the given subject that is a blank node is also printed out, and so 
+forth, recursively, until all the blank nodes having the given 
+subject as an ancestor are written out as well. 
+
+\procsig{write-descot-request}{\var{subject-uri} \var{port}}{}
+
+<<Requests>>=
+(define write-rdf-subject+blanks
+  (lambda (graph subject port)
+    (let ([triples (rdf-graph/triples-by-subject graph subject)])
+      ((descot-api-triples-writer) triples port)
+      (for-each 
+        (lambda (triple)
+          (when (rdf-bnode? (rdf-triple/object triple))
+            (write-rdf-subject+blanks graph (rdf-triple/object triple) port)))
+        triples))))
+
+(define write-descot-request
+  (lambda (subject . maybe-port)
+    (write-rdf-subject+blanks 
+      ((descot-api-reader) (descot-uri->store-path subject)) 
+      subject 
+      (if (null? maybe-port) (current-output-port) (car maybe-port)))))
+@
+
+We separate [[write-rdf-subject+blanks]] because this is an useful 
+procedure that is used later on when we need to write this information 
+to the filesystem.
+
+{\bf Important Note:} The astute reader may question the currently
+unnecessary overhead of parsing the file into an RDF Graph, and
+then reading it back out into the same format. We could have just
+read the file directory or something similar. Indeed, if we assume
+that the output to the user is the same as the format of the RDF
+Store, this is the best thing to do, and it removes a lot of complex
+handling here. However, this is not the case. A request may come
+in for the RDF to be given in any number of formats, and the server
+must be able to provide the Graph in the format that the client
+wishes to the best of its abilities.  This means that we need to
+have this extra layer of processing.
+
+Right now, the format detection is not implemented, but it should 
+be. Adjusting the above to handle this shouldn't be difficult.
+
+\subsection{Server Synchronization}
+
+<<Exports>>=
+write-descot-updates
+@
+
+The server also provides the means of printing out the necessary 
+update document required by a Descot Server. This allows servers 
+to easily update each other about their new changes without using 
+much bandwidth. When sending an update, only the libraries themselves 
+that have modified times will be sent, and only the triples with 
+a modified node as a predicate will be written.
+
+\procsig{write-descot-updates}{\var{port}}{}
+
+<<Updates>>=
+(define write-descot-updates
+  (lambda (port)
+    ((descot-api-triples-writer)
+     (rdf-graph/triples-by-predicate (current-store) dscts:modified)
+     port)))
+@
+
+This requires the Descot RDF Utilities module and the [[current-store]] 
+parameter:
+
+<<Imports>>=
+(import descot-rdf-utilities)
+(import descot-web-parameters)
+@
+
+\subsection{Submissions}
+
+<<Exports>>=
+write-descot-store
+@
+
+While Descot Servers are not strictly required to provide submission 
+interfaces, a standard one is provided here to allow safe interaction 
+between the reading and writing part of the server. The functions 
+defined in this API will play safely with one another so that the 
+Descot Store will not be corrupted by the simultaneous use of the read 
+and write functions (or any combination of either) presuming that this 
+library is the only library used to access the store.  Other libraries 
+may access it provided that they behave according to the same rules.
+
+When submitting a library, to incorporate it into the system, the 
+provided graph will be considered, and all the files in the store 
+will be updated according to the new information. The standard layout 
+for a Descot Store is provided below.
+
+{\bf Important Note:} We are assuming that the graph we receive is 
+the complete package, and so for any single node, we will erase it 
+and competely replace it with the new one!
+
+\procsig{write-descot-store}{\var{graph}}{}
+
+<<Submitting>>=
+(define write-descot-store
+  (lambda (graph)
+    (iterate! (for subject (in-list (rdf-graph/all-subjects graph)))
+	      (if (rdf-uri-ref? subject))
+      (let ([path (descot-uri->store-path subject)])
+	(guarantee-directory-exists (path-parent path))
+        (call-with-output-file (descot-uri->store-path subject)
+	  (lambda (port) (write-rdf-subject+blanks graph subject port))
+	  'replace)))))
+
+@
+
+The above code uses nested foof loop to loop over all the subjects 
+in the graph, so make sure that we import this:
+
+<<Imports>>=
+(import foof-loop)
+(import nested-foof-loop)
+@
+
+We use [[guarantee-directory-exists]] to make sure that the path works. 
+
+<<Submitting>>=
+(define guarantee-directory-exists
+  (lambda (path)
+    (unless (file-exists? path)
+      (guarantee-directory-exists (path-parent path))
+      (mkdir path))))
+@
+
+\section{Descot Layout}
+
+<<Exports>>=
+descot-uri->store-path
+@
+
+This is a relatively simple layout provided for storing Descot RDF 
+Graphs in a persistent manner while providing some level of safety. 
+The store is laid out in a filesystem hierarchy, consisting of a series 
+of subdirectories corresponding to different levels of an RDF 
+URI. A given path in the file system starting at the root of the 
+store will form a representation of a given subject URI, and the 
+file located at said path will contain the necessary information for 
+the printing features of this library to work.  That is, it will 
+contain all the triples that have the given URI as a subject or 
+that have a blank node subject which is the object of a triple which has 
+said URI as a subject. 
+
+For example, if we consider a sample URL 
+
+\medskip\verbatim
+http://descot.sacrideo.us/libs/system/malloc#chez
+|endverbatim
+\medskip
+
+We can find the neccessary triples for handling this URI by looking in 
+the graph stored in the file with the path
+
+\medskip\verbatim
+<root>/http/us/sacrideo/descot/libs/system/malloc#chez
+|endverbatim
+\medskip
+
+When accessing one of these files, an exclusive lock is issued if 
+the file will be changed to make sure that the integrity of the 
+file is maintained.
+
+We use a single URI Resolution procedure to convert from a URI 
+we want to reference into its corresponding file system path.
+
+\procsig{descot-uri-$>$store-path}{\var{uri-string}}{\var{path-string}}
+
+<<URI Resolution>>=
+(define descot-uri->store-path
+  (lambda (uri-string)
+    (let ([uri (string->uri uri-string)])
+      (format #f "~a/~a/~{~a~^/~}~{~a~^/~}~@[#~a~]"
+	(descot-store)
+	(uri-scheme uri)
+	(reverse 
+	  (string-tokenize 
+	    (uri-authority-host (uri-authority uri))
+	    (char-set-complement (char-set #\.))))
+	(uri-path uri)
+	(uri-fragment uri)))))
+@
+
+This requires the use of SRFI-13, SRFI-14, and Taylor Campbell's URI Library:
+
+<<Imports>>=
+(import uri)
+(import srfi-14)
+(import srfi-13)
+@
+
+\section{Choosing Different Formats}
+
+<<Exports>>=
+descot-api-triples-writer
+descot-api-reader
+descot-store
+@
+
+Descot Stores may be stored in any arbitrary format, which means that 
+the server must know what format the store uses. To accomplish this, 
+this API provides two parameters to allow the application to specify 
+how to read and write to the store.
+
+Additionally, one may control the format for writing Descot Graphs 
+to the file system by giving it a different handler for printing the 
+lists of triples:
+
+<<Parameters>>=
+(define descot-api-triples-writer
+  (make-parameter write-rdf-triples->srdf
+    (lambda (e)
+      (unless (procedure? e)
+	(error 'descot-api-triples-writer
+	  "Expected a procedure but found: ~s"
+	  e))
+      e)))
+
+@
+
+By default we use the SRDF Triple writer that is provided by the 
+SRDF library:
+
+<<Imports>>=
+(import srdf)
+@
+
+When a request comes in, the server must be able to read the files in 
+the filesystem and parse them. To do this, a parameter containing the 
+reading procedure is provided. This reader will return an RDF Graph 
+that can be used later. It should have the following signature:
+
+\procsig{reader}{\var{fname} [\var{graph}]}{\var{rdf graph}}
+
+The above procedure should return an RDF graph that is the union 
+of the graph represented by the file specified by fname and the 
+graph provided in the second optional argument. If the optional 
+argument is not specified, it should default to an empty RDF Graph. 
+
+<<Parameters>>=
+(define descot-api-reader
+  (make-parameter parse-srdf-file
+    (lambda (e)
+      (unless (procedure? e)
+	(error 'descot-api-reader "Invalid reader value ~s" e))
+      e)))
+
+@
+
+\section{Store Location}
+
+The server also should operate on only one store at a time. For this 
+we define a parameter to contain the root path of the store, without 
+the tailing directory separator. This defaults to [[/var/db/descot]]:
+
+<<Parameters>>=
+(define descot-store
+  (make-parameter "/var/db/descot"
+    (lambda (e) 
+      (unless (string? e)
+	(error 'descot-store "Invalid Path ~s" e))
+      e)))
+@
+
+\section{Getting the Entire Store}
+
+<<Exports>>=
+read-descot-store
+@
+
+It may be that an application wishes to operate on the entire store 
+rather than parts of it. To do this, we provide a convenience procedure 
+for parsing the entire Descot Store into a single RDF Graph. It will 
+actually work on subsections of the entire store as well.
+
+It works by recursively descending into each directory and parsing 
+every file that it sees into the graph.
+
+\procsig{read-descot-store}{\var{Root}}{\var{RDF Graph}}
+
+<<Whole Store>>=
+(define read-descot-store
+  (lambda (root . maybe-graph)
+    (let ([graph (if (null? maybe-graph) (make-rdf-graph) (car maybe-graph))])
+      (cond
+	[(file-regular? root)
+	 ((descot-api-reader) root graph)]
+	[(file-directory? root)
+	 (loop ([for file (in-list (directory-list root))]
+		[with ng graph 
+		  (read-descot-store 
+		    (string-append root (string (directory-separator)) file)
+		    ng)])
+	   => ng)]
+	[else (error 'read-descot-store "Invalid Descot Store")]))))
+@
+
+\section{License}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Desscot Server API
+;;; 
+;;; Copyright (c) 2009 Aaron Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.

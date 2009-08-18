@@ -1,0 +1,770 @@
+\input sigplanconf_plain 
+\input eplain
+\input bnf
+
+\conferenceinfo{2009 Workshop Scheme and Functional Programming}{}
+\authorinfo{Aaron W. Hsu}{Indiana University}{awhsu@indiana.edu}
+\title{Descot: Decentralizing Scheme Library Repositories}
+
+\maketitle
+
+\beginabstract
+
+Currently, no de facto standard exists for the distribution, 
+location, and retrieval of Scheme libraries. 
+In fact, the Scheme community 
+remains largely unaffected by attempts to unify them
+around one library distribution system. Some argue that such 
+a system cannot exist given the wide range of implementations 
+and the diversity of the Scheme community. This paper documents 
+a new approach to library distribution in Scheme that focuses 
+on the interface between repositories and tools rather than 
+on the tools themselves, tied to a specific repository.  The Descot
+system presented specifically avoids restrictions
+of implementation or function (such as specific tools). The author 
+argues that Descot provides the necessary framework for a successful 
+library distribution mechanism to form within 
+Scheme's current climate by eliminating the need for a single suite of 
+tools for library management, as well as eliminating the need for a 
+single code repository. The author discusses some of the benefits 
+to this approach, particularly in light of the Scheme community's 
+tendency to fracture on the details of 
+implementing such a suite. 
+Additionally, the current tools written 
+for the Descot protocol, the supporting libraries and formats, 
+are also discussed.
+
+\endabstract
+
+\section{Overview}
+
+The history of Scheme shows a progression in techniques 
+for abstracting over blocks of code from very basic source 
+file handling up to today's sophisticated module 
+systems. Before module systems were widely used by implementations, 
+most Scheme programs had to isolate code into differing files 
+and subsequently order their evaluation with
+cumbersome constructs such as {\tt eval-when} and {\tt load}. 
+Most implementations today have some sort of module system 
+that reliably controls the dependencies between libraries, 
+making it easier to build large programs.
+The R6RS {\tt library} form is the latest module system to 
+be widely implemented and standardized.\cite{r6rs}
+
+The R6RS {\tt library} form attempts to provide a portable 
+means of sharing code, 
+but the requirements of standardization forces the
+library form to permit different evaluation models, 
+resulting in different semantics for libraries in 
+differing implementations\cite{phasing}. 
+Furthermore, not all implementations 
+of Scheme support the R6RS {\tt library} form. 
+Thus, in order to share code, 
+it does not suffice to distribute libraries in an arbitrary module form,
+because other implementations do not 
+understand how to use the library unless they also 
+understand the same module system.
+
+In fact, the Scheme community is characterized by a wide 
+variety of implementations.
+Scheme's expressivity encourages different methodologies, 
+but this also strains any attempt 
+to gather libraries together for general use by the 
+community at large. 
+Usually, users are restricted to 
+a single implementation's libraries, unless some effort is 
+taken to locate, port, and manage libraries outside of the 
+implementation's libraries. 
+While this can be done, 
+it creates a barrier that discourages 
+sharing code among Schemers and 
+which often discourages 
+the use of Scheme in large applications.
+
+Some have attempted to address the need for collaboration by
+developing repositories and tools to manage libraries. 
+Generally, these applications take
+their inspiration from repositories like CPAN\cite{cpan}, 
+which have a central repository of code from which users 
+may download and install software
+packages. These repositories are meant to be tightly integrated
+into the workflow of the user, with libraries sometimes being
+automagically grabbed and installed whenever they are needed.
+Unfortunately, to date, these systems have not succeeded in
+establishing any form of standard for library distribution
+in Scheme. 
+
+The usual complaints concerning these systems 
+center around three principles of library repositories:
+
+\unorderedlist
+\li They should contain many up-to-date libraries.
+\li The tools should be easy to use.
+\li The whole system should integrate well with library authors and users.
+\endunorderedlist
+
+Current repositories and their tools fail to adequately 
+satisfy these requirements for the entire Scheme community.
+Some satisfy the needs of 
+only one implementation\cite{planet}, others require excessive changes to existing 
+workflows, and still others are hard to use for either authors or 
+users.
+
+The value of Scheme's segregated community aside,  most everyone
+would like to have a system of library distribution
+and integration, even if they disagree on how it should be done.
+
+\section{Necessary Components}
+
+Every library repository requires some minimal set of features and 
+tools to be useful. These are:
+
+\unorderedlist
+\li A database of libraries
+\li A way to publish libraries
+\li A way to retrieve and manage libraries for the user
+\li A search engine of some kind for locating libraries
+\endunorderedlist
+
+Any decent library repository has these features. 
+There must be some easy way to submit libraries, 
+some easy way to obtain and use them, 
+and some way of finding the desired libraries.
+
+The Descot\cite{descot} system acknowledges these components, 
+but almost entirely ignores them. 
+All current repository systems implicitly provide some interface 
+for connecting and communicating between each of these components, 
+even though this interface often lays private and hidden behind the 
+tools. 
+Descot focuses on a public interface of communication between the 
+above components, rather than focusing on the above components themselves. 
+The justification and motivation behind such an approach will be 
+examined after the current approaches are analyzed.
+
+\section{Current Approaches and Attempts}
+
+Current library distribution systems fall into two camps. 
+The first attempts to provide implementation neutral tools, 
+while the second caters entirely to one implementation alone.
+
+Implementation specific library repositories include PLT's 
+PLaneT\cite{planet}, Chicken's Eggs\cite{eggs}, 
+and Bigloo's repository\cite{bigloorepo}.  Implementation 
+neutral systems include Snow\cite{snow}, CSAN\cite{csan}, 
+CxAN\cite{cxan}, and SLIB\cite{slib}.
+
+Implementation specific repositories integrate well,
+have good package management tools,
+and utilize some extension to Scheme at the language level to 
+improve integration.
+Implementation independent repositories tend 
+not to integrate as well, but provide more portability.
+Snow is a well known implementation 
+neutral repository.
+
+SLIB illustrates another approach which, 
+while seemingly implementation neutral, 
+ends up acting more like an implementation in itself.
+It does not utilize the native module system, reader, 
+macros, or other parts of the Scheme system, and instead 
+provides its own set of tools for managing itself. 
+This makes it difficult to integrate SLIB libraries into 
+existing code, and authors cannot easily share code in a 
+portable way with SLIB.
+
+Snow, while being more portable, also enforces a certain toolset, 
+framework, and ideology about package management on the user. 
+Authors must package their libraries using a Snow specific 
+format in order to distribute them through Snow. 
+Authors must then maintain two sets of code for their libraries, 
+Snow versions, and non-Snow versions.
+If everyone used Snow, or if a large enough majority used it, 
+the author would not bother to keep a second 
+version along with the Snow packaged version, 
+but until then, authors must use two packages. 
+This makes it difficult for Snow to gather the necessary 
+momentum for widespread use because libraries will likely 
+become out of date and users still have to use the Snow tools 
+provided to access the repository, or decipher the code in 
+order to write their own tools.
+
+Each of the systems above suffers in one area or another, 
+whether in issues of portability, integration, ease of use, 
+developer liberty, or other areas.  
+Importantly, developer liberty tends to be an important factor 
+when considering the Scheme community as a whole. 
+While one set of users may 
+be fine with one set of tools on one implementation, such as 
+PLaneT, such a system cannot hope to succeed among all of the 
+differing ideas and implementations of the entire Scheme 
+community at large. 
+
+\section{A Different Approach and Focus}
+
+Why have none of these systems succeeded in garnering the 
+support of the majority? 
+For some, this was never the goal. 
+For others, they fight an uphill battle because of 
+presumptions about the way a library system ought to operate. 
+All of these systems have a single toolset with a single repository. 
+Doing this in CPAN works, because there really is one implementation. 
+Scheme is, however, by its nature, a diverse and varied set of 
+implementations and users that have very different needs.  These 
+needs are not met by trying to enforce a single solution on the 
+whole. 
+
+That is not to say that each of the above systems meant to do 
+this, but they had little choice when their goals are examined. 
+Their goals included such things as tools and an entire 
+set of programs necessary to manage libraries, 
+and neglect or entirely ignore distribution from the perspective 
+of how each of these tools interact with one another. 
+
+Some of these systems already have a nice toolset for use, 
+if users are so inclined to use it,
+but they do not have the necessary library size 
+or flexibility to encourage other users to use their repository.
+Descot takes a different approach.
+In fact, Descot is nearly orthogonal in focus to systems like 
+Snow, and Snow could be ported to use Descot fairly easily.
+Descot prioritizes the sharing of information
+over the ubiquity of a single toolchain. 
+Rather than enforce a single toolset, program, or 
+even repository, Descot provides the necessary framework for 
+many different tools and repositories to coordinate together. 
+
+This emphasis on the representation and protocol, while 
+not sufficient to make a complete system, results in a system 
+capable of scaling up to the Scheme community at large. 
+Since Descot does not specify a specific server, but a specification 
+of how a server should behave,
+authors and implementations may run their own repositories, 
+and other users and implementations will still be able to understand 
+their database.
+This grassroots capability also allows for the system to grow 
+incrementally, without requiring everyone to start using the 
+system right away. In this way, the system has a better chance 
+of seeing more people use it, since the burden on the programmer 
+is lowered. 
+
+Additionally, Descot does not store or require the storage of 
+a library's code, just the metadata. This means that authors 
+do not have to have two copies of the code, 
+and very little extra work need be done in order to 
+publish a library to a Descot repository.
+
+Since Descot uses an extension friendly format 
+for recording the metadata about libraries, it allows 
+implementation specific extension that can safely be ignored 
+by other implementations or users who wish to port the code.
+In this way, implementations can 
+utilize Descot to provide access to libraries, while at the 
+same time providing a much higher degree of integration with 
+elements that may only suit that implementation, 
+without forcing the rest of the world to support them. 
+
+In summary, Descot provides a specification of interaction 
+that is tool and implementation independent. 
+While some tools are already written for this specification, 
+their existence and use is neither required nor even 
+that beneficial if other tools are better suited. 
+However, new tools and management suites written using 
+Descot's specification of behavior can be trusted to operate 
+correctly with existing tools and repositories. 
+
+This approach caters to the independent nature of the Scheme 
+community and permits a variety of solutions to library management 
+while guaranteeing the ability for each of these solutions to work 
+together with others. Put another way, Descot is an attempt to 
+``document the chaos'' of libraries in the Scheme community, 
+rather than trying to reign in the chaos. 
+
+\section{Benefits and Reasons to Use Descot}
+
+It may seem that Descot's benefits are purely abstract 
+or theoretical. 
+Since Descot doesn't try to solve the more commonly 
+addressed issues of library management suites and tools, 
+Descot's benefits might appear marginal.
+Apparently, no single library management 
+suite, repository, and all-in-one approach will gain 
+the traction necessary to nontrivially affect the 
+community's way of operating. 
+Descot's advantage comes in its ability to leverage all 
+the existing tools, as well as the labor of the entire 
+community, rather than relying on a few select 
+individuals to create a critical mass. 
+It enables communicating library information to the 
+community in a human and machine readable 
+fashion, while letting users and authors do things the 
+way they want.  Descot provides the glue, nuts, bolts, fittings, and 
+standards, as it were, to allow each party of the Scheme 
+community to contribute in a compatible, integrated way 
+to a library system, so that the Scheme community as a 
+whole can benefit. 
+
+The benefits Descot provides correlate to the three 
+complaints most people have about existing solutions.
+
+Firstly, it encourages up-to-date, direct-from-the-source 
+libraries, and makes it easy for authors to publish 
+their libraries in a machine and human readable way, 
+confident that they will be found, indexed, and located 
+through the web of Descot Servers on the Internet. 
+This solution is more effective than using an existing 
+web search engine because the searching is very specific 
+to Scheme Libraries. Consequently, more tools will be 
+able to access more libraries than was previously possible. 
+This benefits both authors and users, since it improves the 
+overall availability of libraries to the community. 
+
+Since Descot does not require submission to a central 
+repository, prolific authors can host their own repositories, 
+and have them neatly integrated into their workflow, 
+making the changes available that much faster to the 
+community as a whole, and reducing the amount of work for 
+the author in order to ensure that each mirroring
+repository has a copy of the latest library.
+
+Secondly, Descot is easier to use because the tools 
+that can be written can focus directly on handling the 
+needs of a specific community, rather than trying to 
+handle the needs of an entire programming community. 
+This means easier to use, simpler tools for the 
+user, with more availability. Likewise, authors can 
+use the specific tools they like to manage their own 
+code, and know that their tools will interoperate with 
+all the other Descot-compatible tools and repositories. 
+
+Not only does the possibility of many specific tools 
+benefit the system's ease of use, but it also means that 
+there is a much higher chance that an user can find or 
+make a tool to integrate into his or her existing workflow
+without much difficulty. 
+
+Since all these libraries can now be made easily visible, 
+and can be easily managed, this will encourage more 
+people to use Scheme and contribute libraries who may have 
+previously avoided using Scheme because of the difficulty 
+of finding and managing libraries. 
+
+In short, Descot addresses the issues that have made it difficult 
+for existing repositories to gain traction in the Scheme community, 
+enabling better cooperation between systems, and making it easier 
+to see what libraries exist. 
+
+\section{Library Description Language}
+
+The actual library description language has been written using RDF\cite{rdf}. 
+RDF is a framework for documenting the metadata about some resource. 
+In this case, it is used to document libraries and the subcomponents 
+thereof. 
+
+RDF is at its core a directed graph where a node 
+pointing to another node forms a sentence, with the subject being 
+the originating node, the object being the target node, and 
+the arrow representing the predicate. One can then assign 
+meaning to the predicate, subjects, and objects. Each node and 
+edge is identified by either a blank node or a globally unique 
+URI. \cite{rdfprimer} 
+
+Descot describes a number of classes and properties under a given 
+URI prefix which have assigned semantic meaning in the Descot 
+system. Nodes which belong to certain classes are expected to 
+have certain properties associated with them, and the 
+set of properties defined by the Descot Schema \cite{descotschema} 
+form the predicates 
+that are needed above and beyond the basic RDF properties \cite{rdfschema}
+to describe library information. 
+
+This section uses the Turtle format \cite{turtle} for describing RDF Graphs, 
+but the next section will detail a new S-expression based format 
+that is expected to be more appealing to Schemers. In fact, Descot 
+is independent of a particular format for representing the 
+Descot RDF Graphs so long as the two servers understand the format 
+being used to communicate said graph. Current Descot APIs support 
+any format for RDF Graphs storage.
+
+Descot currently defines classes for Repositories, Libraries, 
+Bindings, Licenses, People, Retrieval methods (such as 
+Archive, CVS, and Single File), and Implementations. It also 
+defines properties such as a node name, alternatives, 
+description, homepage, dependencies, exports, license, 
+copyright information, authors, modification dates, maintainers, 
+version, and location information. These form a set from which 
+libraries are described. 
+
+A few properties have codomains that take other nodes such as People, 
+bindings, and locations.  These are particularly important, because
+things like binding nodes allows an arbitrarily large amount of 
+information to be associated with a binding, and not just its 
+name.  This means that potentially, two libraries may match the 
+same search for a procedure, even if they export the procedure 
+with different names. Likewise, Locations are extensible, so 
+that implementations and servers can provide more information 
+about how to obtain and/or install a library than is by default 
+provided with the Descot schema. 
+
+Here is a simple example of a library, where the 
+following prefixes are assumed to be defined: {\tt authors:}, 
+{\tt impls:}, {\tt licenses:}, {\tt dscts:}, 
+{\tt libs},
+{\tt rdf:}, and {\tt xsd:}. It is important to note that 
+prefix names are arbitrary and do not matter so long as they 
+expand into the correct URIs. 
+
+\medskip
+\verbatim
+libs:system/malloc#chez
+rdf:type dscts:Library ;
+dscts:name "Garbage Collected Malloc" ;
+dscts:names ( "malloc" "gc-malloc" ) ;
+dscts:contact authors:arcfide ;
+dscts:categories ( "system" ) ;
+dscts:desc 
+  "Allocate garbage collected memory." ;
+dscts:version "1.0" ;
+dscts:authors ( authors:dybvig );
+dscts:copyright-year "2008"^^xsd:gYear ;
+dscts:copyright-owner authors:dybvig ;
+dscts:license licenses:public-domain ;
+dscts:implementation impls:chez ;
+dscts:modified 
+  "2009/03/08 23:39:18"^^xsd:dateTime .
+dscts:exports (bindings:gc-malloc);
+dscts:deps (libs:system/ffi#chez);
+dscts:location _:location.
+
+_:location rdf:type dscts:CVS ;
+dscts:cvs-root 
+  "anoncvs@anoncvs.sacrideo.us:/cvs";
+dscts:cvs-module "lib/malloc.ss" .
+|endverbatim
+
+The above defines a single library that exports a garbage 
+collected {\tt malloc} procedure. Notice also that the download 
+location (a blank node) is a CVS node pointing to some 
+resource in CVS. 
+
+\section{S-expression RDF}
+
+SRDF is an s-expression based format for describing RDF Graphs.  It is
+meant to be mostly equivalent in its form to Turtle. Since the language
+is S-expression based, it is easier for Scheme and Lisp parsers to
+parse it. Parsers for other languages can also be written very
+easily. This makes it particularly nice for use in automated systems
+or in areas where S-expressions are the natural representation format.
+SRDF is designed to work for most Scheme's {\tt read} procedure. 
+
+SRDF documents are composed of a series of RDF triples and possibly,
+prefix definitions. Prefixes take the form
+{\tt (= name "uri")}, and associate a given Scheme
+symbol with a URI string. Otherwise, the form is an RDF triple or a set
+of triples.
+
+Normal triples are just a list of three elements, each a URI. However,
+it is possible to have a subject associated with more predicate
+and objects by replacing the list that would hold the single
+predicate and object with a list of such predicates and objects.
+Likewise, one can specify more objects to be associated with a
+given subject and predicate by doing the same thing with the
+object list, and replacing the {\tt cdr} that would normally hold the
+object with a list of such objects.
+
+If the {\tt cadr} of a predicate pair contains a list of objects, this
+represents a collection of objects, and is created in the same
+way that a turtle collection syntax is created: by associating
+a series of blank nodes with the right predicates with each of
+the objects listed.
+
+It is important to note the difference between an object that
+is a collection, and a list of objects that are each associated
+with the subject and predicate. The following is an instance of
+the former:
+
+\medskip\verbatim
+("subject-uri" "predicate-uri"
+  ("object1" "object2" ...))
+|endverbatim
+\medskip
+
+\noindent Whereas the following is an instance of the latter:
+
+\medskip\verbatim
+("subject-uri" "predicate-uri"
+  "object1"
+  "object2"
+  "object3")
+|endverbatim
+\medskip
+
+Normal RDF triples take the form:
+
+\medskip\verbatim
+("subject-uri" "predicate-uri" "object-uri")
+|endverbatim
+\medskip
+
+A blank node may be inlined into the graph by using a `*' as the
+beginning symbol in an object context like so:
+
+\medskip\verbatim
+("subject" "pred" (* "pred" "object"))
+|endverbatim
+\medskip
+
+Of course, blank nodes may have anything that is a valid predicate
+{\tt cdr} as its {\tt cdr} so the following is also valid:
+
+\medskip\verbatim
+("subject" "pred" 
+ (* ("pred1" "object1") ("pred2" "object2")))
+|endverbatim
+\medskip
+
+URIs may be described by their full path names as strings,
+as prefix combined paths, or as blank node paths. The following
+are all valid URIs:
+
+\medskip\verbatim
+"http://some.domain/path/to#blah"
+"blah"
+(: prefix "blah")
+(_ "uniqueid")
+|endverbatim
+\medskip
+
+We use `:' for prefixes and `\_' for blank nodes.
+
+In addition to URIs, we permit literals as valid {\tt car}s for objects.
+Literals can be strings, numbers, booleans, or may be strings
+with either languages or types associated with them. The following
+are examples of languages and types, respectively:
+
+\medskip\verbatim
+($ "Language unspecified.")
+(& "English Sentence lies here." en)
+(^ "2008/01/03 14:00" (: xsd "date"))
+|endverbatim
+\medskip
+
+The following is a fairly formal BNF grammar with the exception of
+tokens such as strings, numbers, and booleans being undefined and
+presumed to be defined lexical values. Additionally, we define
+S-expression in terms of atoms and pairs, so the BNF grammar is
+also defined in the ``longhand'' notation for pairs and lists.
+This means that while the BNF Grammar states something
+like {\tt ("subj" . ("pred" . ("obj" . ())))} as the
+valid simplistic RDF triple, it is also legal in practice to use
+the shorthand version of this: {\tt ("subj" "pred" "obj")}
+
+\begingroup\narrower
+\begingrammar
+%
+<rdf sexp>:     <rdf triple> | <rdf triple> <rdf sexp>.\par
+
+<rdf triple>:   "(" <uri> "." <rdf subject tail> ")" ; | "(" "=" name string ")".
+
+<rdf subject tail: <rdf predicate> ; | <rdf predicate list> .
+
+<rdf pred list>: "()" ; | "(" <rdf predicate> "." <rdf pred list> ")".
+
+<rdf predicate>: "(" <uri> "." <rdf object list> ")".
+
+<rdf object list>: "()" ; | "(" <rdf object> "." <rdf object list> ")".
+
+<rdf object>: <uri> | <literal>
+        ; | <rdf object list> | <blank node list> .
+
+<blank node list>: "(" "*" "." <rdf subject tail> ")".
+
+<uri>: uri ; | "(" ":" "." <uri list> ")" ; | "(" "\_" name ")" .
+
+<uri list>: "()" ; | "(" <uri name> "." <uri list> ")".
+
+<uri name>: uri | name.
+
+<literal>: number | boolean ; | "(" "\$" string ")" ; |
+        "(" "\&" string name ")" ; | "(" "\^{}" string <uri> ")".
+
+\endgrammar
+\endgroup
+\endgroup
+\medskip
+
+The previous example given in Turtle format, could be rewritten as 
+an SRDF Document as follows:
+
+\medskip
+\verbatim
+((: libs "system/malloc#chez")
+ ((: rdf type) 
+  (: dscts "Library"))
+ ((: dscts "name") 
+  ($ "Garbage Collected Malloc"))
+ ((: dscts "names") 
+  (($ "malloc") ($ "gc-malloc")))
+ ((: dscts "contact") 
+  (: authors "arcfide"))
+ ((: dscts "categories") 
+  (($ "system")))
+ ((: dscts "desc") 
+  ($ "Allocate garbage collected memory."))
+ ((: dscts "version") 
+  ($ "1.0"))
+ ((: dscts "authors") 
+  (: authors "dybvig"))
+ ((: dscts "copyright-year") 
+  (^ "2008" (: xsd "gYear")))
+ ((: dscts "copyright-owner") 
+  (: authors "dybvig"))
+ ((: dscts "license") 
+  (: licenses "public-domain"))
+ ((: dscts "implementation") (: impls "chez"))
+ ((: dscts "modified") 
+  (^ "2009/03/08 23:39:18" 
+     (: xsd "dateTime")))
+ ((: dscts "exports") 
+  ((: bindings "gc-malloc")))
+ ((: dscts "deps") 
+  ((: libs "system/ffi#chez")))
+ ((: dscts "location") 
+  (* ((: rdf "type") (: dscts "CVS"))
+     ((: dscts "cvs-root")
+      ($ "anoncvs@anoncvs.sacrideo.us:/cvs"))
+     ((: dscts "cvs-module") 
+      ($ "lib/malloc.ss")))))
+|endverbatim
+
+\section{Server Interface}
+
+The server interface for Descot is actually quite simple. A server 
+hosting a repository should provide a single URI which, when accessed, 
+will provide a repository consisting of a set of library nodes 
+whose only predicates are modified times.  This can be used to 
+mirror the library repository. Additionally, any Descot resource 
+URI, such as a library, author, binding, or location node, when 
+accessed (such as via HTTP) will return all of the properties that 
+have that URI as their subjects.  In this way, it is possible to 
+walk through from one update URI to all the rest of the repository, 
+and obtain all the relevant information. 
+
+Additionally, when returning information about a URI, the graph must 
+be recursively processed for blank nodes connected to the subject 
+URI, since these nodes will not be accessible outside of the current 
+context. Their graphs must also be returned in some format along 
+with the originating URI.
+Another way of seing this is that, given a URI, 
+when a Descot server fulfills a request for this URI, 
+it must provide all the nodes spawning from the URI 
+and their children and so forth up to the point where the child node 
+is itself a URI which is accessible independently.
+
+For example, in the above section, a library is defined with an 
+author node, but this author node has its own unique URI that is 
+accessible globally, and so a Descot server which handles request 
+for the above library should only print out that node, and not 
+its children, since a separate request can be made for the author 
+node's children. However, the location predicate of the library 
+points to a blank node with a number of children, and these children 
+would have to be provided, since there is no other way to access 
+them, because blank nodes are not globally accessible. 
+
+\section{Query Servers}
+
+An additional, suggested but not required feature for Descot is 
+the query server. This is a SPARQL \cite{sparql} engine that will 
+accept queries using the SPARQL language.  
+In this way, clients can provide search 
+over repositories without necessarily needing to cache the entire 
+database.  It can also serve as an useful backend for user 
+queries on such clients as web applications. 
+
+\section{Client-side tools}
+
+Additional tools are necessary to make Descot the useful system 
+that it can be. These would include CLI package management tools, 
+of which Snow comes immediately to mind. Snow could easily be 
+extended to use the Descot format and to communicate with 
+Descot servers. This would allow users to leverage the existing 
+code base in Snow, while gaining from the new approach Descot 
+takes. 
+
+A web interface has already been designed built on top of mod\_lisp 
+\cite{modlisp}
+and Chez Scheme \cite{chez} which provides an interface to the current 
+Descot repository through a web browser.  It is still in its 
+infancy, but is functional for searching and browsing. 
+
+The author hopes that PLaneT, Eggs, and other repositories 
+will decide to provide access to their content through the Descot 
+server protocol, to allow these libraries to be mirrored 
+to other services, and open up the possibility of future 
+portability. 
+
+Because Descot's language can be used just about anywhere, 
+the authors would like to see crawlers for Usenet and 
+other services that would pick up Descot content. 
+
+Currently, it is not obvious how to set up
+one's own Descot server.  However, when Descot's implementation 
+reaches maturity, additional tools to ease deployment will 
+be made available.  These will make it easy to run Descot 
+from just about any web server withoug having to have new tools 
+running or making modifications to the web server.
+
+\section{Extending and Integrating Descot}
+
+It would be nice to see Descot used as an embedded metalanguage 
+inside of Scheme code, so that distributions of Scheme code 
+could gain enough information about them to automatically put 
+them into Descot without further user intervention. Since Descot 
+is built on RDF technologies, extending the language to handle 
+new requirements does not take much effort, and can be done 
+without harming existing tools. The emphasis on 
+the format rather than the tool allows Descot to be integrated 
+into a wide variety of tools and applications, facilitating 
+better communication about library metadata in many areas.
+
+\section{Current Status}
+
+Currently, the core libraries for Descot are complete, and are 
+publically available via CVS. An API with documentation exists 
+to facilitate the creation of other Descot Servers, and libraries 
+for handling Descot Stores are available. 
+
+A web client and server utilizing these libraries is also available
+and running. It accepts both submissions to its repository and
+provides information about the current libraries in its store. These
+are slowly being populated.
+
+The code for the system is only available via CVS at the moment, 
+but the Descot libraries will be released once the system has 
+stabilized to an acceptable point. Users are encouraged to 
+submit comments and suggestions, as Descot is meant to 
+satisfy the needs of the Scheme community at large, and not one 
+specific group over another. 
+
+\section{Future Work}
+
+Once the web application is stable, a SPARQL query engine is 
+planned, which will allow more sophisticated queries from clients. 
+A CLI client is planned, probably a modification of Snow, if 
+possible. Writing Descot interfaces to existing repositories, such 
+as Chicken's Eggs and PLT's PLaneT are also desirable. 
+
+After the Descot system stabilizes to a mostly useful state, 
+the author intends to pursue the issue of taking the library 
+meta data and extending it enough to assist in the automated 
+or semi-automated porting of libraries from one implementation 
+to another. This, however, is an issue that needs much more 
+work, and requires a well accepted Descot system before it 
+can be used successfully.
+
+\section{References}
+
+\bibliography{descot}
+\bibliographystyle{plain}
+
+\bye

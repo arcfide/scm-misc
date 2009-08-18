@@ -1,0 +1,200 @@
+\documentclass{sigplanconf}
+
+\title{[your title goes here]}
+
+\authorinfo{[your name here]}{[your affiliation here]}{[your email here]}
+
+% Leave this alone.
+
+\conferenceinfo{2008 Workshop on Scheme and Functional Programming}{}
+
+% Leave this alone.  The program chair will adjust the page number
+% and cause page numbers to be printed at the bottom of each page.
+
+\setcounter{page}{1}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Converting decimal scientific notation into binary
+floating point is nontrivial, but this conversion can
+be performed with the best possible accuracy without
+sacrificing efficiency.
+\end{abstract}
+
+\section{Introduction}
+
+Having learned to count on their fingers, humans like
+to express real numbers in decimal scientific notation.
+Most computers are designed to calculate using numbers
+that are expressed in IEEE-standard binary floating-point
+notation.
+
+Although every binary floating-point number can be expressed
+in decimal scientific notation by using enough digits, most
+numbers that are expressible in decimal scientific notation
+cannot be expressed in binary floating-point.  For example,
+0.1 is not expressible in binary floating-point.  The value
+of the closest IEEE double precision floating-point
+approximation to 0.1 is
+\[
+  .1000000000000000055511151231257827021181583404541015625
+\]
+A decimal-to-binary conversion routine that always delivers
+the closest floating-point approximation to its input, and
+breaks ties according to the current rounding mode (typically
+round-to-even), is said to perform \emph{correct rounding}.
+
+My PLDI paper gave the first description of an efficient
+algorithm for correctly rounded decimal-to-binary conversions
+\cite{Clinger:1990:HRF}.
+Section 10 of that paper describes its motivation and its
+relationship to the paper by Steele and White in that PLDI
+and this collection \cite{Steele:1990:HPF}.
+
+IEEE-conforming decimal-to-binary conversions have been allowed
+to lose almost twice as much accuracy as would be lost by correct
+rounding \cite{IEEE-754}.  When my PLDI paper was published, almost
+all implementations did lose this much accuracy at times.
+This source of inaccuracy could conceivably affect the result
+of a numerically unstable computation.  More importantly,
+this loss of accuracy has made decimal scientific notation less
+attractive for exchanging numerical data between different
+systems \cite{priest-appendixD}:
+\begin{quote}
+Unfortunately, the IEEE standard does not guarantee that the
+same program will deliver identical results on all conforming
+systems.  Most programs will actually produce different results
+on different systems for a variety of reasons.  For one, most
+programs involve the conversion of numbers between decimal and
+binary formats, and the IEEE standard doesn't completely specify
+the accuracy with which such conversions must be performed.
+\end{quote}
+
+In consequence of the research described below,
+most computer systems now perform correct rounding, and
+several language standards now require correct rounding of
+decimal-to-binary conversions.  The committee that is revising
+the IEEE standard for binary floating point arithmetic is
+considering a proposal to require correct rounding.
+
+
+\section{Implementations}
+
+Within months of PLDI '90, David Gay improved upon my Algorithm
+Bellerophon by replacing the extended precision floating point
+calculation by a standard-precision floating point calculation
+combined with a high-precision integer calculation \cite{Gay:1990}.
+Gay also noted an easy case that I had missed, simplified the
+algorithm by using a uniform error bound for all hard cases,
+and reduced the table sizes.
+
+Gay also improved upon Steele and White's Dragon algorithm.  He
+implemented both improved algorithms in C, and made his code
+available for anyone to use \cite{Gay:netlib}.  Gay's code was
+slower than previous conversion routines on hard cases (for
+which the previous routines were often less accurate), but was
+so much faster on typical cases that Gay's code was faster
+overall.
+
+Gay's code was also more robust and more accurate.  These
+advantages were demonstrated by David Hough's \emph{Testbase}
+program, and were documented in a manuscript written by Vern
+Paxson under the direction of William Kahan
+\cite{Hough:testbase,Paxson:1991}.
+Most major workstation vendors soon incorporated Gay's code
+into their standard libraries.
+
+The implementation of correctly rounded decimal-to-binary
+conversion for the IBM S/390 apparently began with my
+algorithm instead of Gay's code \cite{Abbott:1999:ASS}.
+
+Meanwhile I had implemented correctly rounded conversions in
+Scheme for MacScheme, which ran on the Apple Macintosh, and
+made my code available to other implementors of Scheme and
+Common Lisp \cite{macscheme}.  Robert Burger and Kent Dybvig
+implemented correct rounding for Chez Scheme, and made their
+code available to other implementors \cite{Burger:1996:PFN}.
+Most major implementations of Scheme now provide correctly
+rounded conversions.
+
+
+\section{Standards}
+
+The Scheme standards cite the PLDI '90 papers, and require
+numeric conversion routines to preserve the value of a
+number across a \emph{round-trip} of output followed by input,
+but do not actually require correct rounding
+\cite{IEEE-1178,r5rs}.
+Scheme also requires the output routine, for each individual
+number, to generate the minimum number of digits that allows
+this round-trip requirement to be satisfied.  This makes
+Scheme's round-trip requirement more stringent than the
+round-trip requirement of the IEEE floating-point standard,
+where the number of digits that are needed to avoid loss of
+accuracy during a round-trip is independent of the number.
+Hence implementations of Scheme cannot just rely on
+IEEE-conforming conversion routines.  The best way to
+satisfy Scheme's i/o requirements is to provide correctly
+rounded conversions.
+
+It appears that Java was the first programming language to
+require correctly rounded decimal-to-binary conversions
+\cite{java:api}.  The specification of
+{\tt java.lang.Double.valueOf(String)}, for example, says
+that a syntactically correct input string
+\begin{quote}
+is regarded as representing an exact decimal value in the
+usual ``computerized scientific notation''; this exact
+decimal value is then conceptually converted to an
+``infinitely precise'' binary value that is then rounded
+to type double by the usual round-to-nearest rule of
+IEEE 754 floating-point arithmetic.
+\end{quote}
+
+XML Schema, which was approved as a W3C Recommendation on
+2 May 2001, requires correct rounding of decimal-to-binary
+conversions, citing both my paper and Gay's
+\cite{Clinger:1990:HRF,Gay:1990,xml-schema}.
+
+The committee that is revising the IEEE 754 standard for
+binary floating-point arithmetic has already voted to
+encourage correct rounding of all binary-decimal conversions.
+A proposal that would actually require correct rounding has
+been written and will soon be considered by the committee
+\cite{IEEE-754R}.
+
+ 
+\section{Correction}
+
+In section 9 of my PLDI paper, I reported that ``some compilers
+do not implement IEEE arithmetic correctly.''  This was an
+overstatement, as the IEEE 754 standard concerns itself
+primarily with the low-level operations as they would be
+implemented in hardware or in library routines, and does
+not specify many of the language-level and compiler-level
+details that determine the behavior of floating-point
+arithmetic as seen by most programmers and users.  In
+particular, ``the IEEE standard requires that each result
+be rounded correctly to the precision of the destination
+into which it will be placed, but the standard does not
+require that the precision of that destination be determined
+by a user's program'' \cite{priest-appendixD}.
+
+
+\section{Acknowledgements}
+
+I have relied on BibTeX entries that were collected or
+written by Guy Steele and Nelson Beebe for the committee
+that is revising the IEEE 754 standard
+\cite{IEEE-754R,Knuth:1990:SPW}.
+
+
+\bibliographystyle{plain}
+\bibliography{refs2,refs}
+
+\onecolumn
+
+\end{document}

@@ -1,0 +1,128 @@
+\def\popl#1{{\it {Conf. Rec. #1 ACM Symposium on Principles of Programming
+  Languages}\/}} \def\lics#1{{\it Proc. #1 IEEE Symposium on Logic in Computer
+  Science\/}} \def\lfp#1{{\it Proc. #1 ACM Symposium on Lisp and Functional
+  Programming}} \def\tr{Northeastern University College of Computer Science
+  Technical Report NU-CCS-} \def\mfcs#1{{\it Mathematical Foundations of
+  Computer Science #1}}
+\begin{thebibliography}{10}
+
+\bibitem{Abbott:1999:ASS}
+P.~H. Abbott, D.~G. Brush, C.~W. {Clark III}, C.~J. Crone, J.~R. Ehrman, G.~W.
+  Ewart, C.~A. Goodrich, M.~Hack, J.~S. Kapernick, B.~J. Minchau, W.~C.
+  Shepard, R.~M. Smith, Sr., R.~Tallman, S.~Walkowiak, A.~Watanabe, and W.~R.
+  White.
+\newblock Architecture and software support in {IBM S/390 Parallel Enterprise
+  Servers} for {IEEE} floating-point arithmetic.
+\newblock {\em IBM Journal of Research and Development}, 43(5/6):723--760,
+  1999.
+\newblock At {\tt www.research.ibm.com/journal/rd/}, see {\tt 435/abbott.html}.
+
+\bibitem{Burger:1996:PFN}
+Robert~G. Burger and R.~Kent Dybvig.
+\newblock Printing floating-point numbers quickly and accurately.
+\newblock {\em ACM SIGPLAN Notices}, 31(5):108--116, May 1996.
+\newblock (Proceedings of PLDI '96).
+
+\bibitem{Clinger:1990:HRF}
+William~D. Clinger.
+\newblock How to read floating point numbers accurately.
+\newblock {\em ACM SIGPLAN Notices}, 25(6):92--101, June 1990.
+\newblock (Proceedings of PLDI '90).
+
+\bibitem{Feijen:1990:BOB}
+W.~H.~J. Feijen, A.~J.~M. {van Gasteren}, D.~Gries, and J.~Misra, editors.
+\newblock {\em Beauty is our business: a birthday salute to {Edsger W.
+  Dijkstra}}.
+\newblock Spring{\-}er-Ver{\-}lag, Berlin, Germany~/ Heidelberg, Germany~/
+  London, UK~/ etc., 1990.
+
+\bibitem{Gay:1990}
+David Gay.
+\newblock Correctly rounded binary-decimal and decimal-binary conversions.
+\newblock Technical Report 90-10, {AT\&T} Bell Laboratories, November 1990.
+\newblock At {\tt http://www.ampl.com/REFS/}.
+
+\bibitem{Gay:netlib}
+David Gay.
+\newblock {\tt dtoa.c}.
+\newblock At {\tt http://www.netlib.org/fp/}, November 1990.
+
+\bibitem{Gries:1990:BDO}
+David Gries.
+\newblock Binary to decimal, one more time.
+\newblock In Feijen et~al. \cite{Feijen:1990:BOB}, chapter~16, pages 141--148.
+\newblock This paper presents an alternate proof of Knuth's algorithm
+  \cite{Knuth:1990:SPW} for conversion between decimal and fixed-point binary
+  numbers.
+
+\bibitem{Hough:testbase}
+David Hough and Vern Paxson.
+\newblock Testbase.
+\newblock At {\tt http://www.netlib.org/fp/}, 1991.
+
+\bibitem{IEEE-754}
+IEEE Computer Society, New York.
+\newblock {\em IEEE Standard for Binary Floating-Point Arithmetic}, 1985.
+\newblock {IEEE} Standard 754-1985.
+
+\bibitem{IEEE-1178}
+IEEE Computer Society, New York.
+\newblock {\em IEEE Standard for the Scheme Programming Language}, 1991.
+\newblock {IEEE} Standard 1178-1990.
+
+\bibitem{r5rs}
+Richard Kelsey, William~D. Clinger, and Jonathan Rees.
+\newblock Revised{$^5$} report on the algorithmic language {Scheme}.
+\newblock {\em Journal of Higher-Order and Symbolic Computation}, 11(1):7--105,
+  1998.
+\newblock Also appears in {\em ACM SIGPLAN Notices} 33(9), September 1998.
+
+\bibitem{Knuth:1990:SPW}
+Donald~E. Knuth.
+\newblock A simple program whose proof isn't.
+\newblock In Feijen et~al. \cite{Feijen:1990:BOB}, chapter~27, pages 233--242.
+\newblock This paper discusses the algorithm used in {\TeX} for converting
+  between decimal and scaled fixed-point binary values, and for guaranteeing a
+  minimum number of digits in the decimal representation. See also
+  \cite{Clinger:1990:HRF} for decimal to binary conversion,
+  \cite{Steele:1990:HPF} for binary to decimal conversion, and
+  \cite{Gries:1990:BDO} for an alternate proof of Knuth's algorithm.
+
+\bibitem{macscheme}
+Lightship Software.
+\newblock {\em {MacScheme} manual and software}, 1990.
+
+\bibitem{Paxson:1991}
+Vern Paxson and William Kahan.
+\newblock A program for testing {IEEE} decimal-binary conversion.
+\newblock At {\tt ftp.ee.lbl.gov}, see {\tt testbase*}, May 1991.
+
+\bibitem{priest-appendixD}
+Doug Priest.
+\newblock Differences among {IEEE} 754 implementations.
+\newblock At {\tt http://www.validlab.com/}. This was written as Appendix D for
+  David Goldberg's {\em What Every Computer Scientist Should Know About
+  Floating-Point Arithmetic}, {\em ACM Computing Surveys}, March 1991.
+
+\bibitem{Steele:1990:HPF}
+Guy~L. {Steele Jr.} and Jon~L. White.
+\newblock How to print floating-point numbers accurately.
+\newblock {\em ACM SIGPLAN Notices}, 25(6):112--126, June 1990.
+\newblock (Proceedings of PLDI '90).
+
+\bibitem{java:api}
+Sun Microsystems.
+\newblock {\em {Java} 2 Platform, Standard Edition, v1.2.2, {API}
+  Specification}, 1999.
+
+\bibitem{IEEE-754R}
+754R working group.
+\newblock Some proposals for revising {ANSI/IEEE} {Std} 754-1985.
+\newblock At {\tt http://754r.ucbtest.org/}.
+
+\bibitem{xml-schema}
+World-Wide Web Consortium.
+\newblock {\em {XML} Schema Part 2: Datatypes}, May 2001.
+\newblock At {\tt http://www.w3.org/TR/xmlschema-2/}.
+
+\end{thebibliography}

@@ -1,0 +1,72 @@
+%-----cut here with a sharp machete or an 19.95 ginsu knife
+%************************************************************************
+%* BNF.tex								*
+%* 									*
+%* plain tex macros for formatting grammars				*
+%*									*
+%* Erik Quanstrom 							*
+%* 10. November 1990							*
+%************************************************************************
+
+%things to fix:
+%	make configurable
+%	work with texinfo
+
+\gdef\actifygrammarchars{%
+	\catcode`\>\active%
+	\catcode`\<\active%
+	\catcode`\:\active%
+	\catcode`\"\active%
+	\catcode`\;\active%
+	\catcode`\.\active%
+	\catcode`\|\active%
+	\catcode`\,\active}
+
+\gdef\deactifygrammarchars{%
+	\catcode`\>12%
+	\catcode`\<12%
+	\catcode`\:12%
+	\catcode`\;12%
+	\catcode`\.12%
+	\catcode`\|12%
+	\catcode`\,12}
+
+\newif\ifquote
+\quotefalse
+
+\begingroup
+   \actifygrammarchars
+   \gdef>{\/\endgroup$\rangle$\relax}
+   \gdef<{$\langle$\begingroup\sl}
+   \gdef:{$\rightarrow$}
+
+   \begingroup
+	\catcode`\"\active
+	\gdef"{\ifquote%
+		'\endgroup\quotefalse%
+	   \else%
+		\quotetrue\begingroup\deactifygrammarchars\bf`%
+	\fi}%
+   \endgroup
+
+   \gdef;{\hfill\break}
+   \gdef.{\relax}
+   \gdef|{$\vert$}
+   \gdef,{;\hbox to 1cm{\hfill}}
+\endgroup
+
+\def\begingrammar{%
+	\begingroup
+	\advance\leftskip by 1cm%
+	\parindent=-1cm%
+	\actifygrammarchars%
+	\def\endgrammar{\endgroup}
+	\parskip 1ex%
+	\relax
+}
+
+%
+%
+%
+\def\ul{\lower .2ex\hbox to 1ex{\hrulefill}\relax}%
+

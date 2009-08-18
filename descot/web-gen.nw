@@ -1,0 +1,109 @@
+\chapter{Generating Web Sites with Descot}
+
+Descot web pages are generated with the help of two procedures: 
+[[write-html-page]] and [[descot-wrapper]].  The first makes 
+sure that pages can be easily printed in mod\_lisp by standardizing 
+the interface to using generators and a port.  The second 
+performs the wrapping of all pages in the Descot headers and 
+footers. 
+
+<<web-gen.ss>>=
+<<License>>
+
+(module descot-web-generators
+  (write-html-page descot-wrapper)
+  (import scheme)
+  (import descot-web-parameters)
+  (import descot-web-utilities)
+  (import sxml-to-html)
+
+<<Writing>>
+
+<<Wrapping>>
+
+(xml-tags? #t)
+
+)
+@
+
+Note that Descot web pages are written in XHTML, so we have to 
+use the Chez Lib extension on Oleg's SXML, [[xml-tags?]] parameter, 
+in order to ensure the right output.
+
+\section{Writing Pages}
+
+Descot uses mod\_lisp which normally calls a procedure with a path 
+and port.  Normally, we may have a page generator that generates 
+the SXML that we wish to print, but in order to print it, we 
+use [[write-html-page]] to convert the SXML to XHTML and format 
+it according to normal W3C standards, all sent to the given port. 
+
+<<Writing>>=
+(define write-html-page
+  (lambda (generator port)
+    (display xhtml-decl port)
+    (display 
+      (with-output-to-string (lambda () (sxml->html (generator))))
+      port)))
+@
+
+\section{Wrapping Pages}
+
+Every Descot page is wrapped in a header and a footer that contains 
+the navigation and search.  [[descot-wrapper]] allows this to 
+be done easily, and also provides a little flexibility in the 
+way of style sheets and subheadings for each page.
+
+<<Wrapping>>=
+(define descot-wrapper
+  (lambda (page-name css . body-elems)
+    (html 
+      (head 
+	(title (string-append descot-title " -- " page-name))
+	(link css "stylesheet" "text/css" "screen"))
+      (body
+	(div '(@ (id "beta")) descot-beta-msg)
+	(h1 descot-title)
+	(div '(@ (id "search"))
+	  (form descot-search-path "get"
+	    (p 
+	      (input '(name "q") '(type "text"))
+	      (button '(@ (type "submit")) "Search"))))
+	(if (zero? (string-length page-name)) "" (h2 page-name))
+	body-elems
+	(ul '(@ (id "menu"))
+	  (li (a `(@ (href ,descot-about-path)) "Info"))
+	  (li (a `(@ (href ,descot-blog-path)) "Blog"))
+	  (li (a `(@ (href ,descot-browse-path)) "Browse"))
+	  (li (a `(@ (href ,descot-search-path)) "Advanced Search"))
+	  (li (a `(@ (href ,descot-submit-path)) "Submit a Library")))
+	(div '(@ (id "copyright"))
+	  (p 
+	    "Copyright " 
+	    '|&copy;| 
+	    " 2009 Aaron Hsu. All rights reserved."))))))
+@
+
+\section{Licensing}
+
+This file is licensed under the ISC License.
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Generate Static Web Pages for Descot Web Application
+;;; 
+;;; Copyright (c) 2009 Aaron Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.

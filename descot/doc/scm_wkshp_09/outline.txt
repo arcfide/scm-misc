@@ -1,0 +1,63 @@
+Overview of the Scheme Community as it relates to Libraries
+	Casual History of Module Systems
+		EVAL-WHEN/LOAD
+		Module Systems
+		R6RS Libraries
+	Features of Scheme Community
+		Fiercely independent
+		Many implementations
+		No Single authority
+		No Single Solution
+		Many different workflows
+	Current skepticism about libraries
+		Existing Systems haven't worked
+		Complaints about integration
+		No one wants to be told what to do
+		Ease of use and workflow effects matter
+Necessary Components for a Scheme Library System
+	Database/Metadata
+	Representation Format
+	Submission Framework
+	Client Framework
+	Search/Query Framework
+Current Approaches and Attempts
+	Snow
+	CSAN
+	CxAN
+	SLIB
+	PLaneT
+	Eggs
+	Bigloo
+A New Approach
+	Representation/Server Emphasis
+	Decentralization
+	Removing restrictions, enabling extensibility
+Justification of Different Focus
+	Scheme Independence
+	Grassroots
+	Cooperative, Documented Chaos
+	Integrates with existing solutions
+	Easy to Use the way You want
+	Limiting Focus makes system more viable
+Library Description Language
+	RDF Primer
+	S-expression Notation
+	Classes and Properties
+Server Design and Interface
+	Nodes Evaluate to themselves
+	Update Node
+Query Servers
+	SPARQL
+	Not necessary for everyone
+Client-side tools
+	Integrating Snow as CLI
+	Web
+	PLaneT, Eggs, et al. 
+	Crawlers
+	Hosting Conveniences
+Extending and Integrating Descot
+	Comment Based Metadata
+	Extending the Download Information
+	General Extension via RDF
+	Format vs. Tool => Easy integration
+Future Work

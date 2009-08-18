@@ -1,0 +1,20 @@
+--- web-param.ss	Fri May 22 18:45:15 2009
++++ web-param-sacrideo.ss	Fri May 22 18:48:39 2009
+@@ -29,7 +29,7 @@
+   (import scheme)
+   (import rdf-list-graphs)
+ 
+-(define descot-path-prefix "/descot")
++(define descot-path-prefix "")
+ (define descot-static-prefix descot-path-prefix)
+ (define descot-about-path (string-append descot-path-prefix "/about.xhtml"))
+ (define descot-blog-path (string-append descot-path-prefix "/blog.xhtml"))
+@@ -37,7 +37,7 @@
+ (define descot-search-path (string-append descot-path-prefix "/db/search"))
+ (define descot-beta-msg "ALPHA!")
+ (define descot-title "Descot: Decentralized Scheme Code Tracker")
+-(define descot-store-fname "regress/sample.srdf.local")
++(define descot-store-fname "regress/sample.srdf")
+ (define descot-stylesheet (string-append descot-static-prefix "/style.css"))
+ (define descot-web-docroot "~/descot/www_static")
+ (define descot-rdf-path (string-append descot-path-prefix "/rdf"))
