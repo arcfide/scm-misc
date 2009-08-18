@@ -87,9 +87,10 @@ The following procedures read and write packets to a given port.
 		(put-string port "Keep-Socket\n1\n"))
 	(put-string port "Content-Length\n")
 	(put-string port (number->string (string-length (modlisp-packet-contents packet))))
-	(put-string port "\n")
+	(put-char port #\newline)
 	(put-string port "end\n")
-	(put-string port (modlisp-packet-contents packet)))
+	(put-string port (modlisp-packet-contents packet))
+	(flush-output-port port))
 
 <<Header Processing>>
 
@@ -187,7 +188,7 @@ the handler.
 (define (serve-request port)
 	(define (packet-url p) (assq 'url (modlisp-packet-headers p)))
 	(define (get-response url p) 
-		(if url ((lookup-request-handler url) p) (make-500-response)))
+		(if url ((lookup-request-handler (cdr url)) p) (make-500-response)))
 	(let ([incoming (get-packet port)])
 		(and incoming
 			(begin 
@@ -274,12 +275,31 @@ start-multiplexed-mod-lisp-server
 						[bp (socket->port sock)]
 						[tp (transcoded-port bp modlisp-transcoder)])
 					(fork-thread (lambda () (loop ([while (serve-request tp)])))))))))
-					
+
+(define (start-modlisp-server/synchronous port)
+	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
+		(define socks (make-parameter (list s)))
+		(define (push s) (socks (cons s (socks))))
+		(define (drop s) (socks (remq s (socks))))
+		(define (serve x)
+			(let* ([bp (socket->port x)] [tp (transcoded-port bp modlisp-transcoder)])
+				(serve-request tp)))
+		(define (accept x) 
+			(let-values ([(sock addr) (accept-socket x)]) 
+				(serve sock)
+				sock))
+		(bind-socket s (string->internet-address (format "127.0.0.1:~d" port)))
+		(listen-socket s (socket-maximum-connections))
+		(loop ()
+			(let ([ready (socket-select (socks))])
+				(for-each
+					(lambda (x) (if (eq? x s) (push (accept x)) (unless (serve x) (drop x))))
+					ready)))))
 @
 
 \chapter{R6RS Form}
 
-<<mod_lisp.sls>>=
+<<modlisp.sls>>=
 <<License>>
 
 ;(library (arcfide mod-lisp)
