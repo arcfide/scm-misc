@@ -3,7 +3,7 @@ FILES=rdf-util.ss rdf2html.ss web-app.ss rdf-print.ss web-gen.ss srdf.ss \
 NW_FILES=rdf-util.nw rdf2html.nw web-app.nw rdf-print.nw web-gen.nw srdf.nw \
     server.nw
 
-.SUFFIXES: .so .ss .nw
+.SUFFIXES: .so .ss .sls .nw
 
 build: ${FILES}
 
@@ -33,7 +33,10 @@ clean_www:
 	rm -rf www_static
 
 .nw.ss: 
-	notangle -R$@ $< > $@
+	notangle -R$@ -t2 $< > $@
+
+.nw.sls:
+	notangle -R$@ -t2 $< > $@
 
 .ss.so:
 	@echo '(compile-file "$*")' | scheme -q

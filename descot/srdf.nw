@@ -46,7 +46,7 @@ the former:
 
 \medskip\verbatim
 ("subject-uri" "predicat-uri" 
-  ("object1" "object2" ...))
+	("object1" "object2" ...))
 |endverbatim
 \medskip
 
@@ -54,9 +54,9 @@ the former:
 
 \medskip\verbatim
 ("subject-uri" "predicate-uri"
-  "object1"
-  "object2"
-  "object3")
+	"object1"
+	"object2"
+	"object3")
 |endverbatim
 \medskip
 
@@ -171,33 +171,31 @@ and thus, a simple association list makes more sense than using
 hashtables. 
 
 <<Parsing Types>>=
-(define-record prefix-table (entries) ()
-  ((constructor %make-prefix-table)))
+(define-record-type (prefix-table %make-prefix-table prefix-table?) 
+	(fields (mutable entries)))
 
-(define prefix-table-set! 
-  (lambda (tbl key value)
-    (assert tbl prefix-table?)
-    (let ([res (assq key (prefix-table-entries tbl))])
-      (if res
-	  (set-cdr! res value)
-	  (set-prefix-table-entries! tbl
-	    (cons (cons key value)
-	      (prefix-table-entries tbl)))))))
+(define (prefix-table-set! tbl key value)
+	(assert (prefix-table? tbl))
+	(let ([res (assq key (prefix-table-entries tbl))])
+		(if res
+			(set-cdr! res value)
+			(prefix-table-entries-set! tbl
+				(cons (cons key value)
+					(prefix-table-entries tbl))))))
 
-(define prefix-table-ref
-  (lambda (tbl key default)
-    (assert tbl prefix-table?)
-    (let ([res (assq key (prefix-table-entries tbl))])
-      (if res (cdr res) default))))
+(define (prefix-table-ref tbl key default)
+	(assert (prefix-table? tbl))
+	(let ([res (assq key (prefix-table-entries tbl))])
+		(if res (cdr res) default)))
 
-(define make-prefix-table (lambda () (%make-prefix-table '())))
+(define (make-prefix-table) (%make-prefix-table '()))
 @
 
-These forms require the use of [[assert]] so we import this:
-
 <<Imports>>=
-(import scheme)
-(import assertions)
+(rnrs base)
+(rnrs lists)
+(rnrs records syntactic)
+(rnrs mutable-pairs)
 @
 
 Given a Graph to work on and a set of Prefixes to use, then we 
@@ -207,29 +205,23 @@ don't need to do any backtracking ourselves, and instead, we can
 rely on Scheme's built-in [[read]] to do most of the work for us. 
 
 <<File Parsing>>=
-(define parse-srdf-file
-  (lambda (fname . maybe-graph)
-    (let ([graph (if (null? maybe-graph) (make-rdf-graph) (car maybe-graph))]
-	  [prefixes (make-prefix-table)])
-      (iterate! (for srdf-form (in-file fname read))
-	(parse-srdf-form graph prefixes srdf-form))
-      graph)))
+(define (parse-srdf-file fname . maybe-graph)
+	(let (
+			[graph (if (null? maybe-graph) (make-rdf-graph) (car maybe-graph))]
+			[prefixes (make-prefix-table)])
+		(iterate! (for srdf-form (in-file fname get-datum))
+			(parse-srdf-form graph prefixes srdf-form))
+		graph))
+@
+
+<<Imports>>=
+(riastradh foof-loop)
+(riastradh schemantic-web rdf-list-graph)
 @
 
 Of course, there is a problem with this. If there is an error 
 in the parsing, we will not know where it is. There really is 
 not anything we are going to do about this right now.
-
-The above form uses nested foof looping, so we need to make 
-sure that is an import; we also use RDF List Graphs to represent 
-the RDF information for the moment, though we may have to 
-move to something more effecient in the future:
-
-<<Imports>>=
-(import foof-loop)
-(import nested-foof-loop)
-(import rdf-list-graphs)
-@
 
 For each SRDF form, we will do a basic hard coding handle of 
 each design, since this is easier than trying to abstract this 
@@ -242,11 +234,10 @@ Where {\it graph} and {\it prefixes} will be updated with the information
 stored in {\it form}. 
 
 <<Generic Form Parsing>>=
-(define parse-srdf-form
-  (lambda (graph prefixes form)
-    (case (car form)
-      [(=) (prefix-table-set! prefixes (cadr form) (caddr form))]
-      [else (parse-srdf-triple graph prefixes form)])))
+(define (parse-srdf-form graph prefixes form)
+	(case (car form)
+		[(=) (prefix-table-set! prefixes (cadr form) (caddr form))]
+		[else (parse-srdf-triple graph prefixes form)]))
 @
 
 An SRDF Triple is composed of a URI component and an RDF Subject Tail. 
@@ -259,11 +250,10 @@ all of the tail. The signature of [[parse-srdf-triple]] is similar to
 \procsig{[[parse-srdf-triple]]}{\var{graph} \var{prefixes} \var{form}}{}
 
 <<Triple Parsing>>=
-(define parse-srdf-triple
-  (lambda (graph prefixes form)
-    (parse-srdf-subj-tail graph prefixes 
-      (parse-srdf-uri prefixes (car form))
-      (cdr form))))
+(define (parse-srdf-triple graph prefixes form)
+	(parse-srdf-subj-tail graph prefixes 
+		(parse-srdf-uri prefixes (car form))
+		(cdr form)))
 @
 
 Parsing the RDF Subject Tail requires checking ahead a little bit to 
@@ -274,17 +264,16 @@ to assume that we are dealing with a predicate list. We are
 given the right URI to use as the subject.
 
 \procsig{[[parse-srdf-subj-tail]]}
-  {\var{graph} \var{prefixes} \var{subject uri} \var{subj tail form}}{}
+	{\var{graph} \var{prefixes} \var{subject uri} \var{subj tail form}}{}
 
 <<Subject Tail Parsing>>=
-(define parse-srdf-subj-tail
-  (lambda (graph prefixes subject form)
-    (if (valid-srdf-uri? (car form))
-	(parse-srdf-predicate graph prefixes subject form)
-	(for-each 
-	  (lambda (t) 
-	    (parse-srdf-predicate graph prefixes subject t))
-	  form))))
+(define (parse-srdf-subj-tail graph prefixes subject form)
+	(if (valid-srdf-uri? (car form))
+		(parse-srdf-predicate graph prefixes subject form)
+		(for-each 
+			(lambda (t) 
+				(parse-srdf-predicate graph prefixes subject t))
+			form)))
 @
 
 Parsing an SRDF Predicate is just like parsing a normal triple in 
@@ -293,31 +282,29 @@ from the [[car]] and parse the tail, which we will handle the same
 way we handle the subject tail parsing.
 
 \procsig{[[parse-srdf-predicate]]}
-  {\var{graph} \var{prefixes} \var{subject-uri} \var{predicate-form}}{}
+	{\var{graph} \var{prefixes} \var{subject-uri} \var{predicate-form}}{}
 
 <<Predicate Parsing>>=
-(define parse-srdf-predicate
-  (lambda (graph prefixes subject form)
-    (let ([predicate (parse-srdf-uri prefixes (car form))])
-      (iterate! (for object (in-list (cdr form)))
-	(parse-srdf-object graph prefixes subject predicate object)))))
+(define (parse-srdf-predicate graph prefixes subject form)
+	(let ([predicate (parse-srdf-uri prefixes (car form))])
+		(iterate! (for object (in-list (cdr form)))
+			(parse-srdf-object graph prefixes subject predicate object))))
 
-(define parse-srdf-object
-  (lambda (graph prefixes subject predicate object)
-    (cond 
-      [(valid-srdf-uri? object)
-       (rdf-graph/add-triple! graph
-	 (make-rdf-triple subject predicate 
-	   (parse-srdf-uri prefixes object)))]
-      [(valid-srdf-literal? object)
-       (rdf-graph/add-triple! graph
-	 (make-rdf-triple subject predicate 
-	   (parse-srdf-literal prefixes object)))]
-      [(valid-blank-node-list? object)
-       (parse-srdf-subj-tail graph prefixes (generate-bnode) (cdr object))]
-      [(valid-srdf-object-list? object)
-       (parse-srdf-obj-collection graph prefixes subject predicate object)]
-      [else (error 'parse-srdf-object "Invalid Object: ~s" object)])))
+(define (parse-srdf-object graph prefixes subject predicate object)
+	(cond 
+		[(valid-srdf-uri? object)
+			(rdf-graph/add-triple! graph
+				(make-rdf-triple subject predicate 
+	 				(parse-srdf-uri prefixes object)))]
+		[(valid-srdf-literal? object)
+			(rdf-graph/add-triple! graph
+ 				(make-rdf-triple subject predicate 
+	 				(parse-srdf-literal prefixes object)))]
+		[(valid-blank-node-list? object)
+			(parse-srdf-subj-tail graph prefixes (generate-bnode) (cdr object))]
+		[(valid-srdf-object-list? object)
+			(parse-srdf-obj-collection graph prefixes subject predicate object)]
+		[else (error 'parse-srdf-object "Invalid Object: ~s" object)]))
 @
 
 \subsection{Parsing Collections}
@@ -330,9 +317,8 @@ object lists.
 Firstly, we must define the three URIs used with Collections:
 
 <<RDF URIs>>=
-(define prefix-with-rdf
-  (lambda (tail)
-    (string-append "http://www.w3.org/1999/02/22-rdf-syntax-ns#" tail)))
+(define (prefix-with-rdf tail) 
+	(string-append "http://www.w3.org/1999/02/22-rdf-syntax-ns#" tail))
 (define rdf:nil (prefix-with-rdf "nil"))
 (define rdf:rest (prefix-with-rdf "rest"))
 (define rdf:first (prefix-with-rdf "first"))
@@ -344,17 +330,17 @@ After this, we will loop over every object in the collection,
 creating a series of blank nodes to match with the collection. 
 
 <<Collection Parsing Procedures>>=
-(define parse-srdf-obj-collection
-  (lambda (graph prefixes subject predicate obj-list)
-    (let ([fbn (generate-bnode)])
-      (rdf-graph/add-triple! graph
-	(make-rdf-triple subject predicate fbn))
-      (loop ([for object rest (in-list obj-list)]
-	     [with obn fbn bn]
-	     [let bn (if (null? (cdr rest)) rdf:nil (generate-bnode))])
-	(rdf-graph/add-triple! graph (make-rdf-triple obn rdf:type rdf:List))
-	(parse-srdf-object graph prefixes obn rdf:first object)
-	(rdf-graph/add-triple! graph (make-rdf-triple obn rdf:rest bn))))))
+(define (parse-srdf-obj-collection graph prefixes subject predicate obj-list)
+	(let ([fbn (generate-bnode)])
+		(rdf-graph/add-triple! graph
+			(make-rdf-triple subject predicate fbn))
+		(loop (
+				[for object rest (in-list obj-list)]
+				[with obn fbn bn]
+				[let bn (if (null? (cdr rest)) rdf:nil (generate-bnode))])
+			(rdf-graph/add-triple! graph (make-rdf-triple obn rdf:type rdf:List))
+			(parse-srdf-object graph prefixes obn rdf:first object)
+			(rdf-graph/add-triple! graph (make-rdf-triple obn rdf:rest bn)))))
 @
 
 <<Collection Parsing>>=
@@ -372,22 +358,21 @@ and [[parse-srdf-uri]] should return a standard URI%
 \procsig{[[parse-srdf-uri]]}{\var{prefixes} \var{uri form}}{\var{uri}}
 
 <<URI Parsing>>=
-(define parse-srdf-uri
-  (lambda (prefixes uri)
-    (if (pair? uri)
-	(case (car uri)
-	  [(:) (parse-srdf-uri-list prefixes (cdr uri))]
-	  [(_) (make-rdf-bnode (symbol->string (cadr uri)))]
-	  [else (error 'parse-srdf-uri "Invalid URI: ~a" uri)])
-	uri)))
+(define (parse-srdf-uri prefixes uri)
+	(if (pair? uri)
+		(case (car uri)
+			[(:) (parse-srdf-uri-list prefixes (cdr uri))]
+			[(_) (make-rdf-bnode (symbol->string (cadr uri)))]
+			[else (error 'parse-srdf-uri "Invalid URI" uri)])
+		uri))
 
-(define parse-srdf-uri-list
-  (lambda (prefixes uri-list)
-    (apply string-append
-      (collect-list (for e (in-list uri-list))
-	(if (string? e) e 
-	    (or (prefix-table-ref prefixes e #f)
-	      (error 'parse-srdf-uri "Invalid URI Tail: ~s" uri-list)))))))
+(define (parse-srdf-uri-list prefixes uri-list)
+	(apply string-append
+		(collect-list (for e (in-list uri-list))
+			(if (string? e) 
+				e 
+				(or (prefix-table-ref prefixes e #f)
+					(error 'parse-srdf-uri "Invalid URI Tail: ~s" uri-list))))))
 @
 
 The above requires the use of nested foof loop, as well as Taylor 
@@ -395,27 +380,24 @@ Campbell's RDF Library.  We should add the RDF module since this
 is not already added:
 
 <<Imports>>=
-(import rdf)
+(riastradh schemantic-web rdf)
 @
 
 Parsing a literal is a matter of checking its tag if it has one, or 
 letting it through if it's a value such as a number or boolean.
 
 <<Literal Parsing>>=
-(define parse-srdf-literal
-  (lambda (prefixes val)
-    (cond
-      [(number? val) (make-rdf-plain-literal (number->string val) #f)]
-      [(boolean? val) (make-rdf-plain-literal (if val "true" "false") #f)]
-      [(pair? val)
-       (case (car val)
-	 [($) (make-rdf-plain-literal (cadr val) #f)]
-	 [(@) (make-rdf-plain-literal (cadr val) (symbol->string (caddr val)))]
-	 [(^) 
-	  (make-rdf-typed-literal (cadr val)
-	    (parse-srdf-uri prefixes (caddr val)))]
-	 [else (error 'parse-srdf-literal "Bad Tagged Literal: ~s" val)])]
-      [else (error 'parse-srdf-literal "Unknown Literal: ~s" val)])))
+(define (parse-srdf-literal prefixes val)
+	(cond
+		[(number? val) (make-rdf-plain-literal (number->string val) #f)]
+		[(boolean? val) (make-rdf-plain-literal (if val "true" "false") #f)]
+		[(pair? val)
+			(case (car val)
+				[($) (make-rdf-plain-literal (cadr val) #f)]
+				[(@) (make-rdf-plain-literal (cadr val) (symbol->string (caddr val)))]
+				[(^) (make-rdf-typed-literal (cadr val) (parse-srdf-uri prefixes (caddr val)))]
+	 			[else (error 'parse-srdf-literal "Bad Tagged Literal" val)])]
+		[else (error 'parse-srdf-literal "Unknown Literal" val)]))
 @
 
 \subsection{Blank Nodes}
@@ -428,14 +410,18 @@ and then use [[current-time]] in order to get something pretty unqiue.
 <<Generating Blank Nodes>>=
 (define bnode-seed (make-parameter 1242083868))
 
-(define generate-bnode
-  (lambda ()
-    (let ([ct (current-time)])
-      (make-rdf-bnode 
-	(string-append (symbol->string (gensym))
-	  (number->string (- (time-second ct) (bnode-seed)))
-	  "."
-	  (number->string (time-nanosecond ct)))))))
+(define (generate-bnode)
+	(let ([ct (current-time)])
+		(make-rdf-bnode 
+			(string-append 
+				(symbol->string (gensym))
+				(number->string (- (time-second ct) (bnode-seed)))
+				"."
+				(number->string (time-nanosecond ct))))))
+@
+
+<<Imports>>=
+(only (scheme) make-parameter current-time time-second time-nanosecond gensym)
 @
 
 \subsection{Validating elements}
@@ -457,30 +443,26 @@ If we want to validate URIs, we can use the following, which checks to
 make sure that we either have the right prefix or we have a string.
 
 <<Validating URIs>>=
-(define valid-srdf-uri?
-  (lambda (uri)
-    (or (string? uri)
-	(and (pair? uri) (memq (car uri) '(: _)) #t))))
+(define (valid-srdf-uri? uri)
+	(or (string? uri) (and (pair? uri) (memq (car uri) '(: _)) #t)))
 @
 
 We can handle Literals by checking for their head tags or their
 other types.
 
 <<Validating Literals>>=
-(define valid-srdf-literal?
-  (lambda (obj)
-    (or (number? obj) (boolean? obj)
-      (and (pair? obj)
-	(memq (car obj) '($ @ ^))
-	#t))))
+(define (valid-srdf-literal? obj)
+	(or 
+		(number? obj) 
+		(boolean? obj) 
+		(and (pair? obj) (memq (car obj) '($ @ ^)) #t)))
 @
 
 A blank node list is easy, since it is only a tagged subject tail:
 
 <<Validating Blank Node Lists>>=
-(define valid-blank-node-list? 
-  (lambda (obj)
-    (and (pair? obj) (eq? '* (car obj)))))
+(define (valid-blank-node-list? obj)
+	(and (pair? obj) (eq? '* (car obj))))
 @
 
 Validating an Object list is a little more involved, since we 
@@ -488,17 +470,15 @@ need some sense of what an object is, as well as the potential
 recursion which results. 
 
 <<Validating Object Lists>>=
-(define valid-srdf-object? 
-  (lambda (obj)
-    (or 
-      (valid-srdf-uri? obj)
-      (valid-srdf-literal? obj)
-      (valid-blank-node-list? obj)
-      (valid-srdf-object-list? obj))))
+(define (valid-srdf-object? obj)
+	(or 
+		(valid-srdf-uri? obj)
+		(valid-srdf-literal? obj)
+		(valid-blank-node-list? obj)
+		(valid-srdf-object-list? obj)))
 
-(define valid-srdf-object-list?
-  (lambda (obj)
-    (and (pair? obj) (andmap valid-srdf-object? obj))))
+(define (valid-srdf-object-list? obj)
+	(and (pair? obj) (for-all valid-srdf-object? obj)))
 @
 
 \section{Writing}
@@ -517,20 +497,19 @@ Firstly, one must know how to construct a string representation of
 a given node:
 
 <<Writing>>=
-(define render-rdf-node
-  (lambda (node)
-    (cond
-      [(rdf-uri-ref? node) (rdf-uri-ref->string node)]
-      [(rdf-plain-literal? node)
-       (let ([lang-tag (rdf-plain-literal/language-tag node)])
-	 (if lang-tag
-	     `(@ ,(rdf-literal/lexical-form node) ,(string->symbol lang-tag))
-	     `($ ,(rdf-literal/lexical-form node))))]
-      [(rdf-bnode? node) `(_ ,(string->symbol (rdf-bnode/name node)))]
-      [(rdf-typed-literal? node)
-       `(^ ,(rdf-literal/lexical-form node)
-           ,(rdf-typed-literal/datatype-uri node))]
-      [else (error 'render-rdf-node "Bad node ~a" node)])))
+(define (render-rdf-node node)
+	(cond
+		[(rdf-uri-ref? node) (rdf-uri-ref->string node)]
+		[(rdf-plain-literal? node)
+			(let ([lang-tag (rdf-plain-literal/language-tag node)])
+				(if lang-tag
+					`(@ ,(rdf-literal/lexical-form node) ,(string->symbol lang-tag))
+					`($ ,(rdf-literal/lexical-form node))))]
+		[(rdf-bnode? node) `(_ ,(string->symbol (rdf-bnode/name node)))]
+		[(rdf-typed-literal? node)
+			`(^ ,(rdf-literal/lexical-form node)
+				,(rdf-typed-literal/datatype-uri node))]
+		[else (error 'render-rdf-node "Bad node" node)]))
 
 @
 
@@ -539,34 +518,38 @@ our pieces in our triple.
 
 <<Writing>>=
 (define write-rdf-triple->srdf
-  (case-lambda 
-    [(triple)
-     (%write-rdf-triple triple (current-output-port))]
-    [(triple port)
-     (%write-rdf-triple triple port)]))
+	(case-lambda 
+		[(triple)
+			(%write-rdf-triple triple (current-output-port))]
+		[(triple port)
+			(%write-rdf-triple triple port)]))
 
-(define %write-rdf-triple
-  (lambda (triple port)
-    (format port "~s~n"
-      `(,(render-rdf-node (rdf-triple/subject triple))
-        ,(render-rdf-node (rdf-triple/predicate triple))
-        ,(render-rdf-node (rdf-triple/object triple))))))
+(define (%write-rdf-triple triple port)
+	(put-datum port
+		`(,(render-rdf-node (rdf-triple/subject triple))
+			,(render-rdf-node (rdf-triple/predicate triple))
+			,(render-rdf-node (rdf-triple/object triple))))
+	(put-char port #\newline))
 
+@
+
+<<Imports>>=
+(rnrs control)
+(rnrs io ports)
 @
 
 We can then apply this over lists of triples:
 
 <<Writing>>=
 (define write-rdf-triples->srdf
-  (case-lambda
-    [(triple)
-     (%write-rdf-triple-list triple (current-output-port))]
-    [(triple port)
-     (%write-rdf-triple-list triple port)]))
+	(case-lambda
+		[(triple)
+			(%write-rdf-triple-list triple (current-output-port))]
+		[(triple port)
+			(%write-rdf-triple-list triple port)]))
 
-(define %write-rdf-triple-list
-  (lambda (triple-list port)
-    (for-each (lambda (e) (write-rdf-triple->srdf e port)) triple-list)))
+(define (%write-rdf-triple-list triple-list port)
+	(for-each (lambda (e) (write-rdf-triple->srdf e port)) triple-list))
 
 @
 
@@ -575,17 +558,54 @@ nodes in a graph:
 
 <<Writing>>=
 (define write-rdf-graph->srdf
-  (case-lambda
-    [(graph)
-     (%write-rdf-graph graph (current-output-port))]
-    [(graph port)
-     (%write-rdf-graph graph port)]))
+	(case-lambda
+		[(graph)
+			(%write-rdf-graph graph (current-output-port))]
+		[(graph port)
+			(%write-rdf-graph graph port)]))
 
-(define %write-rdf-graph
-  (lambda (graph port)
-    (rdf-graph/for-each-triple graph
-      (lambda (e) (write-rdf-triple->srdf e port)))))
+(define (%write-rdf-graph graph port)
+	(rdf-graph/for-each-triple graph
+		(lambda (e) (write-rdf-triple->srdf e port))))
 
+@
+
+\section{R6RS Form}
+
+<<srdf.sls>>=
+<<License>>
+
+(library (arcfide descot srdf)
+	(export
+		<<Exports>>)
+	(import
+		<<Imports>>)
+
+<<Parsing Types>>
+
+<<URI Parsing>>
+
+<<Literal Parsing>>
+
+<<File Parsing>>
+
+<<Generic Form Parsing>>
+
+<<Triple Parsing>>
+
+<<Subject Tail Parsing>>
+
+<<Predicate Parsing>>
+
+<<Collection Parsing>>
+
+<<Validating>>
+
+<<Generating Blank Nodes>>
+
+<<Writing>>
+
+)
 @
 
 \section{Module Form}
@@ -597,8 +617,9 @@ The Chez Scheme module form exports [[parse-srdf-form]] and
 <<License>>
 
 (module srdf
-  (<<Exports>>) 
-  <<Imports>>
+	(<<Exports>>) 
+	(import
+		<<Imports>>)
 
 <<Parsing Types>>
 
