@@ -14,10 +14,10 @@ module exporting the above procedures:
 <<rdf2html.ss>>=
 <<License>>
 
-(module rdf2html
-  (library->html library->short-html)
-
-<<rdf2html imports>>
+(library (arcfide descot rdf-to-html)
+	(export library->html library->short-html)
+	(import
+		<<rdf2html imports>>)
 
 <<long library conversion>>
 
@@ -44,8 +44,7 @@ module exporting the above procedures:
 )
 @
 
-\section{Rendering}
-
+\section{Rendering}%
 A full library description has fields defined for the title of the 
 library, the primary name, a description, a list of alternative 
 libraries, its homepage, the dependencies, alternative library 
@@ -61,37 +60,36 @@ that is stored in some format. To do this, we put a left float
 containing a link to the actual location of the library.
 
 <<long library rendering>>=
-(define render-library
-  (lambda (store name db)
-    (render-wrap
-      (render-left-float 
-	(render-homepage 
-	  (encode-library-id (render-rdf-object name))
-	  "RDF"))
-      (render-title (render-homepage (library-homepage db) (library-title db)))
-      (render-names (library-names store db))
-      (render-categories (library-categories store db))
-      (render-description (library-description db))
-      (render-table
-	(render-row "Version" (render-rdf-object (library-version db)))
-	(render-row "Implementation" 
-	  (render-implementation (library-implementation store db)))
-	(render-row
-	  "Authors"
-	  (fold-right (lambda (e s) (if (null? s) `(,e) `(,e ", " ,@s)))
-	    '()
-	    (map render-author
-	      (library-authors store db))))
-	(render-row "Maintainer"
-	  (render-author (library-contact store db)))
-	(render-row "Copyright"
-	  (render-copyright (library-copyright store db)))
-	(render-row "License"
-	  (rdf-literal/lexical-form (library-license-name store db)))
-	(render-row "Created On:" (render-time (library-created db)))
-	(render-row "Last Modified On:" 
-	  (render-time (library-modified db))))
-      (render-download-info store (library-location store db)))))
+(define (render-library store name db)
+	(render-wrap
+		(render-left-float 
+			(render-homepage 
+				(encode-library-id (render-rdf-object name))
+				"RDF"))
+		(render-title (render-homepage (library-homepage db) (library-title db)))
+		(render-names (library-names store db))
+		(render-categories (library-categories store db))
+		(render-description (library-description db))
+		(render-table
+			(render-row "Version" (render-rdf-object (library-version db)))
+			(render-row "Implementation" 
+				(render-implementation (library-implementation store db)))
+			(render-row
+				"Authors"
+				(fold-right (lambda (e s) (if (null? s) `(,e) `(,e ", " ,@s)))
+					'()
+					(map render-author
+						(library-authors store db))))
+			(render-row "Maintainer"
+				(render-author (library-contact store db)))
+			(render-row "Copyright"
+				(render-copyright (library-copyright store db)))
+			(render-row "License"
+				(rdf-literal/lexical-form (library-license-name store db)))
+			(render-row "Created On:" (render-time (library-created db)))
+			(render-row "Last Modified On:" 
+				(render-time (library-modified db))))
+					(render-download-info store (library-location store db))))
 @
 
 If we are rendering only a short library, we only need to provide the 
@@ -99,15 +97,14 @@ author, title, list of names, and a description (which may be cut short).
 It is probably also good to provide some version information.
 
 <<rendering a short library>>=
-(define render-short-library
-  (lambda (prefix store name db)
-    (render-wrap
-      (render-left-float (render-author (car (library-authors store db))))
-      (render-title 
-	(render-browse-id-link prefix name (library-title db)))
-      (render-names (library-names store db))
-      (render-description (library-description db))
-      (render-summary store db))))
+(define (render-short-library prefix store name db)
+	(render-wrap
+		(render-left-float (render-author (car (library-authors store db))))
+		(render-title 
+			(render-browse-id-link prefix name (library-title db)))
+		(render-names (library-names store db))
+		(render-description (library-description db))
+		(render-summary store db)))
 @
 
 We would like the short description to have a small summary of most 
@@ -115,13 +112,12 @@ of the important information, such as version and implementation,
 so we implement this as a special line after the description.
 
 <<summary line>>=
-(define render-summary
-  (lambda (store db)
-    `(p (@ (class "lib_summary"))
-       "Version " ,(render-rdf-object (library-version db))
-       " for " ,(render-implementation (library-implementation store db))
-       " via " ,(render-download-type (car (library-location store db)))
-       ".")))
+(define (render-summary store db)
+	`(p (@ (class "lib_summary"))
+		"Version " ,(render-rdf-object (library-version db))
+		" for " ,(render-implementation (library-implementation store db))
+		" via " ,(render-download-type (car (library-location store db)))
+		"."))
 @
 
 When [[library->html]] is called, it should be called with the 
@@ -131,11 +127,10 @@ libraries should be returned, otherwise, its value should be the
 result of rendering the library. 
 
 <<default empty library rendering>>=
-(define render-no-library
-  (lambda (name)
-    (render-wrap
-      (render-title "Sorry!")
-      `(p "Library " ,name " does not exist."))))
+(define (render-no-library name)
+	(render-wrap
+		(render-title "Sorry!")
+		`(p "Library " ,name " does not exist.")))
 @
 
 Finally, we can define [[library->html]] and [[libary->short-html]].
@@ -143,12 +138,11 @@ In [[library->html]] we expect to receive the RDF Store along with
 the library name.
 
 <<long library conversion>>=
-(define library->html
-  (lambda (rdf-store library-name)
-    (let ([db (make-filled-rdf-predicate-map rdf-store library-name)])
-      (if (zero? (rdf-predicate-map/size db))
-	  (render-no-library library-name)
-	  (render-library rdf-store library-name db)))))
+(define (library->html rdf-store library-name)
+	(let ([db (make-filled-rdf-predicate-map rdf-store library-name)])
+		(if (zero? (rdf-predicate-map/size db))
+			(render-no-library library-name)
+			(render-library rdf-store library-name db))))
 @
 
 In [[library->short-html]] we expect to get a path prefix for the 
@@ -158,115 +152,99 @@ be something like ``http://descot.sacrideo.us/db/browse?id=''.
 Other than this, the interface is the same as [[library->html]].
 
 <<short library conversion>>=
-(define library->short-html
-  (lambda (browse-id-prefix rdf-store library-name)
-    (let ([db (make-filled-rdf-predicate-map rdf-store library-name)])
-      (if (zero? (rdf-predicate-map/size db))
-	  (render-no-library library-name)
-	  (render-short-library browse-id-prefix rdf-store library-name db)))))
+(define (library->short-html browse-id-prefix rdf-store library-name)
+	(let ([db (make-filled-rdf-predicate-map rdf-store library-name)])
+		(if (zero? (rdf-predicate-map/size db))
+			(render-no-library library-name)
+			(render-short-library browse-id-prefix rdf-store library-name db))))
 @
 
 We now need to define all of our supporting rendering procedures.
 
 <<additional rendering procedures>>=
-(define render-wrap (lambda elems `(div ,@elems)))
-(define render-title (lambda (title) `(h3 ,(render-rdf-object title))))
-(define render-description (lambda (text) `(p ,(render-rdf-object text))))
-(define render-table (lambda rows `(table ,@rows)))
-(define render-row (lambda cols `(tr ,@(map render-column cols))))
-(define render-header-row (lambda cols `(tr ,@(map render-head cols))))
-(define render-column (lambda (column) `(td ,column)))
-(define render-head (lambda (column) `(th ,column)))
+(define (render-wrap . elems) `(div ,@elems))
+(define (render-title title) `(h3 ,(render-rdf-object title)))
+(define (render-description text) `(p ,(render-rdf-object text)))
+(define (render-table . rows) `(table ,@rows))
+(define (render-row . cols) `(tr ,@(map render-column cols)))
+(define (render-header-row . cols) `(tr ,@(map render-head cols)))
+(define (render-column column) `(td ,column))
+(define (render-head column) `(th ,column))
 
-(define render-names 
-  (lambda (names)
-    `(p (@ (class "library_names"))
-       ,(fold-right (lambda (e s) (if s `(,e ", " ,@s) `(,e))) 
-	 #f 
-	 (map rdf-literal/lexical-form names)))))
+(define (render-names names)
+	`(p (@ (class "library_names"))
+		,(fold-right (lambda (e s) (if s `(,e ", " ,@s) `(,e))) 
+			#f 
+			(map rdf-literal/lexical-form names))))
 
-(define render-list 
-  (lambda (type attrs elems) 
-    `(,type (@ ,@attrs) ,@(map (lambda (e) `(li ,e)) elems))))
+(define (render-list type attrs elems) 
+	`(,type (@ ,@attrs) ,@(map (lambda (e) `(li ,e)) elems)))
 
-(define render-author
-  (lambda (author)
-    (let ([email (rdf-literal/lexical-form (car author))] 
-	  [name (rdf-literal/lexical-form (cdr author))])
-      (or (and name email `(a (@ (href ,(make-email-href email))) ,name))
-	  (and email `(a (@ (href ,(make-email-href email))) ,email))
-	  name
-	  ""))))
+(define (render-author author)
+	(let (
+			[email (rdf-literal/lexical-form (car author))] 
+			[name (rdf-literal/lexical-form (cdr author))])
+		(or 
+			(and name email `(a (@ (href ,(make-email-href email))) ,name))
+			(and email `(a (@ (href ,(make-email-href email))) ,email))
+			name
+			"")))
 
-(define make-email-href
-  (lambda (email)
-    (string-append "mailto:" email)))
+(define (make-email-href email)
+	(string-append "mailto:" email))
 
-(define render-browse-id-link
-  (lambda (prefix url txt)
-    (render-homepage 
-      (let ([encoding (encode-library-id (render-rdf-object url))])
-	(if (pair? encoding)
-	    (apply string-append (cons prefix encoding))
-	    (string-append prefix encoding)))
-      txt)))
+(define (render-browse-id-link prefix url txt)
+	(render-homepage 
+		(let ([encoding (encode-library-id (render-rdf-object url))])
+			(if (pair? encoding)
+				(apply string-append (cons prefix encoding))
+				(string-append prefix encoding)))
+		txt))
 
-(define encode-library-id
-  (make-char-quotator '((#\# . "%23"))))
+(define encode-library-id (make-char-quotator '((#\# . "%23"))))
 
-(define render-homepage 
-  (lambda (url txt)
-    (if url
-        `(a (@ (href ,(render-rdf-object url))) ,(render-rdf-object txt))
-	(render-rdf-object txt))))
+(define (render-homepage url txt)
+	(if url
+		`(a (@ (href ,(render-rdf-object url))) ,(render-rdf-object txt))
+		(render-rdf-object txt)))
 
-(define render-copyright
-  (lambda (fields)
-    (let ([year (car fields)]
-	  [author (cdr fields)])
-      `(,(rdf-literal/lexical-form year) ,(render-author author)))))
+(define (render-copyright fields)
+	(let ([year (car fields)] [author (cdr fields)])
+		`(,(rdf-literal/lexical-form year) ,(render-author author))))
 
-(define render-time
-  (lambda (obj)
-    (rdf-literal/lexical-form obj)))
+(define (render-time obj) (rdf-literal/lexical-form obj))
 
-(define render-left-float
-  (lambda elems
-    `(div (@ (class "left_box")) ,@elems)))
+(define (render-left-float . elems) `(div (@ (class "left_box")) ,@elems))
 
-(define render-rdf-object
-  (lambda (obj)
-    (cond
-      [(pair? obj) obj]
-      [(string? obj) obj]
-      [(rdf-literal? obj) (rdf-literal/lexical-form obj)]
-      [else ""])))
+(define (render-rdf-object obj)
+	(cond
+		[(pair? obj) obj]
+		[(string? obj) obj]
+		[(rdf-literal? obj) (rdf-literal/lexical-form obj)]
+		[else ""]))
 
-(define render-implementation
-  (lambda (impl)
-    (render-homepage (cdr impl) (car impl))))
+(define (render-implementation impl)
+	(render-homepage (cdr impl) (car impl)))
 
-(define render-categories
-  (lambda (cats)
-    `(p (@ (class "categories")) "Categories: " 
-       ,@(fold-right 
-	   (lambda (e s) 
-	     (let ([ne (capitalize-string (render-rdf-object e))])
-	       (if s `(,ne ", " ,@s) `(,ne))))
-	   #f 
-	   cats))))
+(define (render-categories cats)
+	`(p (@ (class "categories")) 
+		"Categories: " 
+		,@(fold-right 
+			(lambda (e s) 
+				(let ([ne (capitalize-string (render-rdf-object e))])
+					(if s `(,ne ", " ,@s) `(,ne))))
+		 	#f 
+		 	cats)))
 
-(define render-download-type
-  (lambda (type)
-    (case type
-      [(cvs) "CVS"]
-      [(archive) "Archive"]
-      [(single) "a single Scheme file"]
-      [else "Unknown means"])))
+(define (render-download-type type)
+	(case type
+		[(cvs) "CVS"]
+		[(archive) "Archive"]
+		[(single) "a single Scheme file"]
+		[else "Unknown means"]))
 @
 
-\section{Rendering Locations and Download Information}
-
+\section{Rendering Locations and Download Information}%
 When a library instance is examined, it will have information on 
 how to download it. There are three main distribution methods 
 used by the average library distributor: source repository, 
@@ -281,23 +259,21 @@ will be associated with that node is the type field indicating
 that the node is a Single File download node.  Easy to render.
 
 <<rendering single file downloads>>=
-(define render-single-file-location
-  (lambda (node)
-    `(p 
-       "This library is distributed as a single, self-contained "
-       ,(render-homepage node "Scheme File")
-       ".")))
+(define (render-single-file-location node)
+	`(p 
+		"This library is distributed as a single, self-contained "
+		(render-homepage node "Scheme File")
+		"."))
 @
 
 Rendering an archive really isn't that much more difficult:
 
 <<render an archive download>>=
-(define render-archive-location
-  (lambda (node)
-    `(p
-       "This library is distributed as an "
-       ,(render-homepage node "archive")
-       ".")))
+(define (render-archive-location node)
+	`(p
+		"This library is distributed as an "
+		,(render-homepage node "archive")
+		"."))
 @
 
 Rendering source control is a little harder, but should be done 
@@ -307,42 +283,39 @@ names, [TODO] though it would be nice to have the command for
 downloading right there:
 
 <<rendering CVS locations>>=
-(define render-cvs-location
-  (lambda (root module)
-    `((p "This library is distributed using CVS.")
-      ,(render-table
-         (render-header-row "CVSROOT" "Module")
-         (render-row 
-	   (render-rdf-object root) 
-	   (render-rdf-object module))))))
+(define (render-cvs-location root module)
+	`((p "This library is distributed using CVS.")
+		,(render-table
+			(render-header-row "CVSROOT" "Module")
+			(render-row 
+				(render-rdf-object root) 
+				(render-rdf-object module)))))
 @
 
 Once we have these specialized procedures, we can dispatch on the 
 type of the location node.
 
 <<generic location rendering>>=
-(define render-download-info
-  (lambda (store info)
-    (case (car info)
-      [(single) (render-single-file-location (cdr info))]
-      [(archive) (render-archive-location (cdr info))]
-      [(cvs) (render-cvs-location (cadr info) (cddr info))]
-      [else '()])))
+(define (render-download-info store info)
+	(case (car info)
+		[(single) (render-single-file-location (cdr info))]
+		[(archive) (render-archive-location (cdr info))]
+		[(cvs) (render-cvs-location (cadr info) (cddr info))]
+		[else '()]))
 @
 
-\section{Imports}
-
+\section{Imports}%
 rdf2html requires the following imports for Chez Scheme Version 7.4:
 
 <<rdf2html imports>>=
-(import scheme)
-(import rdf-list-graphs)
-(import rdf)
-(import rdf-maps)
-(import foof-loop)
-(import nested-foof-loop)
-(import descot-rdf-utilities)
-(import oleg-util)
+(rnrs base)
+(rnrs lists)
+(riastradh schemantic-web rdf-list-graph)
+(riastradh schemantic-web rdf)
+(riastradh schemantic-web rdf-map)
+(riastradh foof-loop)
+(arcfide descot rdf utilities)
+(oleg util)
 @
 
 \section{Licensing}
