@@ -45,7 +45,7 @@
 (define descot-rdf-path (string-append descot-path-prefix "/rdf"))
 (define descot-submit-path (string-append descot-path-prefix "/db/submit"))
 (define descot-submit-store "submissions")
-(define descot-store-root "~/descot/regress/store")
+(define descot-store-root "~/code/arcfide/descot/regress/store")
 (define descot-maintainer-email "arcfide@sacrideo.us")
 (define descot-maintainer-name "Aaron W. Hsu")
 

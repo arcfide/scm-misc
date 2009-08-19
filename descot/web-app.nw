@@ -49,7 +49,7 @@ for a specific library URL.
 (rnrs base)
 (arcfide descot web generators)
 (arcfide descot web parameters)
-(arcfide descot rdf-to-html)
+(arcfide descot rdf rdf-to-sxml)
 @
 
 \noindent [Notice the use of [[descot-wrapper]] to help everything go along.]
@@ -386,7 +386,7 @@ rather than definitions.
 <<web-app.ss>>=
 <<Web App License>>
 
-(let ()
+;(let ()
 
 (import 
 	<<Imports>>)
@@ -395,9 +395,10 @@ rather than definitions.
 
 <<Handlers>>
 
-<<Initialization>>
+(define (initialize-server)
+	<<Initialization>>)
 
-)
+;)
 @
 
 We need to make sure that we initialize the server api the way we 
