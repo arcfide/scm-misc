@@ -200,8 +200,6 @@ mime-type->string
 				(mime-type-parameters type)))))
 @
 
-<<Headers>>=
-
 \section{Encoding Header}%
 Encoding specifies the method of storing the data that is in the entity.
 
