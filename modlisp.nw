@@ -306,6 +306,92 @@ start-modlisp-server start-modlisp-server/synchronous
 					ready)))))
 @
 
+\chapter{Utilities and Helpers}%
+Constructing request handlers ought not to overly burden the developer. The 
+following help to ease any burden the programmer may encounter when using 
+this library.
+
+\procsig{[[modlisp-plain-matcher]]}{\var{url}}{\var{URL Regex String}}
+
+<<Exports>>=
+modlisp-subtree-matcher
+@
+
+\noindent This procedure takes a url which is meant to be matched against 
+the root of an incoming url and sets it so that it will match any subtree 
+of the url as well as the URL itself. It also makes sure that it will ignore 
+any parameters passed in the URL.
+
+<<Utilities>>=
+(define (modlisp-subtree-matcher url)
+	(string-append url ".*"))
+
+@
+
+\procsig{[[get-modlisp-header]]}{\var{packet} \var{key} [\var{default}]}{\var{header or default}}
+
+<<Exports>>=
+get-modlisp-header
+@
+
+\noindent Make it easy to get some header.
+
+<<Utilities>>=
+(define (get-modlisp-header packet key . default)
+	(let ([res (assq key (modlisp-packet-headers packet))])
+		(if res (cdr res) (and (not (null? default)) (car default)))))
+
+@
+
+\procsig{[[get-modlisp-parameter]]}{\var{parameter} \var{packet}}{\var{parameter value}}
+
+<<Exports>>=
+get-modlisp-parameter
+@
+
+\noindent Makes it easy to get a parameter from a modlisp packet.
+
+<<Utilities>>=
+(define (get-modlisp-parameter key packet)
+	(let ([res (assq key (get-modlisp-header packet 'url-params '()))])
+		(and res (cdr res))))
+
+@
+
+\procsig{[[make-html-response]]}{\var{body}}{\var{Response Packet}}
+
+<<Exports>>=
+make-html-response
+@
+
+\noindent Making an HTML response of some kind is very popular, so 
+it makes sense to make this as easy as possible. 
+
+<<Utilities>>=
+(define (make-html-response body)
+	(make-modlisp-packet '((content-type . "text/html") (status . "200 OK")) body))
+
+@
+
+\procsig{[[make-typed-response]]}{\var{mime-type} \var{contents}}{\var{packet}}
+
+<<Exports>>=
+make-typed-response
+@
+
+\noindent Allows for easy responses for arbitrary mime-types without 
+any special requirements.
+
+<<Utilities>>=
+(define (make-typed-response type contents)
+	(make-modlisp-packet
+		`((content-type . ,(mime-type->string type)) (status . "200 OK"))
+		contents))
+
+@
+
+\procsig{[[
+
 \chapter{R6RS Form}
 
 <<modlisp.sls>>=
@@ -318,6 +404,8 @@ start-modlisp-server start-modlisp-server/synchronous
 		<<Imports>>)
 
 <<Datatypes>>
+
+<<Utilities>>
 
 <<Server>>
 

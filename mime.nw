@@ -37,6 +37,7 @@ parse-mime-entity parse-mime-contents
 (define (parse-mime-contents params contents)
 	((make-generic-parser (mime-parser:contents params) rfc2822-transcoder)
 	 contents))
+
 @
 
 \chapter{Parsing MIME Entities}%
@@ -174,6 +175,32 @@ character.
 		(parser:return (cons (string->symbol (string-downcase attr)) val))))
 
 @
+
+\subsection{Display MIME Types}%
+It is useful to be able to render MIME types back into their canonical 
+string form.
+
+<<Exports>>=
+mime-type->string
+@
+
+<<Convenience Procedures>>=
+(define (mime-type->string type)
+	(call-with-string-output-port
+		(lambda (p)
+			(put-datum p (mime-type-main type))
+			(put-char p #\/)
+			(put-datum p (mime-type-subtype type))
+			(for-each
+				(lambda (param)
+					(put-string p "; ")
+					(put-datum p (car param))
+					(put-char p #\=)
+					(put-datum p (cdr param)))
+				(mime-type-parameters type)))))
+@
+
+<<Headers>>=
 
 \section{Encoding Header}%
 Encoding specifies the method of storing the data that is in the entity.

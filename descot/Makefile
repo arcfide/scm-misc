@@ -23,7 +23,7 @@ sacrideo: build
 	mv web-param.ss.stock web-param.ss
 
 docs: 
-	noweave -delay ${NW_FILES} > doc/tech/main.tex
+	noweave -delay -t2 ${NW_FILES} > doc/tech/main.tex
 
 clean: 
 	rm -f ${FILES} ${WEB_FILES}

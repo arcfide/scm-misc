@@ -39,12 +39,11 @@ use [[write-html-page]] to convert the SXML to XHTML and format
 it according to normal W3C standards, all sent to the given port. 
 
 <<Writing>>=
-(define write-html-page
-  (lambda (generator port)
-    (display xhtml-decl port)
-    (display 
-      (with-output-to-string (lambda () (sxml->html (generator))))
-      port)))
+(define (write-html-page code)
+	(with-output-to-string
+		(lambda ()
+			(put-string (current-output-port) xhtml-decl)
+			(sxml->html code))))
 @
 
 \section{Wrapping Pages}
