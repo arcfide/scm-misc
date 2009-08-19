@@ -8,12 +8,14 @@ Server Protocol.  That is, it is a library upon which Descot Servers
 can be built, such as a Web Application or a GUI. It has the following 
 module declaration:
 
-<<server.ss>>=
+<<server.sls>>=
 <<License>>
 
-(module descot-server
-  (<<Exports>>)
-  <<Imports>>
+(library (arcfide descot server)
+  (export
+		<<Exports>>)
+  (import
+		<<Imports>>)
 
 <<URI Resolution>>
 
@@ -33,9 +35,9 @@ module declaration:
 \section{The Descot Server Protocol}
 
 <<Imports>>=
-(import scheme)
-(import rdf-list-graphs)
-(import rdf)
+(rnrs base)
+(riastradh schemantic-web rdf-list-graph)
+(riastradh schemantic-web rdf)
 @
 
 The following describes the Descot Server Protocol
@@ -79,6 +81,10 @@ subject as an ancestor are written out as well.
       ((descot-api-reader) (descot-uri->store-path subject)) 
       subject 
       (if (null? maybe-port) (current-output-port) (car maybe-port)))))
+@
+
+<<Imports>>=
+(except (rnrs io simple) call-with-output-file)
 @
 
 We separate [[write-rdf-subject+blanks]] because this is an useful 
@@ -127,8 +133,8 @@ This requires the Descot RDF Utilities module and the [[current-store]]
 parameter:
 
 <<Imports>>=
-(import descot-rdf-utilities)
-(import descot-web-parameters)
+(arcfide descot rdf utilities)
+(arcfide descot web parameters)
 @
 
 \subsection{Submissions}
@@ -174,8 +180,10 @@ The above code uses nested foof loop to loop over all the subjects
 in the graph, so make sure that we import this:
 
 <<Imports>>=
-(import foof-loop)
-(import nested-foof-loop)
+(riastradh foof-loop)
+(only (scheme) 
+	path-parent call-with-output-file mkdir file-exists?
+	directory-separator directory-list file-directory? file-regular?)
 @
 
 We use [[guarantee-directory-exists]] to make sure that the path works. 
@@ -248,9 +256,10 @@ we want to reference into its corresponding file system path.
 This requires the use of SRFI-13, SRFI-14, and Taylor Campbell's URI Library:
 
 <<Imports>>=
-(import uri)
-(import srfi-14)
-(import srfi-13)
+(riastradh schemantic-web uri)
+(only (scheme) format)
+(only (srfi :13) string-tokenize)
+(srfi :14)
 @
 
 \section{Choosing Different Formats}
@@ -286,7 +295,8 @@ By default we use the SRDF Triple writer that is provided by the
 SRDF library:
 
 <<Imports>>=
-(import srdf)
+(arcfide descot srdf)
+(only (scheme) make-parameter)
 @
 
 When a request comes in, the server must be able to read the files in 
@@ -309,6 +319,10 @@ argument is not specified, it should default to an empty RDF Graph.
 	(error 'descot-api-reader "Invalid reader value ~s" e))
       e)))
 
+@
+
+<<Imports>>=
+(rnrs control)
 @
 
 \section{Store Location}
