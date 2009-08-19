@@ -159,6 +159,14 @@ readily available, so we have to make some procedures to help.
 Firstly, it is useful to know all the categories that exist in a store. 
 
 <<store categories>>=
+(define remove-duplicate-categories
+  (lambda (lst)
+    (loop ([for elem (in-list (list-sort string>? lst))]
+	   [for res 
+	     (listing-reverse elem 
+	       (if (or (null? res) (not (string=? elem (car res))))))])
+      => res)))
+
 (define store-categories
   (lambda (store)
     (remove-duplicate-categories
@@ -381,7 +389,8 @@ them into something useful.
    library-title library-description library-homepage library-copyright
    library-authors library-license-name library-created library-modified
    library-contact library-version library-implementation
-   library-location library-categories)
+   library-location library-categories
+		remove-duplicate-categories)
 
 	(import 
 		<<imports>>)
@@ -424,6 +433,7 @@ Libraries for Chez Scheme Version 7.4.
 (rnrs base)
 (rnrs lists)
 (rnrs syntax-case)
+(rnrs sorting)
 (riastradh schemantic-web rdf-list-graph)
 (riastradh schemantic-web rdf)
 (riastradh schemantic-web rdf-map)
