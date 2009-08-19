@@ -21,10 +21,11 @@ to which it should print.  If no port is given, then the
 \section{Exports and Name}
 
 <<Module Form>>=
-(module rdf-printing
-  (write-rdf-triple->turtle write-rdf-graph->turtle write-rdf-triples->turtle)
+(library (arcfide descot rdf turtle-output)
+  (export write-rdf-triple->turtle write-rdf-graph->turtle write-rdf-triples->turtle)
 
-<<Imports>>
+	(import 
+		<<Imports>>)
 
 <<Output Procedures>>
 
@@ -37,11 +38,13 @@ to which it should print.  If no port is given, then the
 libraries.
 
 <<Imports>>=
-(import scheme)
-(import rdf-list-graphs)
-(import rdf)
-(import foof-loop)
-(import nested-foof-loop)
+(rnrs base)
+(rnrs control)
+(rnrs io simple)
+(riastradh schemantic-web rdf-list-graph)
+(riastradh schemantic-web rdf)
+(riastradh foof-loop)
+(only (scheme) format)
 @
 
 \section{Output Procedures}
@@ -111,7 +114,7 @@ in a list.
 
 (define %write-rdf-triple-list
   (lambda (triple-list port)
-    (for-each (lambda (e) (write-rdf-triple e port)) triple-list)))
+    (for-each (lambda (e) (%write-rdf-triple e port)) triple-list)))
 @
 
 To print a graph, we should simply use the [[rdf-graph/for-each-triple]] 
@@ -128,7 +131,7 @@ function made available to use from Taylor Campbell's RDF Graphs.
 (define %write-rdf-graph
   (lambda (graph port)
     (rdf-graph/for-each-triple graph
-      (lambda (e) (write-rdf-triple e port)))))
+      (lambda (e) (%write-rdf-triple e port)))))
 @
 
 \section{Licensing}
