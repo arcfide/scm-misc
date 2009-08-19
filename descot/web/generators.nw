@@ -7,21 +7,24 @@ the interface to using generators and a port.  The second
 performs the wrapping of all pages in the Descot headers and 
 footers. 
 
-<<web-gen.ss>>=
+<<generators.sls>>=
 <<License>>
 
-(module descot-web-generators
-  (write-html-page descot-wrapper)
-  (import scheme)
-  (import descot-web-parameters)
-  (import descot-web-utilities)
-  (import sxml-to-html)
+#!chezscheme
+(library (arcfide descot web generators)
+  (export write-html-page descot-wrapper)
+	(import
+		(rnrs base)
+		(rnrs io ports)
+		(rnrs io simple)
+		(arcfide descot web parameters)
+		(arcfide descot web utilities)
+		(oleg sxml-to-html)
+		(only (scheme) with-output-to-string))
 
 <<Writing>>
 
 <<Wrapping>>
-
-(xml-tags? #t)
 
 )
 @
@@ -61,9 +64,9 @@ way of style sheets and subheadings for each page.
 	(title (string-append descot-title " -- " page-name))
 	(link css "stylesheet" "text/css" "screen"))
       (body
-	(div '(@ (id "beta")) descot-beta-msg)
+	(div-elem '(@ (id "beta")) descot-beta-msg)
 	(h1 descot-title)
-	(div '(@ (id "search"))
+	(div-elem '(@ (id "search"))
 	  (form descot-search-path "get"
 	    (p 
 	      (input '(name "q") '(type "text"))
@@ -76,7 +79,7 @@ way of style sheets and subheadings for each page.
 	  (li (a `(@ (href ,descot-browse-path)) "Browse"))
 	  (li (a `(@ (href ,descot-search-path)) "Advanced Search"))
 	  (li (a `(@ (href ,descot-submit-path)) "Submit a Library")))
-	(div '(@ (id "copyright"))
+	(div-elem '(@ (id "copyright"))
 	  (p 
 	    "Copyright " 
 	    '|&copy;| 
