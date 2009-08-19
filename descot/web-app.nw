@@ -287,7 +287,7 @@ or, if we are given a query, we try to list the results.
 <<Search Handler>>=
 (register-request-handler! (modlisp-subtree-matcher descot-search-path)
 	(lambda (req)
-		(let ([query (get-modlisp-parameter 'q)])
+		(let ([query (get-modlisp-parameter 'q req)])
 			(make-html-response
 				(write-html-page
 					(cond
