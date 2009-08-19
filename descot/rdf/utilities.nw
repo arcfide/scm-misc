@@ -359,19 +359,19 @@ them into something useful.
 
 [[descot-rdf-utilities]] is a module declared thus:
 
-<<rdf-util.ss>>=
+<<utilities.sls>>=
 <<License>>
 
-(module descot-rdf-utilities
-  (dscts dscts:name dscts:desc dscts:homepage dscts:authors dscts:email
+(library (arcfide descot rdf utilities)
+  (export
+		dscts dscts:name dscts:desc dscts:homepage dscts:authors dscts:email
    dscts:license dscts:categories dscts:contact dscts:Library dscts:version
    dscts:copyright dscts:copyright-type dscts:copyright-owner
    dscts:copyright-year dscts:implementation dscts:location dscts:modified
    dscts:Single-file dscts:Archive dscts:CVS
    rdfs prefix-with-rdf rdf:nil rdf:rest rdf:first rdf:Type
    store-categories
-   (in-rdf-list rdf-graph/triples-by-subject rdf-object=?
-		find-rdf-object-by-predicate)
+		in-rdf-list
    find-rdf-predicate find-rdf-object-by-predicate
    parse-turtle-file
    libraries-in-category
@@ -383,7 +383,8 @@ them into something useful.
    library-contact library-version library-implementation
    library-location library-categories)
 
-<<imports>>
+	(import 
+		<<imports>>)
 
 <<rdf uris>>
 
@@ -420,15 +421,17 @@ The following imports are expected from Aaron Hsu's Chez Scheme
 Libraries for Chez Scheme Version 7.4.
 
 <<imports>>=
-(import scheme)
-(import rdf-list-graphs)
-(import rdf)
-(import rdf-maps)
-(import text-parser-combinators)
-(import rdf-turtle-parser)
-(import parse-errors)
-(import foof-loop)
-(import nested-foof-loop)
+(rnrs base)
+(rnrs lists)
+(rnrs syntax-case)
+(riastradh schemantic-web rdf-list-graph)
+(riastradh schemantic-web rdf)
+(riastradh schemantic-web rdf-map)
+(riastradh parscheme partext)
+(riastradh parscheme perror)
+(riastradh foof-loop)
+(riastradh schemantic-web rdf-turtle-parser)
+(arcfide descot web parameters)
 @
 
 \section{Licensing}

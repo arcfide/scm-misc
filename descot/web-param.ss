@@ -17,8 +17,8 @@
 ;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 ;;; PERFORMANCE OF THIS SOFTWARE.
 
-(module descot-web-parameters
-  (descot-path-prefix descot-static-prefix 
+(library (arcfide descot web parameters)
+  (export descot-path-prefix descot-static-prefix 
    descot-about-path descot-blog-path descot-browse-path
    descot-search-path descot-beta-msg descot-title descot-stylesheet
    descot-store-fname current-store browser-column-width
@@ -26,8 +26,10 @@
    descot-submit-path descot-submit-store
    descot-store-root
    descot-maintainer-email descot-maintainer-name)
-  (import scheme)
-  (import rdf-list-graphs)
+  (import 
+		(rnrs base) 
+		(only (scheme) make-parameter)
+		(riastradh schemantic-web rdf-list-graph))
 
 (define descot-path-prefix "/descot")
 (define descot-static-prefix descot-path-prefix)
