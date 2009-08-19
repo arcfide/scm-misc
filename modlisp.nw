@@ -71,6 +71,7 @@ The following procedures read and write packets to a given port.
 <<Imports>>=
 (rnrs io ports)
 (rnrs unicode)
+(rnrs control)
 (riastradh foof-loop)
 @
 
@@ -260,6 +261,7 @@ which spawns a new thread for each connection.
 
 <<Imports>>=
 (arcfide sockets)
+(only (scheme) meta-cond machine-type)
 @
 
 <<Exports>>=
@@ -275,15 +277,18 @@ start-modlisp-server start-modlisp-server/synchronous
 (define modlisp-transcoder (make-transcoder (utf-8-codec) (eol-style none)))
 
 (define (start-modlisp-server port)
-	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
-		(bind-socket s (string->internet-address (format "127.0.0.1:~d" port)))
-		(listen-socket s (socket-maximum-connections))
-		(loop ()
-			(let-values ([(sock addr) (accept-socket s)])
-				(let* (
-						[bp (socket->port sock)]
-						[tp (transcoded-port bp modlisp-transcoder)])
-					(fork-thread (lambda () (loop ([while (serve-request tp)])))))))))
+	(meta-cond
+		[(memq (machine-type) '(ta6le ti3ob ti3le))
+			(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
+				(bind-socket s (make-internet-address #vu8(127 0 0 1) port))
+				(listen-socket s (socket-maximum-connections))
+				(loop ()
+					(let-values ([(sock addr) (accept-socket s)])
+						(let* (
+								[bp (socket->port sock)]
+								[tp (transcoded-port bp modlisp-transcoder)])
+							(fork-thread (lambda () (loop ([while (serve-request tp)]))))))))]
+		[else (error #f "Threaded server unsupported")]))
 
 (define (start-modlisp-server/synchronous port)
 	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
@@ -297,7 +302,7 @@ start-modlisp-server start-modlisp-server/synchronous
 			(let-values ([(sock addr) (accept-socket x)]) 
 				(serve sock)
 				sock))
-		(bind-socket s (string->internet-address (format "127.0.0.1:~d" port)))
+		(bind-socket s (make-internet-address #vu8(127 0 0 1) port))
 		(listen-socket s (socket-maximum-connections))
 		(loop ()
 			(let ([ready (socket-select (socks))])
@@ -390,15 +395,29 @@ any special requirements.
 
 @
 
-\procsig{[[
+\procsig{[[make-500-response]]}{}{}
+
+<<Exports>>=
+make-500-response
+@
+
+<<Utilities>>=
+(define (make-500-response)
+	(make-html-response
+		"<html><head><title>500 Internal Server Error</title></head>
+<body><h1>500</h1><h2>Internal Server Error</h2>
+<p>A problem occured with your request. Please contact 
+the administrator about this problem.</p></body></html>"))
+
+@
 
 \chapter{R6RS Form}
 
 <<modlisp.sls>>=
 <<License>>
 
-;(library (arcfide mod-lisp)
-	#;(export
+(library (arcfide modlisp)
+	(export
 		<<Exports>>)
 	(import
 		<<Imports>>)
@@ -411,7 +430,7 @@ any special requirements.
 
 <<MIME Registration>>
 
-;)
+)
 @
 
 \chapter{License}
