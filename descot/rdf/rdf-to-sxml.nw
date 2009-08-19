@@ -11,7 +11,7 @@ relevant information optimized for listings.
 This inteface is documented by the rdf2html.ss file, which is a 
 module exporting the above procedures:
 
-<<rdf2html.ss>>=
+<<rdf-to-sxml.sls>>=
 <<License>>
 
 (library (arcfide descot rdf-to-html)
