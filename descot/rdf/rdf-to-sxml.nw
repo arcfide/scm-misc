@@ -315,6 +315,7 @@ rdf2html requires the following imports for Chez Scheme Version 7.4:
 (riastradh schemantic-web rdf-map)
 (riastradh foof-loop)
 (arcfide descot rdf utilities)
+(arcfide descot web utilities)
 (oleg util)
 @
 

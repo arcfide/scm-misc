@@ -17,18 +17,22 @@
 ;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 ;;; PERFORMANCE OF THIS SOFTWARE.
 
-(module descot-web-utilities
-  (xhtml-decl html head body title div h1 h2 h3 p input button ul ol li a
+(library (arcfide descot web utilities)
+  (export xhtml-decl html head body title div-elem h1 h2 h3 p input button ul ol li a
    form link make-column-table-with-size categories->links 
-   matching-libraries remove-duplicate-categories capitalize-string
+   matching-libraries capitalize-string
    make-search-proc)
-  (import scheme)
-  (import foof-loop)
-  (import nested-foof-loop)
-  (import descot-web-parameters)
-  (import srfi-13)
-  (import srfi-14)
-  (import descot-rdf-utilities)
+	(import
+		(rnrs base)
+		(rnrs mutable-strings)
+		(rnrs unicode)
+		(only (scheme) make-list)
+		(foof irregex)
+		(riastradh foof-loop)
+		(only (srfi :13) string-tokenize)
+		(srfi :14)
+		(arcfide descot rdf utilities)
+		(arcfide descot web parameters))
 
 (define xhtml-decl
 "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>
@@ -48,7 +52,7 @@
 (define head (lambda elems (cons 'head elems)))
 (define body (lambda elems (cons 'body elems)))
 (define title (lambda (text) `(title ,text)))
-(define div (lambda body `(div ,@body)))
+(define div-elem (lambda body `(div ,@body)))
 (define h1 (lambda body `(h1 ,@body)))
 (define h2 (lambda body `(h2 ,@body)))
 (define h3 (lambda body `(h3 ,@body)))
@@ -97,15 +101,6 @@
     (let ([ns (string-copy s)])
       (string-set! ns 0 (char-upcase (string-ref ns 0)))
       ns)))
-
-(define remove-duplicate-categories
-  (lambda (lst)
-    (loop ([for elem (in-list (list-sort string>? lst))]
-	   [for res 
-	     (listing-reverse elem 
-	       (if (or (null? res) (not (string=? elem (car res))))))])
-      => res)))
-
 (define make-search-proc
   (lambda (query)
     (let ([terms (map (lambda (e) (irregex e 'i)) 
