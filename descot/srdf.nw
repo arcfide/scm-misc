@@ -394,7 +394,7 @@ letting it through if it's a value such as a number or boolean.
 		[(pair? val)
 			(case (car val)
 				[($) (make-rdf-plain-literal (cadr val) #f)]
-				[(@) (make-rdf-plain-literal (cadr val) (symbol->string (caddr val)))]
+				[(&) (make-rdf-plain-literal (cadr val) (symbol->string (caddr val)))]
 				[(^) (make-rdf-typed-literal (cadr val) (parse-srdf-uri prefixes (caddr val)))]
 	 			[else (error 'parse-srdf-literal "Bad Tagged Literal" val)])]
 		[else (error 'parse-srdf-literal "Unknown Literal" val)]))
@@ -455,7 +455,7 @@ other types.
 	(or 
 		(number? obj) 
 		(boolean? obj) 
-		(and (pair? obj) (memq (car obj) '($ @ ^)) #t)))
+		(and (pair? obj) (memq (car obj) '($ & ^)) #t)))
 @
 
 A blank node list is easy, since it is only a tagged subject tail:
@@ -503,7 +503,7 @@ a given node:
 		[(rdf-plain-literal? node)
 			(let ([lang-tag (rdf-plain-literal/language-tag node)])
 				(if lang-tag
-					`(@ ,(rdf-literal/lexical-form node) ,(string->symbol lang-tag))
+					`(& ,(rdf-literal/lexical-form node) ,(string->symbol lang-tag))
 					`($ ,(rdf-literal/lexical-form node))))]
 		[(rdf-bnode? node) `(_ ,(string->symbol (rdf-bnode/name node)))]
 		[(rdf-typed-literal? node)
