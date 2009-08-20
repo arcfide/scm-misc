@@ -129,7 +129,7 @@ here for customization of mod_lisp.}
 <<Imports>>=
 (rnrs lists)
 (rnrs mutable-pairs)
-(oleg cgi processing)
+(riastradh schemantic-web uri)
 @
 
 <<Header Processing>>=
@@ -144,7 +144,7 @@ here for customization of mod_lisp.}
 
 (define (process-header header)
 	(case (car header)
-		[(url-params) (cons 'url-params (cgi:url-unquote (cdr header)))]
+		[(url) (cons 'url (string->uri (cdr header)))]
 		[(content-type) (cons 'content-type (parse-content-type (cdr header)))]
 		[else header]))
 @
@@ -197,9 +197,10 @@ the handler.
 <<Handlers>>
 
 (define (serve-request port)
-	(define (packet-url p) (assq 'url (modlisp-packet-headers p)))
+	(define empty-uri (string->uri ""))
+	(define (packet-url p) (uri->string (get-modlisp-header p 'url empty-uri)))
 	(define (get-response url p) 
-		(if url ((lookup-request-handler (cdr url)) p) (make-500-response)))
+		(if url ((lookup-request-handler url) p) (make-500-response)))
 	(let ([incoming (get-packet port)])
 		(and incoming
 			(begin 
@@ -358,9 +359,15 @@ get-modlisp-parameter
 
 <<Utilities>>=
 (define (get-modlisp-parameter key packet)
-	(let ([res (assq key (get-modlisp-header packet 'url-params '()))])
-		(and res (cdr res))))
+	(let ([url (get-modlisp-header packet 'url #f)])
+		(and url 
+			(let ([res (assq key (cgi:url-unquote (or (uri-query url) "")))])
+				(and res (cadr res))))))
 
+@
+
+<<Imports>>=
+(oleg cgi processing)
 @
 
 \procsig{[[make-html-response]]}{\var{body}}{\var{Response Packet}}
@@ -408,6 +415,17 @@ make-500-response
 <body><h1>500</h1><h2>Internal Server Error</h2>
 <p>A problem occured with your request. Please contact 
 the administrator about this problem.</p></body></html>"))
+
+@
+
+\procsig{[[make-404-response]]}{}{}
+
+<<Exports>>=
+make-404-response
+@
+
+<<Utilities>>=
+(define (make-404-response) (handle-404 #f))
 
 @
 

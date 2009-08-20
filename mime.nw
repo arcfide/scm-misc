@@ -53,7 +53,7 @@ strings should be used. If however, the media type of the contents of
 an entity are binary or non-textual data, a bytevector should be used.
 
 <<Exports>>=
-mime-parser:entity
+mime-parser:entity mime-entity-fields mime-entity-contents
 @
 
 <<Datatypes>>=
@@ -108,12 +108,16 @@ distinguishes.
 \section{Content Header}%
 Specifies the Content-Type of a MIME entity.
 
+<<Exports>>=
+make-mime-type mime-type-main mime-type-subtype mime-type-parameters
+@
+
 <<Datatypes>>=
 (define-record-type mime-type (fields main subtype parameters))
 @
 
 <<Exports>>=
-mime-parser:content-value
+mime-parser:content-value mime-parser:parameter-list
 @
 
 <<Headers>>=
@@ -121,15 +125,17 @@ mime-parser:content-value
 	(parser:rfc2822-header 'content-type "Content-Type"
 		mime-parser:content-value))
 
+(define-parser mime-parser:parameter-list
+	(parser:list:repeated
+		(parser:sequence (parser:char= #\;)
+			(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:parameter))))
+
 (define-parser mime-parser:content-value
 	(*parser
 			[type (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
 			[(parser:char= #\/)]
 			[subtype (parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:token)]
-			[params 
-				(parser:list:repeated 
-					(parser:sequence (parser:char= #\;) 
-						(parser:single-bracketed rfc2822-parser:cfws-opt mime-parser:parameter)))]
+			[params mime-parser:parameter-list]
 		(parser:return 
 			(make-mime-type 
 				(string->symbol (string-downcase type)) 

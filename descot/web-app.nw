@@ -326,18 +326,20 @@ except that it will never have to serve static content.
 (register-request-handler! (modlisp-subtree-matcher descot-rdf-path)
 	(lambda (req)
 		(make-typed-response 
-			(make-mime-type 'application 'x-srdf '())
+			(make-mime-type 'text 'plain '())
 			(with-output-to-string 
 				(lambda ()
 					(write-descot-request
 						(string-append "http://" 
-						(get-modlisp-header req 'host "") 
-						(get-modlisp-header req 'url ""))))))))
+							(get-modlisp-header req 'host "") 
+							(let ([res (get-modlisp-header req 'url #f)])
+								(if res (format "~{~a~^/~}" (uri-path res)) "")))))))))
 @
 
 <<Imports>>=
 (arcfide descot server)
 (arcfide mime)
+(riastradh schemantic-web uri)
 @
 
 It should be noted that RDF URLs coming in with fragments in them 
@@ -352,28 +354,83 @@ check if they are null. If it isn't, then we have a submission and
 we can go ahead and write out the library.  Otherwise, we'll just 
 display the main submit landing page.
 
+<<Imports>>=
+(oleg sxml-to-html)
+(only (srfi :13) string-index)
+(riastradh parscheme partext)
+@
+
+When handling submissions, we have to take care of the mime contents, which 
+requires us to parse the [[Content-Disposition]] header, and the following Utility 
+helps to handle that.
+
+<<Utilities>>=
+(define (parse-mime-parameter-list x)
+	(let ([start (string-index x #\;)])
+		(if start
+			(parse-string mime-parser:parameter-list
+				(substring x start (string-length x))
+				#f (lambda (g c s) g) 
+				(lambda (e c s) 
+					(error 'parse-mime-parameter-list
+						"Failed to parse parameter list" e)))
+			'())))
+@
+
+When we have received a file to put in the submission queue, we want to 
+put the actual file in one place, and associate a time stamp with it, which 
+we do with the two following chunks, assuming that our generic location 
+is [[fname]].
+
+<<Write Received File>>=
+(call-with-output-file fname
+	(lambda (port)
+		(let ([data (mime-entity-contents code)])
+			((cond [(string? data) put-string] [(bytevector? data) put-bytevector]
+					[else (error 'submit-code "Unknown entity contents type" data)])
+				port data))))
+@
+
+<<Write Timestamp>>=
+(call-with-output-file (string-append fname ".timestamp")
+	(lambda (port) 
+		(put-string port (date-and-time))
+		(put-char port #\newline)
+		(put-string port (get-modlisp-header req 'remote-ip-addr "Unknown"))))
+@
+
+If we cannot tell that we have received a file for submission, the default is to display 
+the submission form page. We assume that we have a file submission if we 
+have a [[multipart/form-data]] [[Content-Type]] as well as have a submitted 
+element with the name [[code]].
+
 <<Submission Handler>>=
 (register-request-handler! (modlisp-subtree-matcher descot-submit-path)
 	(lambda (req)
-		(make-404-response)))
+		(define (success)
+			(make-html-response (write-html-page (successful-submit-page))))
+		(define (form-page)
+			(make-html-response (write-html-page (submit-page))))
+		(define (code-element? x)
+			(let ([disp (assq 'content-disposition (mime-entity-fields x))])
+				(and disp
+					(let ([res (assq 'name (parse-mime-parameter-list (cdr disp)))])
+						(and res (string-ci=? "code" (cdr res)))))))
+		(let (
+				[t (get-modlisp-header req 'content-type (make-mime-type #f #f '()))]
+				[contents (modlisp-packet-contents req)])
+			(if (and contents (eq? 'multipart (mime-type-main t)) (eq? 'form-data (mime-type-subtype t)))
+				(let (
+						[code (find code-element? contents)]
+						[fname (format "~a~a" descot-submit-root (format-gensym (gensym "submission")))])
+					(if code
+						(begin 
+							<<Write Received File>>
+							<<Write Timestamp>>
+							(success))
+						(form-page)))
+				(form-page)))))
 
-#;(define-subtree-handler descot-submit-path 'application/xhtml+xml
-	(lambda (path port)
-		(let ([params (http-request-post-parameter-bindings)])
-			(if (or (not params) (null? params))
-		(write-html-page submit-page port)
-		(begin 
-			(http-response-header 'content-type "text/plain")
-			(format port "Would write to: ~a~%"
-				(string-append 
-		descot-submit-store 
-		(string (directory-separator))
-		(format-gensym (gensym "submission"))))
-			(format port "Submitted by ~a on ~a.~%" 
-				(http-request-header 'remote-ip-addr)
-				(date-and-time))
-			(newline port)
-			(pretty-print params port))))))
 @
 
 \section{Optimization/Initialization/Running}
@@ -390,6 +447,8 @@ rather than definitions.
 
 (import 
 	<<Imports>>)
+
+<<Utilities>>
 
 <<Pages>>
 

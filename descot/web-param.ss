@@ -23,7 +23,7 @@
    descot-search-path descot-beta-msg descot-title descot-stylesheet
    descot-store-fname current-store browser-column-width
    descot-web-docroot descot-rdf-path 
-   descot-submit-path descot-submit-store
+   descot-submit-path descot-submit-root
    descot-store-root
    descot-maintainer-email descot-maintainer-name)
   (import 
@@ -44,7 +44,7 @@
 (define descot-web-docroot "~/descot/www_static")
 (define descot-rdf-path (string-append descot-path-prefix "/rdf"))
 (define descot-submit-path (string-append descot-path-prefix "/db/submit"))
-(define descot-submit-store "submissions")
+(define descot-submit-root "~/code/arcfide/descot/regress/submissions/")
 (define descot-store-root "~/code/arcfide/descot/regress/store")
 (define descot-maintainer-email "arcfide@sacrideo.us")
 (define descot-maintainer-name "Aaron W. Hsu")
