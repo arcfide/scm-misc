@@ -1,7 +1,7 @@
-\tite{Mod_lisp for Scheme}
+\title{Mod\_lisp for Scheme}
 
 \chapter{Overview}%
-The following library hopes to become the de facto standard mod_lisp
+The following library hopes to become the de facto standard mod\_lisp
 library for Scheme programs. It aims for the following goals:
 
 \unorderedlist
@@ -20,7 +20,7 @@ This library tries to make sure that each part is easily exchanged with another.
 It may not happen this way, but this goal will eventually be achieved.
 
 \section{Functionality and Generality}%
-People should not have to avoid using something like mod_lisp because of a 
+People should not have to avoid using something like mod\_lisp because of a 
 lack of features. Specifically, there was no POST support in the old MIT 
 Scheme library.
 
@@ -33,13 +33,13 @@ where possible, and encouraging clean approaches.
 This code is licensed under the ISC license for maximum usability in both 
 free and commercial software.
 
-\chapter{Structure of mod_lisp requests}%
-Mod_lisp requests and responses have the same format: a set of key value 
+\chapter{Structure of mod\_lisp requests}%
+Mod\_lisp requests and responses have the same format: a set of key value 
 lines ending with [[end\n]] and followed by the body contents. The pairs 
 consist of two lines each, where the first line contains the key, and the second 
 line the value.
 
-The process of a mod_lisp server is to accept a request, send a response, 
+The process of a mod\_lisp server is to accept a request, send a response, 
 and repeat. There are two means of doing so. The server may handle each 
 request in a single socket, using the [[keep-alive]] parameter to multiplex 
 requests, or it may accept a new socket each time and dispatch. 
@@ -112,11 +112,11 @@ The following procedures read and write packets to a given port.
 					[for headers (listing (process-header header))]
 					[while header])
 				=> (make-modlisp-packet headers
-							(let ([len (assq 'content-length headers)])
-								(and len 
-									(process-contents headers 
-										(return-on-disconnect 
-											(get-string-n port (string->number (cdr len))))))))))))
+						(let ([len (assq 'content-length headers)])
+							(and len 
+								(process-contents headers 
+									(return-on-disconnect 
+										(get-string-n port (string->number (cdr len))))))))))))
 @
 
 \chapter{Processing Headers}%
@@ -124,7 +124,7 @@ At the moment, we just handle unquoting the urls. Otherwise, there
 may be some more things that we could do.
 
 {\it XXX: We may want to do some kind of handler based processing 
-here for customization of mod_lisp.}
+here for customization of mod\_lisp.}
 
 <<Imports>>=
 (rnrs lists)
@@ -262,7 +262,7 @@ which spawns a new thread for each connection.
 
 <<Imports>>=
 (arcfide sockets)
-(only (scheme) meta-cond machine-type)
+(only (scheme) meta-cond machine-type import)
 @
 
 <<Exports>>=
@@ -277,19 +277,29 @@ start-modlisp-server start-modlisp-server/synchronous
 (define keep-alive? (make-parameter #t))
 (define modlisp-transcoder (make-transcoder (utf-8-codec) (eol-style none)))
 
+(meta-cond
+	[(char=? #\t (string-ref (symbol->string (machine-type)) 0))
+
+(import (only (chezscheme) fork-thread))
+
 (define (start-modlisp-server port)
-	(meta-cond
-		[(memq (machine-type) '(ta6le ti3ob ti3le))
-			(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
-				(bind-socket s (make-internet-address #vu8(127 0 0 1) port))
-				(listen-socket s (socket-maximum-connections))
-				(loop ()
-					(let-values ([(sock addr) (accept-socket s)])
-						(let* (
-								[bp (socket->port sock)]
-								[tp (transcoded-port bp modlisp-transcoder)])
-							(fork-thread (lambda () (loop ([while (serve-request tp)]))))))))]
-		[else (error #f "Threaded server unsupported")]))
+	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
+		(bind-socket s (make-internet-address #vu8(127 0 0 1) port))
+		(listen-socket s (socket-maximum-connections))
+		(loop ()
+			(let-values ([(sock addr) (accept-socket s)])
+				(let* (
+						[bp (socket->port sock)]
+						[tp (transcoded-port bp modlisp-transcoder)])
+					(fork-thread (lambda () (loop ([while (serve-request tp)])))))))))
+
+]
+
+	[else
+
+(define (start-modlisp-server port) (start-modlisp-server/synchronous port))
+
+])
 
 (define (start-modlisp-server/synchronous port)
 	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
