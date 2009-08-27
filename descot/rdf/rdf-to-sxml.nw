@@ -14,6 +14,7 @@ module exporting the above procedures:
 <<rdf-to-sxml.sls>>=
 <<License>>
 
+#!chezscheme
 (library (arcfide descot rdf rdf-to-sxml)
 	(export library->html library->short-html)
 	(import
