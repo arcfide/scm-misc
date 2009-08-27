@@ -425,7 +425,7 @@ The [[mime-parser:preamble]] consumes everything except the boundary.
 (define (mime-parser:preamble boundary)
 	(parser:repeated-until (parser:backtrackable (mime-parser:boundary boundary))
 		(lambda (y x) x) (parser:return #f)
-		(parser:char-in-set char-set:full)))
+		(parser:char)))
 
 @
 
@@ -441,7 +441,7 @@ that follows it.
 		rfc2822-parser:crlf
 		(parser:repeated-until (parser:end)
 			(lambda (y x) x) (parser:return #f)
-			(parser:char-in-set char-set:full))))
+			(parser:char))))
 
 @
 
@@ -469,7 +469,7 @@ to do this.}
 			[buf 
 				(parser:string:repeated-until 
 					(parser:peek (parser:backtrackable (mime-parser:delimiter boundary)))
-					(parser:char-in-set char-set:full))]
+					(parser;char))]
 		(parser:return
 			(parse-string mime-parser:entity buf #f
 				(lambda (res c s) res)
@@ -576,7 +576,7 @@ Here are the basic decoders.
 	rfc2822-parser:body)
 
 (define-parser mime-parser:binary
-	(parser:string:repeated (parser:char-in-set char-set:full)))
+	(parser:string:repeated (parser:char)))
 
 (define-parser mime-parser:base64
 	(*parser [body rfc2822-parser:body]
@@ -615,7 +615,7 @@ the appropriate decoder.
 
 <<Content Parsing>>=
 (define (lookup-mime-decoder encoding)
-	(let ([enc (or encoding '7bit)])
+	(let ([enc (or encoding 'binary)])
 		(let ([res (assq enc (mime-decoder-db))])
 			(unless res
 				(error 'lookup-mime-decoder "Unknown encoding." enc))
