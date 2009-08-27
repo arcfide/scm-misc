@@ -266,7 +266,7 @@ which spawns a new thread for each connection.
 @
 
 <<Exports>>=
-start-modlisp-server start-modlisp-server/synchronous
+start-modlisp-server start-modlisp-server/synchronous modlisp-transcoder
 @
 
 <<Server>>=
@@ -275,7 +275,7 @@ start-modlisp-server start-modlisp-server/synchronous
 <<Serving Requests>>
 
 (define keep-alive? (make-parameter #t))
-(define modlisp-transcoder (make-transcoder (utf-8-codec) (eol-style none)))
+(define modlisp-transcoder (make-transcoder (latin-1-codec) (eol-style none)))
 
 (meta-cond
 	[(char=? #\t (string-ref (symbol->string (machine-type)) 0))

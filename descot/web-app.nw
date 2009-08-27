@@ -383,13 +383,18 @@ we do with the two following chunks, assuming that our generic location
 is [[fname]].
 
 <<Write Received File>>=
-(call-with-output-file fname
-	(lambda (port)
-		(let ([data (mime-entity-contents code)])
-			(break)
-			((cond [(string? data) put-string] [(bytevector? data) put-bytevector]
-					[else (error 'submit-code "Unknown entity contents type" data)])
-				port data))))
+(let (
+		[port
+			(open-file-output-port fname 
+				(file-options no-fail) 
+				(buffer-mode block)
+				modlisp-transcoder)]
+		[data (mime-entity-contents code)])
+	((cond [(string? data) put-string] [(bytevector? data) put-bytevector]
+			[else (error 'submit-code "Unknown entity content type" data)])
+		port
+		data)
+	(close-port port))
 @
 
 <<Write Timestamp>>=
@@ -397,7 +402,10 @@ is [[fname]].
 	(lambda (port) 
 		(put-string port (date-and-time))
 		(put-char port #\newline)
-		(put-string port (get-modlisp-header req 'remote-ip-addr "Unknown"))))
+		(put-string port (get-modlisp-header req 'remote-ip-addr "Unknown"))
+		(put-char port #\newline)
+		(put-datum port (mime-entity-fields code))
+		(put-char port #\newline)))
 @
 
 If we cannot tell that we have received a file for submission, the default is to display 

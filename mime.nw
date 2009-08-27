@@ -469,7 +469,7 @@ to do this.}
 			[buf 
 				(parser:string:repeated-until 
 					(parser:peek (parser:backtrackable (mime-parser:delimiter boundary)))
-					(parser;char))]
+					(parser:char))]
 		(parser:return
 			(parse-string mime-parser:entity buf #f
 				(lambda (res c s) res)
@@ -576,7 +576,8 @@ Here are the basic decoders.
 	rfc2822-parser:body)
 
 (define-parser mime-parser:binary
-	(parser:string:repeated (parser:char)))
+	(parser:sequence rfc2822-parser:crlf
+		(parser:string:repeated (parser:char))))
 
 (define-parser mime-parser:base64
 	(*parser [body rfc2822-parser:body]
