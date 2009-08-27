@@ -1261,7 +1261,7 @@ int sock_fd_isset(int fd, fd_set *s) {
 <<FFI Procedures>>=
 (define $select (foreign-procedure "select" (fixnum string string string string) fixnum))
 (define $fd-set
-	(begin (load-shared-object "./arcfide/sockets-stub.so")
+	(begin (load-shared-object "/home/arcfide/code/arcfide/sockets-stub.so")
 		(foreign-procedure "sock_fd_set" (fixnum string) void)))
 (define $fd-isset
 	(foreign-procedure "sock_fd_isset" (fixnum string) boolean))
