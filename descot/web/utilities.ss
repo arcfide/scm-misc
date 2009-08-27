@@ -17,6 +17,7 @@
 ;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 ;;; PERFORMANCE OF THIS SOFTWARE.
 
+#!chezscheme
 (library (arcfide descot web utilities)
   (export xhtml-decl html head body title div-elem h1 h2 h3 p input button ul ol li a
    form link make-column-table-with-size categories->links 
