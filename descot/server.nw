@@ -75,12 +75,13 @@ subject as an ancestor are written out as well.
             (write-rdf-subject+blanks graph (rdf-triple/object triple) port)))
         triples))))
 
-(define write-descot-request
-  (lambda (subject . maybe-port)
-    (write-rdf-subject+blanks 
-      ((descot-api-reader) (descot-uri->store-path subject)) 
-      subject 
-      (if (null? maybe-port) (current-output-port) (car maybe-port)))))
+(define (write-descot-request subject . maybe-port)
+	(let ([path (descot-uri->store-path subject)])
+		(when (and (file-exists? path) (file-regular? path))
+			(write-rdf-subject+blanks  
+				((descot-api-reader) path) 
+				subject 
+				(if (null? maybe-port) (current-output-port) (car maybe-port))))))
 @
 
 <<Imports>>=
@@ -239,18 +240,17 @@ we want to reference into its corresponding file system path.
 \procsig{descot-uri-$>$store-path}{\var{uri-string}}{\var{path-string}}
 
 <<URI Resolution>>=
-(define descot-uri->store-path
-  (lambda (uri-string)
-    (let ([uri (string->uri uri-string)])
-      (format #f "~a/~a/~{~a~^/~}~{~a~^/~}~@[#~a~]"
-	(descot-store)
-	(uri-scheme uri)
-	(reverse 
-	  (string-tokenize 
-	    (uri-authority-host (uri-authority uri))
-	    (char-set-complement (char-set #\.))))
-	(uri-path uri)
-	(uri-fragment uri)))))
+(define (descot-uri->store-path uri-string)
+	(let ([uri (string->uri uri-string)])
+		(format #f "~a/~a/~{~a~^/~}~{~a~^/~}~@[#~a~].dsct"
+			(descot-store)
+			(uri-scheme uri)
+			(reverse 
+				(string-tokenize 
+					(uri-authority-host (uri-authority uri))
+					(char-set-complement (char-set #\.))))
+			(uri-path uri)
+			(uri-fragment uri))))
 @
 
 This requires the use of SRFI-13, SRFI-14, and Taylor Campbell's URI Library:
