@@ -22,7 +22,7 @@
    descot-about-path descot-blog-path descot-browse-path
    descot-search-path descot-beta-msg descot-title descot-stylesheet
    descot-store-fname current-store browser-column-width
-   descot-web-docroot descot-rdf-path 
+   descot-web-docroot descot-rdf-path descot-mirror-path
    descot-submit-path descot-submit-root
    descot-store-root
    descot-maintainer-email descot-maintainer-name)
@@ -43,6 +43,7 @@
 (define descot-stylesheet (string-append descot-static-prefix "/style.css"))
 (define descot-web-docroot "~/descot/www_static")
 (define descot-rdf-path (string-append descot-path-prefix "/rdf"))
+(define descot-mirror-path (string-append descot-path-prefix "/rdf-mirror"))
 (define descot-submit-path (string-append descot-path-prefix "/db/submit"))
 (define descot-submit-root "~/code/arcfide/descot/regress/submissions/")
 (define descot-store-root "~/code/arcfide/descot/regress/store")

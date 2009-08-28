@@ -255,6 +255,8 @@ that URL as the root.
 
 <<RDF Handler>>
 
+<<Mirror Handler>>
+
 <<Submission Handler>>
 @
 
@@ -347,6 +349,21 @@ must be encoded.  That is, the \# character in the URL must be
 encoded using the \%23 string, or else the URL will come through 
 without the fragment.  This appears to be an artifact of mod\_lisp, 
 but I have not confirmed this yet.
+
+\section{Serving Updates/Mirroring}%
+Descot servers provide a mirroring mechanism. Using the API, we define a handler 
+here.
+
+<<Mirror Handler>>=
+(register-request-handler! (modlisp-subtree-matcher descot-mirror-path)
+	(lambda (req)
+		(make-typed-response
+			(make-mime-type 'text 'plain '())
+			(with-output-to-string
+				(lambda ()
+					(write-descot-updates (current-output-port)))))))
+@
+
 
 \section{Accepting Submissions}%
 When handling Submissions, we will grab the post parameters and 
