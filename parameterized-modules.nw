@@ -1,0 +1,128 @@
+\title{Parameterized Modules}
+
+\chapter{Introduction}%
+Chez Scheme's module system is largely syntactic. This permits some interesting extensions 
+of the standard module form in order to achieve some of the features that other Scheme's 
+have built in to their module systems. Chez's use of syntactic modules permits a wide 
+range of extensions that may not be possible for module systems that do not exist as a 
+part of the language itself, or are not malleable. 
+
+One such commnonly desired feature is the ability to parameterize parts of the module 
+form so that you can declare the same module with different internals. This library provides
+a simple method for doing this. It introduces a form [[module/parameterized]] to permit
+altering a set of expressions in the module form when the module is declared/imported.
+
+\chapter{Usage}%
+
+\verbatim
+(module/parameterize <name> (<export> ...)
+	(<param> ...)
+	<body> ...)
+|endverbatim
+
+\noindent Here [[<export> ...]] and [[<body> ...]] correspond to their same use in 
+the normal Chez Scheme [[module]] form. [[<param> ...]] is a possibly empty list of 
+names to be used as parameters for the module. These parameters are module 
+parameters, and should not be confused with regular Chez run-time parameters 
+generated using [[make-parameter]] or the like.
+
+The above form defines a syntax [[<name>]] which, when expanded in any code, 
+evaluates to a [[module]] form in the same scope as the form occurs, with the 
+values of [[<param> ...]] replaced with their associated expressions. The [[<name>]] 
+form expects to be used according to the following syntax:
+
+\verbatim
+(<name> (<param> <exp>) ...)
+|endverbatim
+
+\noindent which associates the expression [[<exp>]] with [[<param>]]. 
+
+\chapter{Implementation}%
+Firstly we create a macro that defines a the tranformer for a [[<name>]] form.
+
+The general form of the name macro follows the following template:
+
+<<Expander Template>>=
+(define-syntax name
+	(syntax-rules ()
+		[(_ n (p e) (... ...))
+			(module n (exp ...)
+				(def-param p e) (... ...)
+				body ...)]))
+@
+
+\noindent [[define-params]] will help us go through the forms found and 
+make sure they associate the right parameter with the right name.
+
+<<Param Definer>>=
+(define-syntax def-param
+	(syntax-rules (param ...)
+		[(_ param e)
+			(define-syntax param (identifier-syntax e))]
+		...))
+@
+
+\noindent And we use this definition in our module expander.
+
+<<Exports>>=
+module/parameterized
+@
+
+<<Name Form Definition>>=
+(define-syntax module/parameterized
+	(syntax-rules ()
+		[(_ name (exp ...) (param ...) body ...)
+			(begin
+				<<Param Definer>>
+				<<Expander Template>>)]))
+@
+
+\chapter{R6RS Form}
+
+<<parameterized-modules.sls>>=
+<<License>>
+
+(library (arcfide parameterized-modules)
+	(export
+		<<Exports>>)
+	(import 
+		(rnrs base)
+		(rnrs syntax-case)
+		(only (scheme) module))
+
+<<Name Form Definition>>
+
+)
+@
+
+\chapter{Vanilla Form}
+
+<<parameterized-modules.scm>>=
+<<License>>
+
+<<Name Form Definition>>
+@
+
+\chapter{License}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Parameterized Modules for Chez
+;;; Version: 1.0.0
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@
