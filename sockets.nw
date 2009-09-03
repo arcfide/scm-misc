@@ -1040,23 +1040,6 @@ EOF to the file.
   (foreign-procedure "write" (fixnum string fixnum) fixnum))
 @
 
-We use the [[eof-character]] parameter to decide what end-of-file 
-character to send.
-
-<<Exports>>=
-eof-character
-@
-
-<<Code>>=
-(define eof-character
-  (make-parameter #\x4
-    (lambda (c)
-      (unless (char? c)
-        (error 'eof-character "Invalid character" c))
-      c)))
-
-@
-
 Closing a socket is the simple matter of using [[close-socket]].
 
 <<Close Socket>>=
