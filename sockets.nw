@@ -1204,60 +1204,6 @@ This is a procedure for accessing the [[SOMAXCONN]] value.
 (%somaxconn fixnum "int" "SOMAXCONN")
 @
 
-\chapter{Synchronous I/O Multiplexing}%
-On machines or systems that have no threading support, the ability 
-to do multiplexing becomes important. The following procedures 
-make this possible using select. 
-
-<<Exports>>=
-socket-select
-@
-
-<<Code>>=
-(define (socket-select sock-list)
-	(let ([fd-set (make-bytevector size-of/fd-set 0)])
-		(let (
-				[maxfds
-					(loop (
-							[for sock (in-list sock-list)]
-							[for max (maximizing (socket-fd sock))])
-						=> (+ max 1)
-						($fd-set (socket-fd sock) fd-set))])
-			(if (= -1 ($select maxfds fd-set #f #f #f))
-				(ffi-error 'socket-select)
-				(filter (lambda (x) ($fd-isset (socket-fd x) fd-set)) sock-list)))))
-
-@
-
-<<sockets-stub.c>>=
-#include <sys/select.h>
-
-void sock_fd_set(int fd, fd_set *s) {
-	FD_SET(fd, s);
-}
-
-int sock_fd_isset(int fd, fd_set *s) {
-	return FD_ISSET(fd, s);
-}
-@
-
-<<FFI Procedures>>=
-(define $select (foreign-procedure "select" (fixnum string string string string) fixnum))
-(define $fd-set
-	(foreign-procedure "sock_fd_set" (fixnum string) void))
-(define $fd-isset
-	(foreign-procedure "sock_fd_isset" (fixnum string) boolean))
-@
-
-<<FFI Headers>>=
-<sys/select.h>
-@
-
-<<FFI Constants>>=
-(size-of/fd-set fixnum "int" "sizeof(fd_set)")
-@
-
-
 \chapter{Handling FFI Errors}
 
 Error handling for procedures that properly set [[errno]] can be handled 
