@@ -33,7 +33,6 @@ The following is a development to-do list of intended features
 and possible improvements.
 
 \orderedlist
-\li Non-blocking Sockets
 \li Sockets Options
 \li Clean up the handling of structures by abstracting and specializing
 \li Consider IP field name replaced with ADDRESS
