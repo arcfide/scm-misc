@@ -22,7 +22,7 @@ They should be literally entered, and not quoted, with strings,
 unless they should be so wrapped in the C file.
 
 \var{bindings} should be a list of the form 
-(\var{name} \var{scheme return} \var{c return} \var{body lines} \ldots).
+(\var{name} \var{scheme return} \var{c return} \var{body lines} \dots).
 \var{name} is the binding to which the result of the foreign procedure 
 will bound.
 \var{scheme return} is the return type of the foreign procedure 
