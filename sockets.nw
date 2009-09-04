@@ -35,6 +35,7 @@ and possible improvements.
 \orderedlist
 \li Non-blocking Sockets
 \li Sockets Options
+\li Clean up the handling of structures by abstracting and specializing
 \li Consider IP field name replaced with ADDRESS
 \li Consider name change of RECEIVE-FROM-SOCKET
 \li Consider name change of ACCEPT-SOCKET
@@ -548,16 +549,39 @@ socket-type/random
 
 <<Code>>=
 (define (create-socket domain type protocol)
-  (assert (and (socket-domain? domain)
-               (socket-type? type)
-               (socket-protocol? protocol)))
-  (let ([ret ($socket (socket-constant-value domain)
-                      (socket-constant-value type)
-                      (socket-constant-value protocol))])
-    (if (negative? ret)
-        (ffi-error 'create-socket)
-        (make-socket ret domain type protocol))))
+	(assert 
+		(and 
+			(socket-domain? domain)
+			(socket-type? type)
+			(socket-protocol? protocol)))
+	(let (
+			[ret 
+				($socket 
+					(socket-constant-value domain)
+					(socket-constant-value type)
+					(socket-constant-value protocol))])
+		(if (negative? ret)
+			(ffi-error 'create-socket 'socket)
+			(begin
+				(when (negative? ($fcntl ret $file-set-flag $option-non-blocking))
+					(ffi-error 'create-socket 'fcntl))
+				(make-socket ret domain type protocol)))))
 
+@
+
+<<FFI Headers>>=
+<sys/unistd.h>
+<sys/fcntl.h>
+@
+
+<<FFI Procedures>>=
+(define $fcntl
+	(foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))
+@
+
+<<FFI Constants>>=
+($file-set-flag fixnum "int" "F_SETFL")
+($option-non-blocking fixnum "int" "O_NONBLOCK")
 @
 
 \noindent [[$socket]] refers directly to the system call:
@@ -821,7 +845,7 @@ bind-socket
                       (bytevector-length foreign-addr))])
       (if (zero? ret)
           (void)
-          (ffi-error 'bind-socket)))))
+          (ffi-error 'bind-socket 'bind)))))
 
 @
 
@@ -843,7 +867,7 @@ listen-socket
   (let ([ret ($listen (socket-fd sock) queue-length)])
     (case ret
       [(0) (void)]
-      [(-1) (ffi-error 'listen)]
+      [(-1) (ffi-error 'listen-socket 'listen)]
       [else (error 'listen "Unknown return: ~s" ret)])))
 
 @
@@ -864,29 +888,38 @@ and the address as its return values.
 
 <<Code>>=
 (define (accept-socket sock)
-  (let ([size (foreign-address-size (socket-domain sock))])
-    (let ([addr (make-bytevector size 0)]
-          [addr-len (make-bytevector size-of/integer 0)])
-      (bytevector-sint-set! addr-len 0 size 
-        (native-endianness) 
-        size-of/integer)
-      (let ([ret ($accept (socket-fd sock) addr addr-len)])
-        (if (negative? ret) 
-            (ffi-error 'accept)
-            (values (make-socket ret
-                      (socket-domain sock)
-                      (socket-type sock)
-                      (socket-protocol sock))
-              (foreign->socket-address 
-                (socket-domain sock) 
-                addr 
-                addr-len)))))))
+	(let ([size (foreign-address-size (socket-domain sock))])
+		(let (
+				[addr (make-bytevector size 0)]
+				[addr-len (make-bytevector size-of/integer 0)])
+			(bytevector-sint-set! addr-len 0 size 
+				(native-endianness) 
+				size-of/integer)
+			(let ([ret ($accept (socket-fd sock) addr addr-len)])
+				(if (negative? ret) 
+					(values #f 
+						(ffi-raise/unless 'accept-socket 'accept
+							$error-again $error-would-block))
+					(values 
+						(make-socket ret
+							(socket-domain sock)
+							(socket-type sock)
+							(socket-protocol sock))
+						(foreign->socket-address 
+							(socket-domain sock) 
+							addr 
+							addr-len)))))))
 
 @
 
 <<FFI Procedures>>=
 (define $accept
   (foreign-procedure "accept" (fixnum string string) fixnum))
+@
+
+<<FFI Constants>>=
+($error-again fixnum "int" "EAGAIN")
+($error-would-block fixnum "int" "EWOULDBLOCK")
 @
 
 \procsig{[[connect-socket]]}{\var{socket} \var{address}}{}
@@ -900,7 +933,7 @@ connect-socket
   (let ([fa (socket-address->foreign addr)])
     (case ($connect (socket-fd sock) fa (bytevector-length fa))
       [(0) (void)]
-      [(-1) (ffi-error 'connect)]
+      [(-1) (ffi-raise/unless 'connect-socket 'connect $error-in-progress)]
       [else (error 'connect-socket "Unknown foreign return value.")])))
 
 @
@@ -908,6 +941,10 @@ connect-socket
 <<FFI Procedures>>=
 (define $connect
   (foreign-procedure "connect" (fixnum string fixnum) fixnum))
+@
+
+<<FFI Constants>>=
+($error-in-progress fixnum "int" "EINPROGRESS")
 @
 
 \procsig{[[close-socket]]}{\var{socket}}{}
@@ -922,7 +959,7 @@ Equivalent to [[close(2)]].
 (define (close-socket sock)
   (case ($close (socket-fd sock))
     [(0) (void)]
-    [(-1) (ffi-error 'close)]
+    [(-1) (ffi-error 'close-socket 'close)]
     [else (error 'close-socket "Unknown foreign return value.")]))
 
 @
@@ -947,7 +984,7 @@ Corresponds to [[shutdown(s)]].
   (assert (shutdown-method? how))
   (case ($shutdown (socket-fd sock) (socket-constant-value how))
     [(0) (void)]
-    [(-1) (ffi-error 'shutdown)]
+    [(-1) (ffi-error 'shutdown-socket 'shutdown)]
     [else (error 'shutdown-socket "Unknown foreign return value.")]))
 
 @
@@ -1030,7 +1067,7 @@ EOF to the file.
 		(bytevector-copy! bv s buf 0 c)
 		(let ([res ($write (socket-fd sock) buf c)])
 			(cond
-				[(= -1 res) (ffi-error 'write)]
+				[(= -1 res) (ffi-error 'socket->port 'write)]
 				[(negative? res) (error 'socket-write "Unknown foreign return value.")]
 				[else res]))))
 @
@@ -1056,22 +1093,26 @@ Corresponds to the [[sendto(2)]] system call.
 
 <<Code>>=
 (define (send-to-socket sock buf addr . flags)
-  (assert (for-all send-to-option? flags))
-  (let* ([fa (socket-address->foreign addr)]
-         [fa-len (bytevector-length fa)]
-         [res ($sendto (socket-fd sock) 
-                buf (bytevector-length buf)
-                (fold-left 
-                  (lambda (s v) 
-                    (fxior s (socket-constant-value v)))  
-                  0 
-                  flags)
-                fa fa-len)])
-    (cond
-      [(= -1 res) (ffi-error 'sendto)]
-      [(negative? res)
-       (error 'send-to-socket "Unknown foreign return value.")]
-      [else res])))
+	(assert (for-all send-to-option? flags))
+	(let* (
+			[fa (socket-address->foreign addr)]
+			[fa-len (bytevector-length fa)]
+			[res 
+				($sendto (socket-fd sock) 
+					buf (bytevector-length buf)
+					(fold-left 
+						(lambda (s v) 
+							(fxior s (socket-constant-value v)))  
+						0 
+						flags)
+					fa fa-len)])
+		(cond
+			[(= -1 res) 
+				(ffi-raise/unless 'send-to-socket 'sendto 
+					$error-again $error-would-block)]
+			[(negative? res)
+				(error 'send-to-socket "Unknown foreign return value.")]
+			[else res])))
 
 @
 
@@ -1121,34 +1162,40 @@ see this as a good thing.}
 
 <<Code>>=
 (define (receive-from-socket sock c . flags)
-  (assert (for-all receive-from-option? flags))
-  (let ([buf (make-bytevector c)]
-        [addr-len (foreign-address-size (socket-domain sock))])
-    (let* ([addr (make-bytevector addr-len)]
-           [addr-len-buf (make-bytevector size-of/integer)])
-      (bytevector-sint-set! addr-len-buf 0 addr-len 
-        (native-endianness) size-of/integer)
-      (let ([n ($recvfrom (socket-fd sock) buf c 
-                 (fold-left
-                   (lambda (s v)
-                     (fxior s (socket-constant-value v)))
-                   0
-                   flags)
-                 addr addr-len)])
-        (cond
-          [(= -1 n) (ffi-error 'recvfrom)]
-          [(negative? n)
-           (error 'receive-from-socket 
-             "Unknown foreign return value.")]
-          [else
-           (values 
-             (if (< n c)
-                 (let ([res (make-bytevector n)])
-                   (bytevector-copy! buf 0 res 0 n)
-                   res)
-                 buf)
-             (foreign->socket-address (socket-domain sock) 
-               addr addr-len-buf))])))))
+	(assert (for-all receive-from-option? flags))
+	(let (
+			[buf (make-bytevector c)]
+			[addr-len (foreign-address-size (socket-domain sock))])
+		(let* (
+				[addr (make-bytevector addr-len)]
+				[addr-len-buf (make-bytevector size-of/integer)])
+			(bytevector-sint-set! addr-len-buf 0 addr-len 
+				(native-endianness) size-of/integer)
+			(let (
+					[n 
+						($recvfrom (socket-fd sock) buf c 
+							(fold-left
+								(lambda (s v)
+									(fxior s (socket-constant-value v)))
+								0
+								flags)
+							addr addr-len)])
+				(cond
+					[(= -1 n) 
+						(ffi-raise/unless 'receive-from-socket 'recvfrom 
+							$error-again $error-would-block)]
+					[(negative? n)
+						(error 'receive-from-socket 
+							"Unknown foreign return value.")]
+					[else
+						(values 
+							(if (< n c)
+								(let ([res (make-bytevector n)])
+									(bytevector-copy! buf 0 res 0 n)
+									res)
+								buf)
+							(foreign->socket-address (socket-domain sock) 
+								addr addr-len-buf))])))))
 
 @
 
@@ -1206,20 +1253,82 @@ This is a procedure for accessing the [[SOMAXCONN]] value.
 
 \chapter{Handling FFI Errors}
 
-Error handling for procedures that properly set [[errno]] can be handled 
-by a single procedure that calls [[perror]] and signals an exception 
-in Scheme.
+Most of the underlying system calls in this library signal an error with some value and 
+then set [[errno]]. Most of these errors should be raised, but on system calls that could 
+block, would don't because a socket has been set to non-blocking, we should not do so.
+
+Generally, I leave how to raise or return the error up to the individual functions. However, 
+all of them need a nice way to obtain a given Scheme condition rather than some obscure 
+error number. 
+
+<<Conditions>>=
+(define-condition-type &socket &condition make-socket-condition socket-condition?
+	(who socket-condition-who)
+	(syscall socket-condition-syscall)
+	(type socket-condition-type)
+	(msg socket-condition-message))
+@
+
+It is useful to be able to make such a condition out of the current value in [[errno]].
 
 <<Code>>=
-(define ffi-error
-  (lambda (who . args)
-    ($perror (symbol->string who))
-    (apply error `(,who "Error in foreign procedure" ,@args))))
+(define (make-socket-condition/current-errno who call)
+	(let ([val (errno)])
+		(make-socket-condition who call val (errno-msg val))))
+
+@
+
+Currently, we are using a hackish [[errno]], but we need to get this fixed.
+
+<<Exports>>=
+errno errno-msg
+@
+
+<<Code>>=
+(define (errno)
+	(define (bit-size)
+		(case size-of/integer
+			[(4) 'integer-32]
+			[(8) 'integer-64]
+			[else (error 'errno "Can't determine sizeof(int)")]))
+	(#%$peek (bit-size) $errno-ptr 0))
+
+(define (errno-msg num)
+	($strerror num))
 
 @
 
 <<FFI Procedures>>=
-(define $perror (foreign-procedure "perror" (string) void))
+(define $strerror 
+	(foreign-procedure "strerror" (fixnum) string))
+@
+
+<<FFI Headers>>=
+<errno.h>
+<string.h>
+@
+
+<<FFI Constants>>=
+($errno-ptr iptr "int *" "&errno")
+@
+
+For functions that want to raise an error regardless of the return type, they can use 
+[[ffi-error]].
+
+<<Code>>=
+(define (ffi-error who call)
+	(raise (make-socket-condition/current-errno who call)))
+
+@
+
+Some functions, however, may want to return the conditions instead of raising the 
+error. The following provides this functionality.
+
+<<Code>>=
+(define (ffi-raise/unless who call . vals)
+	(let ([cnd (make-socket-condition/current-errno who call)])
+		(if (memv (socket-condition-type cnd) vals) cnd (raise cnd))))
+
 @
 
 \chapter{Handling Foreign Constants}
@@ -1254,6 +1363,8 @@ Scheme values at expansion time that are necessary to do these transformations.
 
 <<Datatypes>>
 
+<<Conditions>>
+
 <<FFI Procedures>>
 
 <<Constants>>
@@ -1273,6 +1384,8 @@ Scheme values at expansion time that are necessary to do these transformations.
 <<Foreign Constants>>
 
 <<Datatypes>>
+
+<<Conditions>>
 
 <<FFI Procedures>>
 
