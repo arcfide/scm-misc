@@ -44,9 +44,11 @@
     }\endgroup}
 
 \def\var#1{$\langle${\it #1}$\rangle$}
+\def\mprocsig#1#2#3{%
+	\centerline{#1 : #2 $\to$ \if\blank{#3}\unspec\else #3\fi}}
 \def\procsig#1#2#3{%
   \medskip
-  \centerline{#1 : #2 $\to$ \if\blank{#3}\unspec\else #3\fi}
+  \mprocsig{#1}{#2}{#3}
   \medskip}
 \def\unspec{\#$\langle$void$\rangle$}
 

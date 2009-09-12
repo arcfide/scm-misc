@@ -63,10 +63,11 @@ I start with a basic template for handling [[define-variant-type]].
 			[(_ type-id descriptor-id variant-type? variant-case (variant type (maker args ...)) ...)
 				(with-syntax (
 						[((getter ...) ...) (map generate-temporaries #'((args ...) ...))]
-						[(pred ...) (generate-temporaries #'(maker ...))])
+						[(pred ...) (generate-temporaries #'(maker ...))]
+						[(name ...) (generate-temporaries #'(type ...))])
 					#'(begin 
 						(define-record-type (type-id make-variant-type variant-type?))
-						(define-record-type (type maker pred) (parent type-id)
+						(define-record-type (name maker pred) (parent type-id)
 							(fields (immutable args getter) ...))
 						...
 						(define descriptor-id (record-type-descriptor type-id))

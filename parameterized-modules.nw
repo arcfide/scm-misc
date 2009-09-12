@@ -15,16 +15,11 @@ altering a set of expressions in the module form when the module is declared/imp
 \chapter{Usage}%
 
 \verbatim
-(module/parameterize <name> (<export> ...)
-	(<param> ...)
-	<body> ...)
+(module/parameterize <name> (<export> ...) <body> ...)
 |endverbatim
 
 \noindent Here [[<export> ...]] and [[<body> ...]] correspond to their same use in 
-the normal Chez Scheme [[module]] form. [[<param> ...]] is a possibly empty list of 
-names to be used as parameters for the module. These parameters are module 
-parameters, and should not be confused with regular Chez run-time parameters 
-generated using [[make-parameter]] or the like.
+the normal Chez Scheme [[module]] form.
 
 The above form defines a syntax [[<name>]] which, when expanded in any code, 
 evaluates to a [[module]] form in the same scope as the form occurs, with the 
@@ -32,49 +27,77 @@ values of [[<param> ...]] replaced with their associated expressions. The [[<nam
 form expects to be used according to the following syntax:
 
 \verbatim
-(<name> (<param> <exp>) ...)
+(<name> <module name> (<param> ...) <pbody> ...)
 |endverbatim
 
-\noindent which associates the expression [[<exp>]] with [[<param>]]. 
+\noindent which makes [[<param> ...]] visible in the original module, whose 
+bindings must exist in [[<body> ...]].
+
+This has the effect of doing something like this:
+
+\medskip\verbatim
+(module <module name> (<export> ...)
+	(module (<param> ...)
+		<pbody> ...)
+	<body> ...)
+|endverbatim
+\medskip
 
 \chapter{Implementation}%
-Firstly we create a macro that defines a the tranformer for a [[<name>]] form.
 
-The general form of the name macro follows the following template:
+Because the body is introduced at a different time and place from the parameter 
+body, we must re-wrap the parameter body definitions in the correct wraps after 
+we have exported them. This leads to the following general expansion template, 
+for which we create a helper macro.
 
-<<Expander Template>>=
-(define-syntax name
+\medskip\verbatim
+(module (new-export ...)
+	(module (temp ...)
+		definitions ...
+		(define temp old-export) ...)
+	(define new-export temp) ...)
+|endverbatim
+\medskip
+
+<<Parameterized Modules>>=
+(trace-define-syntax rewrap-identifiers
 	(syntax-rules ()
-		[(_ n (p e) (... ...))
-			(module n (exp ...)
-				(def-param p e) (... ...)
-				body ...)]))
+		[(_ old new (bindings ...) defs ...)
+			(with-syntax (
+					[(temp (... ...)) (generate-temporaries #'(bindings ...))]
+					[(ob (... ...)) (with-implicit (old bindings ...) #'(bindings ...))]
+					[(nb (... ...)) (with-implicit (new bindings ...) #'(bindings ...))])
+				#'(module (nb (... ...))
+					(module (temp (... ...))
+						defs ... (define temp ob) (... ...))
+					(define nb temp) (... ...)))]))
+
 @
 
-\noindent [[define-params]] will help us go through the forms found and 
-make sure they associate the right parameter with the right name.
+\noindent 
+And we use this to rewrap the identifiers for our definitions, which must go 
+from the original declaration to the call site, and the parameter definitions, 
+which must go from their call site to the definitions original wrapping.
 
-<<Param Definer>>=
-(define-syntax def-param
-	(syntax-rules (param ...)
-		[(_ param e)
-			(define-syntax param (identifier-syntax e))]
-		...))
+<<Template>>=
+(rewrap-identifiers name module-name (export ...)
+	(rewrap-identifiers module-name name (param ...)
+		pbody (... ...))
+	body ...)
 @
 
-\noindent And we use this definition in our module expander.
+\noindent We can then easily define the rest of the syntax.
 
-<<Exports>>=
-module/parameterized
-@
-
-<<Name Form Definition>>=
+<<Parameterized Modules>>=
 (define-syntax module/parameterized
 	(syntax-rules ()
-		[(_ name (exp ...) (param ...) body ...)
-			(begin
-				<<Param Definer>>
-				<<Expander Template>>)]))
+		[(_ name (export ...) (param ...) body ...)
+			(trace-define-syntax name
+				(lambda (x)
+					(syntax-case x ()
+						[(_ module-name pbody (... ...))
+							(with-implicit (module-name export ...)
+								#`(module module-name (export ...) #,<<Template>>))])))]))
 @
 
 \chapter{R6RS Form}
@@ -83,14 +106,10 @@ module/parameterized
 <<License>>
 
 (library (arcfide parameterized-modules)
-	(export
-		<<Exports>>)
-	(import 
-		(rnrs base)
-		(rnrs syntax-case)
-		(only (scheme) module))
+	(export module/parameterized)
+	(import (chezscheme))
 
-<<Name Form Definition>>
+<<Parameterized Modules>>
 
 )
 @
@@ -100,7 +119,7 @@ module/parameterized
 <<parameterized-modules.scm>>=
 <<License>>
 
-<<Name Form Definition>>
+<<Parameterized Modules>>
 @
 
 \chapter{License}
