@@ -561,26 +561,10 @@ socket-type/random
 					(socket-constant-value protocol))])
 		(if (negative? ret)
 			(ffi-error 'create-socket 'socket)
-			(begin
-				(when (negative? ($fcntl ret $file-set-flag $option-non-blocking))
-					(ffi-error 'create-socket 'fcntl))
-				(make-socket ret domain type protocol)))))
+			(let ([sock (make-socket ret domain type protocol)])
+				(set-socket-nonblocking! sock #t)
+				sock))))
 
-@
-
-<<FFI Headers>>=
-<sys/unistd.h>
-<sys/fcntl.h>
-@
-
-<<FFI Procedures>>=
-(define $fcntl
-	(foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))
-@
-
-<<FFI Constants>>=
-($file-set-flag fixnum "int" "F_SETFL")
-($option-non-blocking fixnum "int" "O_NONBLOCK")
 @
 
 \noindent [[$socket]] refers directly to the system call:
@@ -1013,75 +997,6 @@ The shutdown method is a constant value defined as follows.
 (%shutdown/read&write fixnum "int" "SHUT_RDWR")
 @
 
-\procsig{[[socket->port]]}{\var{socket}}{}
-
-<<Exports>>=
-socket->port
-@
-
-Creates a binary input/ouput port from the socket with the 
-socket field descriptor as its id. 
-
-{\it XXX: There must be a more efficient way to implement the 
-[[read!]] and [[write!]] procedures here.}
-
-<<Code>>=
-(define (socket->port sock)
-  (make-custom-binary-input/output-port
-    (format "Socket ~a" (socket-fd sock))
-    <<Read Socket>>
-    <<Write Socket>>
-    #f #f 
-    <<Close Socket>>))
-    
-@
-
-We use the [[read(2)]] procedure to handle the reading. 
-Since the system [[read]] procedure does not take a position, 
-whereas the R6RS [[read!]] procedure is expected to take a 
-position, we have to use another intermediate vector, for the 
-moment. 
-
-<<Read Socket>>=
-(lambda (bv s c)
-  (let ([buf (make-bytevector c)])
-    (let ([res ($read (socket-fd sock) buf c)])
-      (bytevector-copy! buf 0 bv s res)
-      res)))
-@
-
-<<FFI Procedures>>=
-(define $read
-  (foreign-procedure "read" (fixnum string fixnum) fixnum))
-@
-
-Writing works in mostly the same way, 
-except that the R6RS [[write!]] differs from the normal 
-[[write(2)]] system call because a zero count write sends 
-EOF to the file. 
-
-<<Write Socket>>=
-(lambda (bv s c)
-	(let ([buf (make-bytevector c)])
-		(bytevector-copy! bv s buf 0 c)
-		(let ([res ($write (socket-fd sock) buf c)])
-			(cond
-				[(= -1 res) (ffi-error 'socket->port 'write)]
-				[(negative? res) (error 'socket-write "Unknown foreign return value.")]
-				[else res]))))
-@
-
-<<FFI Procedures>>=
-(define $write
-  (foreign-procedure "write" (fixnum string fixnum) fixnum))
-@
-
-Closing a socket is the simple matter of using [[close-socket]].
-
-<<Close Socket>>=
-(lambda () (close-socket sock))
-@
-
 \procsig{[[send-to-socket]]}{\var{socket} \var{buffer} \var{address}}{\var{bytes sent}}
 
 <<Exports>>=
@@ -1250,6 +1165,47 @@ This is a procedure for accessing the [[SOMAXCONN]] value.
 (%somaxconn fixnum "int" "SOMAXCONN")
 @
 
+\chapter{Blocking Sockets}%
+The following options allow you to determine if a socket is blocking or non-blocking and 
+set the nonblocking state of the socket. Use of these options is not recommended or 
+encouraged. They exist here for implementing some low-level behavior for higher 
+level abstractions.
+
+<<Exports>>=
+set-socket-nonblocking!
+socket-nonblocking?
+@
+
+<<Code>>=
+(define (set-socket-nonblocking! sock val)
+	(when 
+		(negative? 
+			(if val 
+				($fcntl (socket-fd sock) $file-set-flag $option-non-blocking) 
+				($fcntl (socket-fd sock) $file-set-flag 0)))
+		(ffi-error 'set-socket-nonblocking! 'fcntl)))
+
+(define (socket-nonblocking? sock)
+	(not (zero? (fxand $option-non-blocking ($fcntl (socket-fd sock) $file-get-flag 0)))))
+
+@
+
+<<FFI Headers>>=
+<sys/unistd.h>
+<sys/fcntl.h>
+@
+
+<<FFI Procedures>>=
+(define $fcntl
+	(foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))
+@
+
+<<FFI Constants>>=
+($file-set-flag fixnum "int" "F_SETFL")
+($file-get-flag fixnum "int" "F_GETFL")
+($option-non-blocking fixnum "int" "O_NONBLOCK")
+@
+
 \chapter{Handling FFI Errors}
 
 Most of the underlying system calls in this library signal an error with some value and 
@@ -1347,6 +1303,7 @@ Scheme values at expansion time that are necessary to do these transformations.
 <<sockets.sls>>=
 <<License>>
 
+#!chezscheme
 (library (arcfide sockets)
   (export 
     <<Exports>>)
