@@ -196,15 +196,15 @@ the handler.
 <<Serving Requests>>=
 <<Handlers>>
 
-(define (serve-request port)
+(define (serve-request in out)
 	(define empty-uri (string->uri ""))
 	(define (packet-url p) (uri->string (get-modlisp-header p 'url empty-uri)))
 	(define (get-response url p) 
 		(if url ((lookup-request-handler url) p) (make-500-response)))
-	(let ([incoming (get-packet port)])
+	(let ([incoming (get-packet in)])
 		(and incoming
 			(begin 
-				(put-packet (get-response (packet-url incoming) incoming) port)
+				(put-packet (get-response (packet-url incoming) incoming) out)
 				#t))))
 @
 
@@ -262,11 +262,12 @@ which spawns a new thread for each connection.
 
 <<Imports>>=
 (arcfide sockets)
+(arcfide sockets socket-ports)
 (only (scheme) meta-cond machine-type import)
 @
 
 <<Exports>>=
-start-modlisp-server start-modlisp-server/synchronous modlisp-transcoder
+start-modlisp-server modlisp-transcoder
 @
 
 <<Server>>=
@@ -277,49 +278,17 @@ start-modlisp-server start-modlisp-server/synchronous modlisp-transcoder
 (define keep-alive? (make-parameter #t))
 (define modlisp-transcoder (make-transcoder (latin-1-codec) (eol-style none)))
 
-(meta-cond
-	[(char=? #\t (string-ref (symbol->string (machine-type)) 0))
-
 (import (only (chezscheme) fork-thread))
 
 (define (start-modlisp-server port)
 	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
 		(bind-socket s (make-internet-address #vu8(127 0 0 1) port))
 		(listen-socket s (socket-maximum-connections))
+		(set-socket-nonblocking! s #f)
 		(loop ()
 			(let-values ([(sock addr) (accept-socket s)])
-				(let* (
-						[bp (socket->port sock)]
-						[tp (transcoded-port bp modlisp-transcoder)])
-					(fork-thread (lambda () (loop ([while (serve-request tp)])))))))))
-
-]
-
-	[else
-
-(define (start-modlisp-server port) (start-modlisp-server/synchronous port))
-
-])
-
-(define (start-modlisp-server/synchronous port)
-	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
-		(define socks (make-parameter (list s)))
-		(define (push s) (socks (cons s (socks))))
-		(define (drop s) (socks (remq s (socks))))
-		(define (serve x)
-			(let* ([bp (socket->port x)] [tp (transcoded-port bp modlisp-transcoder)])
-				(serve-request tp)))
-		(define (accept x) 
-			(let-values ([(sock addr) (accept-socket x)]) 
-				(serve sock)
-				sock))
-		(bind-socket s (make-internet-address #vu8(127 0 0 1) port))
-		(listen-socket s (socket-maximum-connections))
-		(loop ()
-			(let ([ready (socket-select (socks))])
-				(for-each
-					(lambda (x) (if (eq? x s) (push (accept x)) (unless (serve x) (drop x))))
-					ready)))))
+				(let-values ([(in out) (socket->port sock (buffer-mode block) modlisp-transcoder)])
+					(fork-thread (lambda () (loop ([while (serve-request in out)])))))))))
 @
 
 \chapter{Utilities and Helpers}%
