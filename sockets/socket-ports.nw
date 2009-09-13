@@ -72,9 +72,9 @@ but return either an input or an output port, respectively.
 	maker)
 
 (define socket->input-port 
-	(make-socket-converter make-binary-input-port make-reader))
+	(make-socket-converter make-custom-binary-input-port make-reader))
 (define socket->output-port
-	(make-socket-converter make-binary-output-port make-writer))
+	(make-socket-converter make-custom-binary-output-port make-writer))
 
 @
 
@@ -105,7 +105,7 @@ EOF to the file.
 			(bytevector-copy! bv s buf 0 c)
 			(let ([res ($write (socket-fd sock) buf c)])
 				(cond
-					[(= -1 res) (ffi-error 'socket->port 'write)]
+					[(= -1 res) (socket-error 'socket->port 'write)]
 					[(negative? res) (error 'socket-write "Unknown foreign return value.")]
 					[else res])))))
 @
@@ -128,9 +128,35 @@ Closing a socket is the simple matter of using [[close-socket]].
 		(rnrs base)
 		(rnrs control)
 		(rnrs bytevectors)
-		(only (chezscheme) foreign-procedure)
+		(rnrs io ports)
+		(only (chezscheme) format foreign-procedure)
 		(arcfide sockets))
 
 <<Code>>
 
 )
+@
+
+\chapter{License}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; R6RS Socket Ports
+;;; Version: 1
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@

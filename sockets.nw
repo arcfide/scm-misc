@@ -560,7 +560,7 @@ socket-type/random
 					(socket-constant-value type)
 					(socket-constant-value protocol))])
 		(if (negative? ret)
-			(ffi-error 'create-socket 'socket)
+			(socket-error 'create-socket 'socket)
 			(let ([sock (make-socket ret domain type protocol)])
 				(set-socket-nonblocking! sock #t)
 				sock))))
@@ -828,7 +828,7 @@ bind-socket
                       (bytevector-length foreign-addr))])
       (if (zero? ret)
           (void)
-          (ffi-error 'bind-socket 'bind)))))
+          (socket-error 'bind-socket 'bind)))))
 
 @
 
@@ -850,7 +850,7 @@ listen-socket
   (let ([ret ($listen (socket-fd sock) queue-length)])
     (case ret
       [(0) (void)]
-      [(-1) (ffi-error 'listen-socket 'listen)]
+      [(-1) (socket-error 'listen-socket 'listen)]
       [else (error 'listen "Unknown return: ~s" ret)])))
 
 @
@@ -881,7 +881,7 @@ and the address as its return values.
 			(let ([ret ($accept (socket-fd sock) addr addr-len)])
 				(if (negative? ret) 
 					(values #f 
-						(ffi-raise/unless 'accept-socket 'accept
+						(socket-raise/unless 'accept-socket 'accept
 							$error-again $error-would-block))
 					(values 
 						(make-socket ret
@@ -916,7 +916,7 @@ connect-socket
   (let ([fa (socket-address->foreign addr)])
     (case ($connect (socket-fd sock) fa (bytevector-length fa))
       [(0) (void)]
-      [(-1) (ffi-raise/unless 'connect-socket 'connect $error-in-progress)]
+      [(-1) (socket-raise/unless 'connect-socket 'connect $error-in-progress)]
       [else (error 'connect-socket "Unknown foreign return value.")])))
 
 @
@@ -942,7 +942,7 @@ Equivalent to [[close(2)]].
 (define (close-socket sock)
   (case ($close (socket-fd sock))
     [(0) (void)]
-    [(-1) (ffi-error 'close-socket 'close)]
+    [(-1) (socket-error 'close-socket 'close)]
     [else (error 'close-socket "Unknown foreign return value.")]))
 
 @
@@ -967,7 +967,7 @@ Corresponds to [[shutdown(s)]].
   (assert (shutdown-method? how))
   (case ($shutdown (socket-fd sock) (socket-constant-value how))
     [(0) (void)]
-    [(-1) (ffi-error 'shutdown-socket 'shutdown)]
+    [(-1) (socket-error 'shutdown-socket 'shutdown)]
     [else (error 'shutdown-socket "Unknown foreign return value.")]))
 
 @
@@ -1022,7 +1022,7 @@ Corresponds to the [[sendto(2)]] system call.
 					fa fa-len)])
 		(cond
 			[(= -1 res) 
-				(ffi-raise/unless 'send-to-socket 'sendto 
+				(socket-raise/unless 'send-to-socket 'sendto 
 					$error-again $error-would-block)]
 			[(negative? res)
 				(error 'send-to-socket "Unknown foreign return value.")]
@@ -1096,7 +1096,7 @@ see this as a good thing.}
 							addr addr-len)])
 				(cond
 					[(= -1 n) 
-						(ffi-raise/unless 'receive-from-socket 'recvfrom 
+						(socket-raise/unless 'receive-from-socket 'recvfrom 
 							$error-again $error-would-block)]
 					[(negative? n)
 						(error 'receive-from-socket 
@@ -1183,7 +1183,7 @@ socket-nonblocking?
 			(if val 
 				($fcntl (socket-fd sock) $file-set-flag $option-non-blocking) 
 				($fcntl (socket-fd sock) $file-set-flag 0)))
-		(ffi-error 'set-socket-nonblocking! 'fcntl)))
+		(socket-error 'set-socket-nonblocking! 'fcntl)))
 
 (define (socket-nonblocking? sock)
 	(not (zero? (fxand $option-non-blocking ($fcntl (socket-fd sock) $file-get-flag 0)))))
@@ -1206,7 +1206,16 @@ socket-nonblocking?
 ($option-non-blocking fixnum "int" "O_NONBLOCK")
 @
 
-\chapter{Handling FFI Errors}
+\chapter{Handling Socket Errors}
+
+<<Exports>>=
+make-socket-condition socket-condition?
+socket-condition-who 
+socket-condition-syscall
+socket-condition-type
+socket-condition-message
+make-socket-condition/current-errno
+@
 
 Most of the underlying system calls in this library signal an error with some value and 
 then set [[errno]]. Most of these errors should be raised, but on system calls that could 
@@ -1268,10 +1277,14 @@ errno errno-msg
 @
 
 For functions that want to raise an error regardless of the return type, they can use 
-[[ffi-error]].
+[[socket-error]].
+
+<<Exports>>=
+socket-error socket-raise/unless
+@
 
 <<Code>>=
-(define (ffi-error who call)
+(define (socket-error who call)
 	(raise (make-socket-condition/current-errno who call)))
 
 @
@@ -1280,7 +1293,7 @@ Some functions, however, may want to return the conditions instead of raising th
 error. The following provides this functionality.
 
 <<Code>>=
-(define (ffi-raise/unless who call . vals)
+(define (socket-raise/unless who call . vals)
 	(let ([cnd (make-socket-condition/current-errno who call)])
 		(if (memv (socket-condition-type cnd) vals) cnd (raise cnd))))
 
