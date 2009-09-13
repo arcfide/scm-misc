@@ -1,0 +1,10 @@
+win scheme
+
+make sockets.sls
+make sockets/socket-ports.chezscheme.sls
+make sockets/socket-ports.sls
+make ev.scm
+make modlisp.sls
+
+(import (arcfide ffi-bind parameters))
+(ffi-build-path "/home/arcfide/code/tmp_build")
