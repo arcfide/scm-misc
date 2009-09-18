@@ -1,0 +1,88 @@
+\title{Building applications}
+
+\chapter{Introduction}%
+This [[build-program]] procedure takes a set of library specifications and file paths
+and builds them in the order that they are listed. It builds them into a single directory.
+It then concatenates them into the final output program.
+
+\chapter{Implementation}
+
+<<Code>>=
+(define (build-program outfile dir inputs)
+	(define (build-file in)
+		(let* (
+				[file (resolve in)] 
+				[out (path->string dir (string-append (path-root (path-last file)) ".so"))])
+			(compile-file file out)
+			out))
+	(let* (
+			[outs (collect-list (for in (in-list inputs)) (build-file in))]
+			[cmd (format "cat ~{'~a' ~}> '~a'" outs outfile)])
+		(printf "~a~%" cmd)
+		(system cmd)))
+
+@
+
+\noindent We resolve the input paths using the standard library searching mechanism.
+
+<<Code>>=
+(define (resolve spec)
+	(cond
+		[(pair? spec) (resolve (apply path->string spec))]
+		[(string? spec) (find-file spec)]
+		[else (error 'resolve "Unknown input type" spec)]))
+
+(define (find-file spec)
+	(let path-loop ([paths (library-directories)])
+		(if (pair? paths)
+			(let ext-loop ([exts (cons "" (library-extensions))])
+				(if (pair? exts)
+					(let ([test-path (path->string (car paths) (string-append spec (car exts)))])
+						(if (and (file-exists? test-path) (file-regular? test-path))
+							test-path
+							(ext-loop (cdr exts))))
+					(path-loop (cdr paths))))
+			(error 'find-file "failed to find spec" spec))))						
+
+(define (path->string . path)
+	(format (string-append "~{~a~^" (string (directory-separator)) "~}") path))
+
+@
+
+\chapter{R6RS Library Form}
+
+<<building.sls>>=
+<<License>>
+
+(library (arcfide building)
+	(export build-program)
+	(import (chezscheme) (riastradh foof-loop))
+
+<<Code>>
+
+)
+@
+
+\chapter{License}
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Building Conveniences for Chez Scheme
+;;; Version: 1
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@
