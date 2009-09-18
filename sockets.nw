@@ -900,6 +900,10 @@ and the address as its return values.
   (foreign-procedure "accept" (fixnum string string) fixnum))
 @
 
+<<FFI Headers>>=
+<errno.h>
+@
+
 <<FFI Constants>>=
 ($error-again fixnum "int" "EAGAIN")
 ($error-would-block fixnum "int" "EWOULDBLOCK")
@@ -1249,13 +1253,7 @@ errno errno-msg
 @
 
 <<Code>>=
-(define (errno)
-	(define (bit-size)
-		(case size-of/integer
-			[(4) 'integer-32]
-			[(8) 'integer-64]
-			[else (error 'errno "Can't determine sizeof(int)")]))
-	(#%$peek (bit-size) $errno-ptr 0))
+(define	errno (foreign-procedure "get_errno" () int))
 
 (define (errno-msg num)
 	($strerror num))
@@ -1265,15 +1263,6 @@ errno errno-msg
 <<FFI Procedures>>=
 (define $strerror 
 	(foreign-procedure "strerror" (fixnum) string))
-@
-
-<<FFI Headers>>=
-<errno.h>
-<string.h>
-@
-
-<<FFI Constants>>=
-($errno-ptr iptr "int *" "&errno")
 @
 
 For functions that want to raise an error regardless of the return type, they can use 
