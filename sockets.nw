@@ -35,6 +35,7 @@ and possible improvements.
 \orderedlist
 \li Sockets Options
 \li Clean up the handling of structures by abstracting and specializing
+\li Better Errno handling
 \li Consider IP field name replaced with ADDRESS
 \li Consider name change of RECEIVE-FROM-SOCKET
 \li Consider name change of ACCEPT-SOCKET
@@ -68,6 +69,59 @@ return true for
 [[socket-domain?]], [[socket-type?]], and [[socket-protocol?]], respectively. 
 This functionality could be introspected from the field descriptor, but it 
 is more convenient to store this information directly.
+
+\section{Socket Options}%
+Socket options form a hierarchy of depth two that identify different settings 
+for sockets. 
+
+<<Exports>>=
+socket-option? make-socket-option socket-option
+@
+
+<<Datatypes>>=
+(define-record-type socket-option
+	(fields level id valid?)
+	(protocol 
+		(lambda (p) 
+			(case-lambda 
+				[(id valid?)  (p $sol-socket id valid?)] 
+				[(id valid? level) (p level id valid?)]))))
+@
+
+<<FFI Constants>>=
+($sol-socket int "int" "SOL_SOCKET")
+@
+
+\noindent The [[level]] field should be a number identifying the highlevel setting 
+group, and [[id]] should be a number identifying the setting itself, as 
+described in [[getsockopt(2)]]. 
+
+[[valid?]] is a predicate that returns true for valid setting values, and false otherwise. 
+
+[[make-socket-option]] called without a level will default to a socket api level option, 
+otherwise it expects a proper option level. 
+
+We currently define child option types for the protocols [[tcp(7)]], [[udp(7)]], and [[raw(7)]]. 
+
+<<Exports>>=
+make-tcp-option make-udp-option make-raw-option
+tcp-option? udp-option? raw-option?
+@
+
+<<Socket Options>>=
+(define (option-maker n proto)
+	(let ([proto (socket-constant-value (get-protocol-by-name proto))])
+		(lambda (id valid?) ((n id valid? proto)))))
+(define-record-type tcp-option 
+	(parent socket-option)
+	(protocol (lambda (n) (option-maker n "tcp"))))
+(define-record-type udp-option
+	(parent socket-option)
+	(protocol (lambda (n) (option-maker n "udp"))))
+(define-record-type raw-option
+	(parent socket-option)
+	(protocol (lambda (n) (option-maker n "raw"))))
+@
 
 \section{Socket Addresses}
 
@@ -1167,6 +1221,19 @@ This is a procedure for accessing the [[SOMAXCONN]] value.
 
 <<FFI Constants>>=
 (%somaxconn fixnum "int" "SOMAXCONN")
+@
+
+\procsig{[[get-socket-option]]}{\var{socket} \var{socket option}}{\var{value}}
+
+<<Exports>>=
+;get-socket-option
+@
+
+\noindent Correlates to the use of [[getsockopt(2)]], but with a slightly different interface. 
+See the above chapter on Socket Options for the format of socket options. 
+
+<<Code>>=
+<<Socket Options>>
 @
 
 \chapter{Blocking Sockets}%
