@@ -776,6 +776,8 @@ socket-protocol/auto
 
 @
 
+For protocol entries, we expect the value to be a protocol constant. 
+
 <<Datatypes>>=
 (define-record-type protocol-entry (fields name aliases value))
 @
@@ -801,6 +803,9 @@ open-protocol-database
 close-protocol-database
 @
 
+Each of the general protocol retreival functions that utilize [[foreign->protocol-entry]] 
+will return false when they are at the end of the protocols database or if there was an error. 
+
 <<Constants>>=
 (define (next-protocol-entry)
   (foreign->protocol-entry ($getprotoent)))
@@ -818,6 +823,11 @@ close-protocol-database
 
 Converting the C structure to the [[protocol-entry]] form 
 is performed by the following function [[foreign->protocol-entry]].
+All of the foreign converters here expect pointers.
+
+{\it XXX: this should really be abstracted into a general structure 
+introspection library so that each implementation can handle this 
+in its own way.}
 
 <<Constants>>=
 (define (protoent-name x) (+ x protoent/name-offset))
@@ -839,15 +849,20 @@ is performed by the following function [[foreign->protocol-entry]].
     ($memcpy v x size-of/pointer)
     (bytevector-uint-ref v 0 (native-endianness) size-of/pointer)))
 
+@
+
+\noindent The explicit check for the null pointer return takes place below. 
+
+<<Constants>>=
 (define (foreign->protocol-entry x)
-  (make-protocol-entry
-    (foreign->string (foreign->pointer (protoent-name x)))
-    (collect-list 
-      ([for i  (up-from (foreign->pointer (protoent-aliases x))
-                        (by size-of/pointer))]
-       [until (zero? ($strlen i))])
-      (foreign->string (foreign->pointer i)))
-    (make-socket-protocol (foreign->integer (protoent-value x)))))
+	(if (zero? x) #f
+		(make-protocol-entry
+			(foreign->string (foreign->pointer (protoent-name x)))
+			(collect-list (
+					[for i  (up-from (foreign->pointer (protoent-aliases x)) (by size-of/pointer))]
+       				[until (zero? ($strlen i))])
+				(foreign->string (foreign->pointer i)))
+				(make-socket-protocol (foreign->integer (protoent-value x))))))
 
 @
 
