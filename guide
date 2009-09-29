@@ -1,6 +1,7 @@
 win scheme
 
 make sockets.sls
+make sockets.tex
 make sockets/socket-ports.chezscheme.sls
 make sockets/socket-ports.sls
 make ev.scm
