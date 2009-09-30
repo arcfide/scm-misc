@@ -1,5 +1,5 @@
 FILES=extended-definitions.sls modlisp.sls sockets.sls swap.sls base64.sls ffi-bind.sls \
-	parser-util.sls rfc2822.sls mime.sls
+	parser-util.sls rfc2822.sls mime.sls errno.sls
 
 .SUFFIXES: .so .sls .ss .scm .tex .nw
 
