@@ -5,14 +5,24 @@ This [[build-program]] procedure takes a set of library specifications and file 
 and builds them in the order that they are listed. It builds them into a single directory.
 It then concatenates them into the final output program.
 
-\chapter{Implementation}
+\chapter{Implementation}%
+The output file should include the desired extension. 
 
 <<Code>>=
 (define (build-program outfile dir inputs)
+	(define (tmp-outfile in)
+		(cond 
+			[(pair? in) (string-append (apply path->string (cons dir in)) ".so")]
+			[(string? in) (path->string dir (string-append in ".so"))]
+			[else (error 'build-program "unknown input type" in)]))
 	(define (build-file in)
 		(let* (
 				[file (resolve in)] 
-				[out (path->string dir (string-append (path-root (path-last file)) ".so"))])
+				[out (tmp-outfile in)])
+			(let loop ([path (path-parent out)])
+				(unless (file-exists? path)
+					(loop (path-parent path))
+					(mkdir path)))
 			(compile-file file out)
 			out))
 	(let* (
