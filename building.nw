@@ -13,7 +13,7 @@ The output file should include the desired extension.
 	(define (tmp-outfile in)
 		(cond 
 			[(pair? in) (string-append (apply path->string (cons dir in)) ".so")]
-			[(string? in) (path->string dir (string-append in ".so"))]
+			[(string? in) (path->string dir (string-append (path-root in) ".so"))]
 			[else (error 'build-program "unknown input type" in)]))
 	(define (build-file in)
 		(let* (
