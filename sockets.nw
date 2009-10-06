@@ -86,6 +86,7 @@ socket-option? make-socket-option socket-option
 			(case-lambda 
 				[(id size maker converter)  (p $sol-socket id size maker converter)] 
 				[(id size maker converter level) (p level id size maker converter)]))))
+
 @
 
 <<FFI Constants>>=
@@ -111,7 +112,6 @@ tcp-option? udp-option? raw-option? ip-option?
 @
 
 <<Datatypes>>=
-
 (define-syntax define-socket-option-type
 	(syntax-rules ()
 		[(_ name level)
@@ -141,26 +141,47 @@ The following are some predefined socket options.
 		{\bf Name: } #2\hfil\break
 		{\bf Valid Domain:} #3\medskip}}
 
-\sockopt{API}{[[socket-option/listening?]]}{Boolean}
+\sockopt{API}{[[socket-option/listening]]}{Boolean}
 
 <<Exports>>=
-socket-option/listening?
+socket-option/listening
 @
 
 <<Code>>=
-(define socket-option/listening?
-	(make-socket-option $so-acceptconn 1
-		(lambda (x) 
-			(if x (bytevector 1) (bytevector 0)))
-		(lambda (x len)
-			(not (zero? (bytevector-uint-ref x 0 (native-endianness) len))))))
+(define size-of/boolean 1)
+
+(define (boolean->foreign x)
+	(if (x) (bytevector 1) (bytevector 0)))
+
+(trace-define (foreign->boolean x len)
+	(not (zero? (bytevector-uint-ref x 0 (native-endianness) len))))
+
+(define socket-option/listening
+	(make-socket-option $so-acceptconn size-of/boolean
+		boolean->foreign foreign->boolean))
+
 @
 
 <<FFI Constants>>=
 ($so-acceptconn int "int" "SO_ACCEPTCONN")
 @
 
-\sockopt{
+\sockopt{API}[[socket-option/broadcast]]}{Boolean}
+
+<<Exports>>=
+socket-option/broadcast
+@
+
+<<Code>>=
+(define socket-option/broadcast
+	(make-socket-option $so-broadcast size-of/boolean
+		boolean->foreign foreign->boolean))
+
+@
+
+<<FFI Constants>>=
+($so-broadcast int "int" "SO_BROADCAST")
+@
 
 \section{Socket Addresses}
 
