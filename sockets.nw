@@ -148,12 +148,14 @@ socket-option/listening
 @
 
 <<Code>>=
-(define size-of/boolean 1)
+(define size-of/boolean size-of/integer)
 
 (define (boolean->foreign x)
-	(if (x) (bytevector 1) (bytevector 0)))
+	(let ([buf (make-bytevector size-of/boolean 0)])
+		(when x (bytevector-sint-set! buf 0 1 (native-endianness) size-of/boolean))
+		buf))
 
-(trace-define (foreign->boolean x len)
+(define (foreign->boolean x len)
 	(not (zero? (bytevector-uint-ref x 0 (native-endianness) len))))
 
 (define socket-option/listening
@@ -166,7 +168,7 @@ socket-option/listening
 ($so-acceptconn int "int" "SO_ACCEPTCONN")
 @
 
-\sockopt{API}[[socket-option/broadcast]]}{Boolean}
+\sockopt{API}{[[socket-option/broadcast]]}{Boolean}
 
 <<Exports>>=
 socket-option/broadcast
@@ -1333,6 +1335,38 @@ See the above chapter on Socket Options for the format of socket options.
 
 <<FFI Constants>>=
 (size-of/socklen-t int "int" "sizeof(socklen_t)")
+@
+
+\procsig{[[set-socket-option!]]}{\var{socket} \var{socket option} \var{value}}{}
+
+<<Exports>>=
+set-socket-option!
+@
+
+\noindent Sets the \var{socket option} of the given \var{socket} to \var{value}. See 
+[[setsockopt(2)]] for more information. The interface is more Schemely, but the overall 
+approach is the same. 
+
+<<Code>>=
+(define (set-socket-option! sock opt val)
+	(call-with-errno
+		(lambda ()
+			(let ([buf ((socket-option-foreign-maker opt) val)])
+				($setsockopt
+					(socket-fd sock)
+					(socket-option-level opt)
+					(socket-option-id opt)
+					buf (bytevector-length buf))))
+		(lambda (ret err)
+			(when (negative? ret)
+				(socket-error 'set-socket-option! 'setsockopt err))
+			(void))))
+
+@
+
+<<FFI Procedures>>=
+(define $setsockopt
+	(foreign-procedure "setsockopt" (int int int string int) int))
 @
 
 \chapter{Blocking Sockets}%
