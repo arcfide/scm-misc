@@ -100,14 +100,15 @@ described in [[getsockopt(2)]].
 [[make-socket-option]] called without a level will default to a socket api level option, 
 otherwise it expects a proper option level. 
 
-We currently define child option types for the protocols [[tcp(7)]], [[udp(7)]], and [[raw(7)]]. 
-I have added the ip option as well become ip options are often applicable to 
-the above. 
+\procsig{[[define-socket-option-type]]}{\var{name} \var{level}}{}
 
 <<Exports>>=
-make-tcp-option make-udp-option make-raw-option make-ip-option
-tcp-option? udp-option? raw-option? ip-option?
+define-socket-option-type
 @
+
+\noindent Defines a new specific socket-option type with a given \var{level}, which should 
+be an integer as detailed in [[setsockopt(2)]]. We use this to define some basic 
+socket option levels. This will bind [[name]], [[make-name]], and [[name?]].
 
 <<Datatypes>>=
 (define-syntax define-socket-option-type
@@ -116,6 +117,18 @@ tcp-option? udp-option? raw-option? ip-option?
 			(define-record-type name (parent socket-option)
 				(protocol (lambda (n) (lambda (id size maker converter) ((n id size maker converter level))))))]))
 
+@
+
+\noindent We currently define child option types for the protocols [[tcp(7)]], [[udp(7)]], and [[raw(7)]]. 
+I have added the ip option as well because ip options are often applicable to 
+the above. 
+
+<<Exports>>=
+make-tcp-option make-udp-option make-raw-option make-ip-option
+tcp-option? udp-option? raw-option? ip-option? 
+@
+
+<<Datatypes>>=
 (define-socket-option-type tcp-option $ipproto-tcp)
 (define-socket-option-type udp-option $ipproto-udp)
 (define-socket-option-type raw-option $ipproto-raw)
