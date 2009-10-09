@@ -33,9 +33,7 @@ The following is a development to-do list of intended features
 and possible improvements.
 
 \orderedlist
-\li Sockets Options
 \li Clean up the handling of structures by abstracting and specializing
-\li Better Errno handling
 \li Consider IP field name replaced with ADDRESS
 \li Consider name change of RECEIVE-FROM-SOCKET
 \li Consider name change of ACCEPT-SOCKET
@@ -130,59 +128,6 @@ tcp-option? udp-option? raw-option? ip-option?
 ($ipproto-udp int "int" "IPPROTO_UDP")
 ($ipproto-raw int "int" "IPPROTO_RAW")
 ($ipproto-ip int "int" "IPPROTO_IP")
-@
-
-\subsection{Predefined Socket Options}%
-The following are some predefined socket options.
-
-\def\sockopt#1#2#3{%
-	{\medskip\noindent
-		{\bf Family/Level:} #1\hfil\break
-		{\bf Name: } #2\hfil\break
-		{\bf Valid Domain:} #3\medskip}}
-
-\sockopt{API}{[[socket-option/listening]]}{Boolean}
-
-<<Exports>>=
-socket-option/listening
-@
-
-<<Code>>=
-(define size-of/boolean size-of/integer)
-
-(define (boolean->foreign x)
-	(let ([buf (make-bytevector size-of/boolean 0)])
-		(when x (bytevector-sint-set! buf 0 1 (native-endianness) size-of/boolean))
-		buf))
-
-(define (foreign->boolean x len)
-	(not (zero? (bytevector-uint-ref x 0 (native-endianness) len))))
-
-(define socket-option/listening
-	(make-socket-option $so-acceptconn size-of/boolean
-		boolean->foreign foreign->boolean))
-
-@
-
-<<FFI Constants>>=
-($so-acceptconn int "int" "SO_ACCEPTCONN")
-@
-
-\sockopt{API}{[[socket-option/broadcast]]}{Boolean}
-
-<<Exports>>=
-socket-option/broadcast
-@
-
-<<Code>>=
-(define socket-option/broadcast
-	(make-socket-option $so-broadcast size-of/boolean
-		boolean->foreign foreign->boolean))
-
-@
-
-<<FFI Constants>>=
-($so-broadcast int "int" "SO_BROADCAST")
 @
 
 \section{Socket Addresses}
