@@ -18,4 +18,4 @@ ffi-bind-param:
 
 .nw.tex:
 	mkdir -p doc
-	noweave -tex -t2 $< > doc/$@
+	noweave -tex -t2 $< > doc/$(subst /,_,$@)
