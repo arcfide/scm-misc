@@ -412,7 +412,7 @@ internet-socket-address.
 get-address-info
 @
 
-Corresponds to [[getaddrinfo(2)]]. The optional domain, type, and protocol 
+Corresponds to [[getaddrinfo(3)]]. The optional domain, type, and protocol 
 may be false or may correspond to some form of socket options. They are 
 used as hints for [[get-address-info]] in the same manner as the 
 corresponding hints structure for [[getaddrinfo(2)]]. The flags also 
@@ -446,9 +446,9 @@ work in the same way, but they must all be values for which
 
 <<FFI Procedures>>=
 (define $getaddrinfo
-  (foreign-procedure "getaddrinfo" (string string string string) fixnum))
+  (foreign-procedure "getaddrinfo" (string string string string) int))
 (define $gai_strerror
-  (foreign-procedure "gai_strerror" (fixnum) string))
+  (foreign-procedure "gai_strerror" (int) string))
 @
 
 There are a few built in address info options.
