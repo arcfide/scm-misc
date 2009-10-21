@@ -1,0 +1,703 @@
+\title{Authorize.Net ARB for Scheme}
+
+\chapter{Overview}%
+This library provides a Schemely programmatic interface to the Authorize.net ARB API. 
+It alleviates the programmer's need to write XML directly in their code and is simpler to 
+use than SOAP. The library is composed of a type hierarchy for the requests that do 
+verification and a few procedures to send commands to the API server.
+
+\chapter{Datatype Hierarchy}%
+Each element is a child of the [[authnet-arb-elem]] record. The benefits of the ARB format 
+is that it does not take very strong advantage of XML element attributes. That means that 
+each element really needs only a name and its contents. The exception is the root nodes 
+used for each of the subscription requests. Each field takes a static number of values, 
+some of which may be optional. 
+
+To represent this idea, [[authnet-arb-elem]] has a [[name]] field and a [[contents]] field, 
+which should be a list of the contents in the element. 
+
+<<Datatypes>>=
+<<Verifier>>
+
+(define-record-type authnet-arb-elem
+	(fields name contents))
+@
+
+\section{Verifying Fields}%
+Every element should verify its contents on creation. Verifying is done by taking a list 
+of fields which are perported to be valid contents for the field, and a list of verifiers 
+in the same order as the fields should arrive. The list of verifiers has the form 
+[[((verifier required?) ...)]]. We test each field in turn, and fail if we ever fail to verify 
+a field with a verifier and that verifier is not marked as optional. 
+
+<<Verifier>>=
+(define (validate-fields name fields verifiers)
+	(cond
+		[(null? fields) (void)]
+		[(null? verifiers) (error name "too many fields passed to record constructor" fields)]
+		[(not ((caar verifiers) (car fields)))
+			(when (cdar verifiers) (error name "invalid field" (car fields)))
+			(validate-fields name fields (cdr verifiers))]
+		[else (validate-fields name (cdr fields) (cdr verifiers))]))
+@
+
+\section{Defining ARB Element Types}%
+Each element that is created should verify its input when the constructor is called. 
+It should store its input into the [[contents]] field as a list. In order to aid the definition 
+of these types, the follow macro allows new element types to be defined as follows:
+
+\medskip
+\verbatim
+(define-arb-elem-type <name> <elem-string> <field-spec> ...)
+|endverbatim
+\medskip
+
+\noindent Where [[<name>]] is an identifier which will be the record type, 
+and [[<field-spec>]] is one of [[(optional <field-verifier>)]] for optional fields, 
+and [[<field-verifier>]] for required fields. [[<elem-string>]] is the actual 
+string representation of the element when printed. 
+The form will expand into the following 
+definition.
+
+\medskip
+\verbatim
+(define-record-type <name>
+	(parent authnet-arb-elem)
+	(protocol
+		(lambda (n)
+			(lambda fields
+				(validate-fields '<name> fields (list (<verifier> . <required?>) ...))
+				((n <elem-string> fields))))))
+|endverbatim
+\medskip
+
+\noindent For every element type we create, we define a custom protocol that 
+calls [[validate-fields]] on its input to decide whether the fields are valid fields. 
+We use [[make-spec-pairs]] to generate the appropriate specification pairs for 
+this call. 
+
+<<Datatypes>>=
+(define-auxilary-keywords optional)
+
+(define-syntax make-spec-pairs
+	(syntax-rules (optional)
+		[(_ (optional verifier)) (list (cons verifier #f))]
+		[(_ verifier) (list (cons verifier #t))]
+		[(_ (optional verifier) rest ...)
+			(cons (cons verifier #f) (make-spec-pairs rest ...))]
+		[(_ verifier rest ...)
+			(identifier? #'verifier)
+			(cons (cons verifier #t) (make-spec-pairs rest ...))]))
+@
+
+\noindent For the update requests, all fields are considered optional, so instead of 
+defining brand new types for these fields, a special option is defined for 
+constructors. When the first argument to an element constructor is a boolean, 
+we use this to determine whether to consider all fields as optional or not. 
+If the first argument is a true boolean, therefore, we assume that all the fields are 
+optional. This works because a boolean should never be a valid field value. 
+
+We use [[with-all-optional]] to change all of the non-optional specifications in 
+the element type declaration to optional declarations and pass those new forms 
+to [[make-spec-pairs]] instead.
+
+<<Datatypes>>=
+(define-syntax with-all-optional
+	(syntax-rules ()
+		[(_ finish spec1 spec2 ...) (%with-all-optional finish () (spec1 spec2 ...))]))
+
+(define-syntax %with-all-optional
+	(syntax-rules (optional)
+		[(_ finish (new-specs ...) ())
+			(finish new-specs ...)]
+		[(_ finish (new-specs ...) ((optional spec1) rest ...))
+			(%with-all-optional finish (new-specs ... (optional spec1)) (rest ...))]
+		[(_ finish (new-specs ...) (spec rest ...))
+			(%with-all-optional finish (new-specs ... (optional spec)) (rest ...))]))
+@
+
+\noindent The actual [[define-elem-type]] macro just expands to a straightforward 
+record definition. The protocol checks for the boolean and changes the validation 
+call accordingly. Note that no new fields are ever created explicitely as record fields; 
+fields of a new element are just a list of these elements. 
+
+<<Datatypes>>=
+(define-syntax define-elem-type
+	(syntax-rules ()
+		[(_ name elem-str spec ...)
+			(identifier? #'name)
+			(define-record-type name (parent authnet-arb-elem)
+				(protocol
+					(lambda (n)
+						(lambda args
+							(let-values ([(all-opt? fields) 
+												(if (boolean? (car args)) 
+													(values (car args) (cdr args))
+													(values #f args))])
+								(validate-fields 'name fields
+									(if all-opt?
+										(with-all-optional make-spec-pairs spec ...)
+										(make-spec-pairs spec ...)))
+								((n elem-str fields)))))))]))
+@
+
+\section{Authentication Elements}%
+The following elements specify authentication information to the ARB server.
+
+<<Datatypes>>=
+(define-elem-type merchant-authentication "merchantAuthentication"
+	merchant-auth-name? merchant-auth-trans-key?)
+
+(define-elem-type merchant-auth-name "name"
+	(lambda (x) (and (string? x) (>= 25 (string-length x)))))
+
+(define-elem-type merchant-auth-trans-key "transactionKey"
+	(lambda (x) (and (string? x) (= 16 (string-length x)))))
+@
+
+\section{Subscription Creation Elements}%
+These elements are used in the [[ARBCreateSubscriptionRequest]] calls. 
+They are also used in the Update section below.
+
+<<Datatypes>>=
+(define-elem-type arb-create-subscription-request "ARBCreateSubscriptionRequest"
+	merchant-authentication?
+	(optional refid?)
+	subscription?)
+@
+
+\noindent The reference id is a merchant/user level id that is created 
+by the merchant. It is included in the response if it is included in the request.
+It uniquely identifies the given request. Useful for multi-threaded applications.
+
+<<Datatypes>>=
+(define-elem-type refid "refId"
+	(lambda (x) (and (string? x) (>= 20 (string-length x)))))
+@
+
+\noindent [[subscription]] elements are the basic element that contains all 
+the subscription information.
+
+<<Datatypes>>=
+(define-elem-type subscription "subscription"
+	(optional name?)
+	payment-schedule?
+	amount?
+	(optional trial-amount?)
+	payment?
+	(optional order?)
+	customer?
+	bill-to?
+	(optional ship-to?))
+@
+
+\noindent Name is a human-readable, merchant-assigned, and optional 
+field.
+
+<<Datatypes>>=
+(define-elem-type name "name"
+	(lambda (x) (and (string? x) (>= 50 (string-length x)))))
+@
+
+\noindent [[payment-schedule]] elements indicate when to start charging 
+and for how long.
+
+<<Datatypes>>=
+(define-elem-type payment-schedule "paymentSchedule"
+	interval?
+	start-date?
+	total-occurances?
+	(optional trial-occurances?))
+@
+
+\noindent An [[interval]] element specifies a specific time duration 
+in either months or days. The range of the duration for months is 
+1 -- 12 and the range for days 7 -- 365. 
+
+<<Datatypes>>=
+(define-elem-type interval "interval"
+	length?
+	unit?)
+
+(define-elem-type length "length"
+	(lambda (x) (and (integer? x) (<= 1 x 365))))
+
+(define-elem-type unit "unit"
+	(lambda (x) (and (symbol? x) (or (eq? 'months x) (eq? 'days x)))))
+@
+
+\noindent [[start-date]] indicates when the first bill should be assessed 
+on the account. This must be greater than or equal to the date the 
+subscription is created. The dates all must be specified relative to the 
+server time, which is Standard Mountain time.
+
+<<Datatypes>>=
+(define-elem-type start-date "startDate"
+	(lambda (x)
+		(and (string? x)
+			(= 10 (string-length x))
+			(char=? #\- (string-ref x 5))
+			(char=? #\- (string-ref x 8))
+			(for-all char-numeric? (substring x 0 4))
+			(for-all char-numeric? (substring x 5 7))
+			(for-all char-numeric? (substring x 8 10)))))
+@
+
+\noindent [[total-occurances]] is used to indicate how many times the 
+client should be billed. This should include trial occurances. If the 
+billing should continue indefinitely, the maximum value of 9999 should 
+be used.
+
+<<Datatypes>>=
+(define-elem-type total-occurances "totalOccurances"
+	(lambda (x) (and (integer? x) (<= 1 x 9999))))
+@
+
+\noindent [[trial-occurances]] elements specify a value no greater than 99 
+indicating the number of trial billing cycles the system should execute 
+before actually billing the customer. Trial cycles are not charged.
+
+<<Datatypes>>=
+(define-elem-type trial-occurances "trialOccurances"
+	(lambda (x) (and (integer? x) (<= 1 x 99))))
+@
+
+\noindent The [[amount]] element specifies the amount to bill the customer 
+every billing cycle.
+
+<<Datatypes>>=
+(define-elem-type amount "amount"
+	(lambda (x) (and (real? x) (<= 0.01 x 999999999999.99))))
+@
+
+\noindent If you want to charge a specific amount during the trial 
+period, you can use the [[trial-amount]] element.
+
+<<Datatypes>>=
+(define-elem-type trial-amount "trialAmount"
+	(lambda (x) (and (real? x) (<= 0.01 x 999999999999.99))))
+@
+
+\noindent [[payment]] elements specify how the customer will be charged. 
+The payment element may contain either credit card information or 
+bank account information, using [[credit-card]] and [[bank-account]] 
+elements, respectively, but not both.
+
+<<Datatypes>>=
+(define-elem-type payment "payment"
+	(lambda (x) (or (credit-card? x) (bank-account? x))))
+@
+
+\noindent Credit card payments are specified using [[credit-card]] elements. 
+They take the usual number, expiration date, and CSV code, if desired.
+
+<<Datatypes>>=
+(define-elem-type credit-card "creditCard"
+	card-number?
+	expiration-date?
+	(optional card-code?))
+
+(define-elem-type card-number "cardNumber"
+	(lambda (x) (and (string? x) (for-all char-numeric? (string->list x)))))
+
+(define-elem-type expiration-date "expirationDate"
+	(lambda (x)
+		(and (string? x)
+			(= 7 (string-length x))
+			(char=? #\- (string-ref x 4))
+			(for-all char-numeric? (string->list (substring x 0 4)))
+			(for-all char-numeric? (string->list (substring x 5 7))))))
+
+(define-elem-type card-code "cardCode"
+	(lambda (x)
+		(and (string? x)
+			(<= 3 (string-length x) 4)
+			(for-all char-numeric? (string->list x)))))
+@
+
+\noindent Bank account information is specified by [[bank-account]] 
+elements. Beware that it is possible to generate invalid elements using 
+the checks below, even in fully safe mode. This is because some of the 
+values below rely on other values being set to something. Our checking 
+system does not check that these elements are all cohesive, but only 
+checks whether they could potentially be valid. 
+
+<<Datatypes>>=
+(define-elem-type bank-account "bankAccount"
+	account-type?
+	routing-number?
+	account-number?
+	name-on-account?
+	e-check-type?
+	(optional bank-name?))
+
+(define-elem-type account-type "accountType"
+	(lambda (x)
+		(and (symbol? x)
+			(or 
+				(eq? 'checking x)
+				(eq? '|businessChecking| x)
+				(eq? 'savings x)))))
+
+(define-elem-type routing-number "routingNumber"
+	(lambda (x) 
+		(and (string? x) (= 9 (string-length x))
+			(for-all char-numeric? (string->list x)))))
+
+(define-elem-type account-number "accountNumber"
+	(lambda (x)
+		(and (string? x) (<= 5 (string-length x) 17)
+			(for-all char-numeric? (string->list x)))))
+
+(define-elem-type name-on-account "nameOnAccount"
+	(lambda (x) (and (string? x) (>= 22 (string-length x)))))
+
+(define-elem-type e-check-type "echeckType"
+	(lambda (x)
+		(and (symbol? x)
+			(or 
+				(eq? '|PPD| x)
+				(eq? '|WEB| x)
+				(eq? '|CCD| x)))))
+
+(define-elem-type bank-name "bankName"
+	(lambda (x) (and (string? x) (>= 50 (string-length x)))))
+@
+
+\noindent [[order]] elements specify optional information about 
+the order. 
+
+<<Datatypes>>=
+(define-elem-type order "order"
+	(optional invoice-number?)
+	(optional description?))
+
+(define-elem-type invoice-number "invoiceNumber"
+	(lambda (x) (and (integer? x) (<= x 99999999999999999999))))
+
+(define-elem-type description "description"
+	(lambda (x) (and (string? x) (>= 255 (string-length x)))))
+@
+
+\noindent Additional information about the customer is placed in 
+[[customer]] elements.
+
+<<Datatypes>>=
+(define-elem-type customer "customer"
+	(optional id?)
+	(optional email?)
+	(optional phone-number?)
+	(optional fax-number?))
+
+(define-elem-type id "id"
+	(lambda (x) (and (string? x) (>= 20 (string-length x)))))
+
+(define-elem-type email "email"
+	(lambda (x) (and (string? x) (>= 255 (string-length x)))))
+@
+
+\noindent We make specific elements for both phone and fax 
+numbers because these will show up as two distinct elements 
+in the final XML, even though they are the same thing.
+
+<<Datatypes>>=
+(define-elem-type phone-number "phoneNumber"
+	(lambda (x) 
+		(and (string? x) (>= 25 (string-length x))
+			(for-all char-numberic? (string->list x)))))
+
+(define-elem-type fax-number "faxNumber"
+	(lambda (x) 
+		(and (string? x) (>= 25 (string-length x))
+			(for-all char-numberic? (string->list x)))))
+@
+
+\noindent Billing and Shipping take the same information, 
+but are used for different purposes. 
+
+<<Datatypes>>=
+(define-elem-type bill-to "billTo"
+	first-name?
+	last-name?
+	(optional company?)
+	(optional address?)
+	(optional city?)
+	(optional state?)
+	(optional zip?)
+	(optional country?))
+
+(define-elem-type ship-to "shipTo"
+	first-name?
+	last-name?
+	company?
+	address?
+	city?
+	state?
+	zip?
+	country?)
+@
+
+\noindent These types are the child elements of 
+[[bill-to]] and [[ship-to]] elements.
+
+<<Datatypes>>=
+(define-elem-type first-name "firstName"
+	(lambda (x) (and (string? x) (>= 50 (string-length x)))))
+
+(define-elem-type last-name "lastName"
+	(lambda (x) (and (string? x) (>= 50 (string-length x)))))
+
+(define-elem-type company "company"
+	(lambda (x) (and (string? x) (>= 50 (string-length x)))))
+
+(define-elem-type address "address"
+	(lambda (x) (and (string? x) (>= 60 (string-length x)))))
+
+(define-elem-type city "city"
+	(lambda (x) (and (string? x) (>= 40 (string-length x)))))
+
+(define-elem-type state "state"
+	(lambda (x)
+		(and (string? x) (= 2 (string-length x))
+			(member x
+				'("AL" "AK" "AZ" "AR" "CA" "CO" "CT"
+					"DE" "DC" "FL" "GA" "HI" "ID"
+					"IL" "IN" "IA" "KS" "KY" "LA"
+					"ME" "MD" "MA" "MI" "MN" "MS"
+					"MO" "MT" "NE" "NV" "NH" "NJ"
+					"NM" "NY" "NC" "ND" "OH" "OK"
+					"OR" "PA" "RI" "SC" "SD" "TN" "TX"
+					"UT" "VT" "VA" "WA" "WV" "WI" "WY")))))
+
+(define-elem-type zip "zip"
+	(lambda (x) (and (string? x) (>= 20 (string-length x)))))
+
+(define-elem-type country "country"
+	(lambda (x) (and (string? x) (>= 60 (string-length x)))))
+@
+
+\section{Subscription Update Structures}%
+In addition to the above datatypes defined for the [[ARBCreateSubscriptionRequest]] 
+structure, Creating an update request entails the following:
+
+<<Datatypes>>=
+(define-elem-type arb-update-subscription-request "ARBUpdateSubscriptionRequest"
+	merchant-authentication?
+	subscription-id?
+	(optional refid?)
+	(optional subscription?))
+
+(define-elem-type subscription-id "subscriptionId"
+	(lambda (x) (and (integer? x) (<= 0 x 9999999999999))))
+@
+
+\section{Cancel Subscription Requests}%
+Cancellation requests only have a reference id, a subscription id,
+and merchant authentication information in them.
+
+<<Datatypes>>=
+(define-elem-type arb-cancel-subscription-request "ARBCancelSubscriptionRequest"
+	merchant-authentication?
+	ref-id?
+	subscription-id?)
+@
+
+\section{ARB Responses}%
+Responses consiste of a reference id, a subscription id, a result code, a message code, and message text. 
+Rather than represent these as a hierarchical XML structure like they do in the manual, 
+I represent these as a single return element.
+
+<<Datatypes>>=
+(define-record-type arb-response
+	(fields reference-id subscription-id result-code message-code message-text))
+@
+
+\chapter{Printing Elements}%
+To print out a tree, recursively descend down the tree, printing each element in turn.
+
+<<Element Printer>>=
+(define (arb-print-tree op tree)
+	(assert (authnet-arb-elem? tree))
+	(%print-elem op tree 0))
+
+(define (%print-elem op tree indent-count)
+	(define indent (make-string (* indent-count 2) #\space))
+	(if (authnet-arb-elem? tree)
+		(begin 
+			<<Print ARB Record>>)
+		(begin 
+			<<Print Datum>>)))
+@
+
+\noindent To print ARB Records, print the name in XML form, and then print the contents, 
+followed by the closing tag. 
+
+<<Print ARB Record>>=
+(put-string op indent)
+(put-string op (string-append "<" (authnet-arb-elem-name tree) ">\n"))
+(for-each (lambda (elem) (%print-elem op elem (1+ indent-count)))
+	(authnet-arb-elem-contents tree))
+(put-string op indent)
+(put-string op (string-append "</" (authnet-arb-elem-name tree) ">\n"))
+@
+
+\noindent To print out datum, either print out the string or the datum.
+
+<<Print Datum>>=
+(put-string op indent)
+((if (string? tree) put-string put-datum) op tree)
+(put-char op #\newline)
+@
+
+\chapter{Sending Requests}%
+To send an ARB Request, we make a socket connection to the ARB server, send the request, and 
+parse the incoming results. There are two different ARB URIs, one for debugging, the other for 
+deployment. 
+
+<<ARB Parameters>>=
+<<Definition to test for URI or String>>
+
+(define arb-request-uri
+	(make-parameter (string->uri "http://localhost:8080/xml/v1/request.api")
+		(uri/string-tester 'arb-request-uri)))
+
+(define arb-request-uri/debug
+	(make-parameter (string->uri "http://localhost:8081/xml/v1/request.api")
+		(uri/string-tester 'arb-request-uri/debug)))
+@
+
+\noindent The above parameters should hold URIs, but I allow for their input to be either 
+URI strings or URI objects.
+
+<<Definition to test for URI or String>>=
+(define (uri/string-tester name)
+	(lambda (x)
+		(cond
+			[(uri? x) x]
+			[(string? x) (string->uri x)]
+			[else (errorf name "~s is not a uri or string" x)])))
+@
+
+\noindent It should be easy to specify that we want to test code, rather than run it on the live 
+system.
+
+<<ARB Parameters>>=
+(define arb-test-mode
+	(make-parameter #f
+		(lambda (x)
+			(unless (boolean? x)
+				(error 'arb-test-mode "input is not boolean" x))
+			x)))
+@
+
+\noindent The user should not have to care about this data in general. Instead, they should 
+be able to just submit a command to the server with [[submit-arb-request]]. 
+
+\procsig{[[submit-arb-request]]}{\var{ARB Request}}{\var{ARB Response}}
+
+\noindent Where \var{ARB Request} is one of an Update, Create, or Cancel requests. These 
+requests are created using the data constructors defned above. 
+
+<<Procedure to Submit Requests>>=
+(define (submit-arb-request req)
+	(let-values (
+			[(arb-input arb-output) (connect-to-arb-server)]
+			[(content) (arb-request->string req)])
+		<<Send HTTP Header>>
+		(put-string arb-output content)
+		<<Read ARB Response>>))
+
+<<Definition of connect-to-arb-server>>
+<<Definition of arb-request->string>>
+@
+
+\noindent Normally, ARB Requires an encrypted communication channel. Since we 
+don't yet have a nice SSL library written, I am going to assume that the user can setup 
+something like Stunnel to do the SSL tunneling for us. We'll connect to the host listed 
+in the URL, which we assume to be an unencrypted connection that is tunneled securely 
+to the outside. 
+
+<<Definition of connect-to-arb-server>>=
+(define (connect-to-arb-server)
+	(let (
+			[sock 
+				(create-socket 
+					socket-domain/internet 
+					socket-type/stream 
+					socket-protocol/auto)]
+			[addr (arb-server-address)])
+		(set-socket-nonblocking! sock #f)
+		(connect-socket sock addr)
+		(socket->port sock (buffer-mode block) (make-transcoder (utf-8-codec)))))
+
+<<Definition of arb-server-address>>
+@
+
+\noindent To grab the ARB server address, we grab the hostname 
+from the URI and connect on either the port specified or, by default, 
+port 80. [[arb-server-address]] looks up the domain name and 
+returns an internet socket address suitable for use with [[connect-socket]].
+I default to [[localhost]] and [[8080]] for the host and port if they are not 
+given in the URI, though they should be.
+
+<<Definition of arb-server-address>>=
+(define (arb-server-address)
+	(let ([uri (if (arb-test-mode) (arb-request-uri/debug) (arb-request-uri))])
+		(let ([authority (uri-authority uri)])
+			(let (
+					[host (or (uri-authority-host authority) "localhost")]
+					[port (or (uri-authority-port authority) "8080")])
+				(let (
+						[addresses
+							(get-address-info host port
+								socket-domain/internet
+								socket-type/stream
+								(protocol-entry-value (get-protocol-by-name "tcp")))])
+					(address-info-address (car addresses)))))))
+@
+
+\noindent [[arb-request->string]] takes an ARB request and turns it into a string 
+in the XML representation.
+
+<<Definition of arb-request->string>>=
+(define (arb-request->string request)
+	(with-output-to-string
+		(lambda ()
+			(arb-print-tree (current-output-port) request))))
+@
+
+\noindent We send a standard HTTP 1.1 POST request using an XML content type to 
+the server socket output port, and we post to the path provided by the parameters 
+defined in the [[ARB Parameters]] chunk.
+
+<<Send HTTP Headers>>=
+(format arb-output "~{~?\r\n~}"
+	(let ([uri (if (arb-test-mode) (arb-request-uri/debug) (arb-request-uri))])
+		`("POST ~{~a~^/~} HTTP/1.1"  ,(uri-path uri)
+			"Host: ~a" 
+			,(or (let ([a (uri-authority uri)]) (and a (uri-authority-host a))) "localhost")
+			"User-Agent: Authorize.net for Scheme (ARB)" ()
+			"Content-Type: text/xml" ()
+			"Content-Length: ~d" (,(string-length content))
+			"Connection: close" ()
+			"\r\n" ())))
+@
+
+\noindent For the moment, we read back in the literal values we receive as input.
+
+<<Read ARB Response>>=
+(get-string-all arb-input)
+@
+
+\chapter{File Forms}%
+
+\section{R6RS Form}%
+
+\section{Vanilla File}%
+
+<<arb.scm>>=
+<<Datatypes>>
+
+<<Element Printer>>
+@
+
