@@ -233,9 +233,9 @@ of the sockaddr\_un structure.
         size-of/family)
       (bytevector-copy! opath 0 res size-of/family
         (if (< unix-max-path opath-length)
-            (begin 
-              (warning 'unix-address->foreign "Path truncatation!")
-              unix-max-path)
+            (error 'unix-address->foreign "path length exceeds maximum path length" 
+				opath-length
+				(unix-address-path addr))
             opath-length)))
     res))
 
@@ -343,43 +343,58 @@ Converting back is pretty easy.
 
 @
 
-Normally, people don't like to provide internet addresses in network 
-byte ordered bytevectors. 
-Instead, we have two helper procedures that create the structure for us, 
-and we define procedures to extract the port and address information 
-from the structure.
+\noindent Usually internet addresses are given as a colon delimited ip 
+address string and a port number. [[string->internet-address]] converts 
+this to a proper internet address structure.
 
 <<Datatypes>>=
 (define string->internet-address
-  (lambda (s)
-    (define split
-      (lambda (s)
-        (apply values
-          (string-tokenize s
-            (char-set-complement (char-set #\:))))))
-    (define s->ip
-      (lambda (s)
-        (apply bytevector
-          (map string->number
-            (string-tokenize s
-              (char-set-complement (char-set #\.)))))))
-    (let-values ([(ip-string port-string) (split s)])
-      (let ([ip (s->ip ip-string)]
-            [port (string->number port-string)])
-        (assert (= 4 (bytevector-length ip)))
-        (assert (< 0 port 65536))
-        (make-internet-address ip port)))))
-        
-(define internet-address->string
-  (lambda (addr)
-    (let ([ip (internet-address-ip addr)]
-          [port (internet-address-port addr)])
-      (assert (< 0 port 65536))
-      (assert (= 4 (bytevector-length ip)))
-      (format "~{~d~^.~}:~d"
-        (bytevector->u8-list ip)
-        (internet-address-port addr)))))
+	(lambda (s)
+		<<Definition for splitting an address string>>
+		<<Definition for maping a string ip address to a bytevector>>
+		(let-values ([(ip-string port-string) (split s)])
+			(let ([ip (s->ip ip-string)]
+						[port (string->number port-string)])
+				(assert (= 4 (bytevector-length ip)))
+				(assert (< 0 port 65536))
+				(make-internet-address ip port)))))
+@
 
+\noindent I define a helper to split the address into ip and port.
+
+<<Definition for splitting an address string>>=
+(define (split s)
+	(apply values (string-tokenize s (char-set-complement (char-set #\:)))))
+@
+
+\noindent Another helper splits the ip address and converts it to a bytevector 
+in big endian or network byte order.
+
+<<Definition for maping a string ip address to a bytevector>>=
+(define (s->ip s)
+	(u8-list->bytevector
+		(map string->number
+			(string-tokenize s (char-set-complement (char-set #\.))))))
+@
+
+\noindent The reverse procedure [[internet-address->string]] is more 
+straightforward.
+
+<<Datatypes>>=
+(define (internet-address->string addr)
+	(let (
+			[ip (internet-address-ip addr)]
+			[port (internet-address-port addr)])
+		(assert (< 0 port 65536))
+		(assert (= 4 (bytevector-length ip)))
+		(call-with-string-output-port
+			(lambda (output)
+				(do ([bytes (bytevector->u8-list ip) (cdr bytes)])
+					[(null? bytes) 
+						(put-char output #\:)
+						(put-datum output port)]
+					(put-datum output (car bytes))
+					(when (pair? (cdr bytes)) (put-char output #\.)))))))
 @
 
 \section{Address Information}
@@ -437,9 +452,9 @@ work in the same way, but they must all be values for which
     (let ([res ($getaddrinfo node service hints addr-list-ptr)])
       (if (zero? res)
           (foreign->address-info-list addr-list-ptr)
-          (errorf 'get-address-info
-            "getaddrinfo() failed with code ~d: ~a"
-            res
+          (error 'get-address-info
+            "getaddrinfo() failed with code"
+            `(code ,res)
             ($gai_strerror res))))))
 
 @
@@ -657,13 +672,15 @@ They also must embed an extracter and a size value so that
 converting to and from foreign values can be done without 
 explicitly knowing the type of the domain beforehand.
 
-<<Constants>>=
+<<Datatypes>>=
 (define-record-type (%socket-domain make-socket-domain socket-domain?)
   (parent socket-constant)
   (fields 
     (immutable extractor socket-domain-extractor)
     (immutable addr-size foreign-address-size)))
+@
 
+<<Constants>>=
 (define socket-domain/unix
   (make-socket-domain %socket-domain/unix
     foreign->unix-address
@@ -939,7 +956,7 @@ listen-socket
 			(case ret
 				[(0) (void)]
 				[(-1) (socket-error 'listen-socket 'listen err)]
-				[else (errorf 'listen "Unknown return: ~s" ret)]))))
+				[else (error 'listen "Unknown return" ret)]))))
 
 @
 
@@ -1436,18 +1453,28 @@ Scheme values at expansion time that are necessary to do these transformations.
 <<sockets.sls>>=
 <<License>>
 
-#!chezscheme
 (library (arcfide sockets)
   (export 
     <<Exports>>)
   (import 
-    (scheme)
-    (riastradh foof-loop)
+    (rnrs base)
+	(rnrs bytevectors)
+	(rnrs records syntactic)
+	(rnrs io ports)
+	(rnrs control)
+	(rnrs conditions)
+	(rnrs arithmetic fixnums)
+	(rnrs lists)
+	(rnrs mutable-pairs)
+	(rnrs exceptions)
     (srfi :14)
+	(srfi :39 parameters)
     (only (srfi :13) string-tokenize)
+    (riastradh foof-loop)
     (arcfide extended-definitions)
     (arcfide ffi-bind)
-	(arcfide errno))
+	(arcfide errno)
+	(only (chezscheme) foreign-procedure void))
 
 <<Foreign Constants>>
 
