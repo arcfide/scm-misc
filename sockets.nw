@@ -537,30 +537,36 @@ and set of flags into a [[struct addrinfo]] bytevector.
 Converting from a foreign [[struct addrinfo]] structure 
 to an address information list is done 
 with [[foreign->address-info-list]].
+This walks through the linked list, grabbing each element from it.
 
 <<Code>>=
 (define (foreign->address-info-list addr-list-ptr)
-  (collect-list 
-    ([with ptr (get-pointer-field addr-list-ptr 0)
-       (foreign->pointer (+ ptr addrinfo/next-offset))]
-     [until (zero? ptr)])
-    (let ([buf (make-bytevector size-of/addrinfo)])
-      ($memcpy buf ptr size-of/addrinfo) 
-      (let ([domain 
-             (lookup-domain 
-               (get-integer-field buf addrinfo/family-offset))])
-        (make-address-info
-          domain
-          (make-socket-type 
-            (get-integer-field buf addrinfo/type-offset))
-          (make-socket-protocol
-            (get-integer-field buf addrinfo/proto-offset))
-          (let ([addr-size 
-                 (get-integer-field buf addrinfo/addrlen-offset)])
-            (foreign->socket-address domain 
-              (get-buffer-field buf addrinfo/addr-offset addr-size)
-              (make-integer-container addr-size))))))))
+	<<Definition of grab to get element of list>>
+	(do (
+			[ptr 
+				(get-pointer-field addr-list-ptr 0) 
+				(foreign->pointer (+ ptr addrinfo/next-offset))]
+			[res '() (cons (grab ptr) res)])
+		[(zero? ptr) (reverse res)]))
+@
 
+\noindent To grab the element, we make a buffer and copy in 
+the data from the pointer. We then extract the field values from 
+the element and make a proper structure.
+
+<<Definition of grab to get element of list>>=
+(define (grab ptr)
+	(let ([buf (make-bytevector size-of/addrinfo)])
+		($memcpy buf ptr size-of/addrinfo) 
+		(let ([domain (lookup-domain (get-integer-field buf addrinfo/family-offset))])
+			(make-address-info
+				domain
+				(make-socket-type (get-integer-field buf addrinfo/type-offset))
+				(make-socket-protocol (get-integer-field buf addrinfo/proto-offset))
+				(let ([addr-size (get-integer-field buf addrinfo/addrlen-offset)])
+					(foreign->socket-address domain 
+						(get-buffer-field buf addrinfo/addr-offset addr-size)
+						(make-integer-container addr-size)))))))
 @
 
 The following procedures help to access data from a field.
@@ -886,12 +892,11 @@ in its own way.}
 	(if (zero? x) #f
 		(make-protocol-entry
 			(foreign->string (foreign->pointer (protoent-name x)))
-			(collect-list (
-					[for i  (up-from (foreign->pointer (protoent-aliases x)) (by size-of/pointer))]
-       				[until (zero? ($strlen i))])
-				(foreign->string (foreign->pointer i)))
-				(make-socket-protocol (foreign->integer (protoent-value x))))))
-
+			(do (
+					[i (foreign->pointer (protoent-aliases x)) (+ i size-of/pointer)]
+					[res '() (cons (foreign->string (foreign->pointer i)) res)])
+				[(zero? ($strlen i)) (reverse res)])
+			(make-socket-protocol (foreign->integer (protoent-value x))))))
 @
 
 <<FFI Procedures>>=
@@ -1454,27 +1459,25 @@ Scheme values at expansion time that are necessary to do these transformations.
 <<License>>
 
 (library (arcfide sockets)
-  (export 
-    <<Exports>>)
-  (import 
-    (rnrs base)
-	(rnrs bytevectors)
-	(rnrs records syntactic)
-	(rnrs io ports)
-	(rnrs control)
-	(rnrs conditions)
-	(rnrs arithmetic fixnums)
-	(rnrs lists)
-	(rnrs mutable-pairs)
-	(rnrs exceptions)
-    (srfi :14)
-	(srfi :39 parameters)
-    (only (srfi :13) string-tokenize)
-    (riastradh foof-loop)
-    (arcfide extended-definitions)
-    (arcfide ffi-bind)
-	(arcfide errno)
-	(only (chezscheme) foreign-procedure void))
+	(export 
+		<<Exports>>)
+	(import 
+		(rnrs base)
+		(rnrs bytevectors)
+		(rnrs records syntactic)
+		(rnrs io ports)
+		(rnrs control)
+		(rnrs conditions)
+		(rnrs arithmetic fixnums)
+		(rnrs lists)
+		(rnrs mutable-pairs)
+		(rnrs exceptions)
+		(srfi :14)
+		(srfi :39 parameters)
+		(only (srfi :13) string-tokenize)
+		(arcfide ffi-bind)
+		(arcfide errno)
+		(only (chezscheme) foreign-procedure void))
 
 <<Foreign Constants>>
 
