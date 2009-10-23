@@ -186,7 +186,7 @@ the subscription information.
 	(optional trial-amount?)
 	payment?
 	(optional order?)
-	customer?
+	(optional customer?)
 	bill-to?
 	(optional ship-to?))
 @
@@ -236,11 +236,11 @@ server time, which is Standard Mountain time.
 	(lambda (x)
 		(and (string? x)
 			(= 10 (string-length x))
-			(char=? #\- (string-ref x 5))
-			(char=? #\- (string-ref x 8))
-			(for-all char-numeric? (substring x 0 4))
-			(for-all char-numeric? (substring x 5 7))
-			(for-all char-numeric? (substring x 8 10)))))
+			(char=? #\- (string-ref x 4))
+			(char=? #\- (string-ref x 7))
+			(for-all char-numeric? (string->list (substring x 0 4)))
+			(for-all char-numeric? (string->list (substring x 5 7)))
+			(for-all char-numeric? (string->list (substring x 8 10))))))
 @
 
 \noindent [[total-occurances]] is used to indicate how many times the 
@@ -275,7 +275,7 @@ period, you can use the [[trial-amount]] element.
 
 <<Datatypes>>=
 (define-elem-type trial-amount "trialAmount"
-	(lambda (x) (and (real? x) (<= 0.01 x 999999999999.99))))
+	(lambda (x) (and (real? x) (<= 0 x 999999999999.99))))
 @
 
 \noindent [[payment]] elements specify how the customer will be charged. 
@@ -599,6 +599,8 @@ be able to just submit a command to the server with [[submit-arb-request]].
 requests are created using the data constructors defned above. 
 
 <<Procedure to Submit Requests>>=
+<<ARB Parameters>>
+
 (define (submit-arb-request req)
 	(let-values (
 			[(arb-input arb-output) (connect-to-arb-server)]
@@ -670,7 +672,7 @@ in the XML representation.
 the server socket output port, and we post to the path provided by the parameters 
 defined in the [[ARB Parameters]] chunk.
 
-<<Send HTTP Headers>>=
+<<Send HTTP Header>>=
 (format arb-output "~{~?\r\n~}"
 	(let ([uri (if (arb-test-mode) (arb-request-uri/debug) (arb-request-uri))])
 		`("POST ~{~a~^/~} HTTP/1.1"  ,(uri-path uri)
@@ -690,14 +692,28 @@ defined in the [[ARB Parameters]] chunk.
 @
 
 \chapter{File Forms}%
+The code is ordered thus:
 
-\section{R6RS Form}%
-
-\section{Vanilla File}%
-
-<<arb.scm>>=
+<<Code>>=
 <<Datatypes>>
+
+<<Procedure to Submit Requests>>
 
 <<Element Printer>>
 @
 
+\section{R6RS Form}%
+
+\section{Vanilla File}%
+Plain Scheme file without libraries or modules.
+
+<<arb.scm>>=
+<<License>>
+
+<<Code>>
+@
+
+\chapter{License}%
+
+<<License>>=
+@
