@@ -558,11 +558,11 @@ deployment.
 <<Definition to test for URI or String>>
 
 (define arb-request-uri
-	(make-parameter (string->uri "http://localhost:8080/xml/v1/request.api")
+	(make-parameter (string->uri "http://localhost:44380/xml/v1/request.api")
 		(uri/string-tester 'arb-request-uri)))
 
 (define arb-request-uri/debug
-	(make-parameter (string->uri "http://localhost:8081/xml/v1/request.api")
+	(make-parameter (string->uri "http://localhost:44381/xml/v1/request.api")
 		(uri/string-tester 'arb-request-uri/debug)))
 @
 
@@ -648,7 +648,7 @@ given in the URI, though they should be.
 		(let ([authority (uri-authority uri)])
 			(let (
 					[host (or (uri-authority-host authority) "localhost")]
-					[port (or (uri-authority-port authority) "8080")])
+					[port (or (uri-authority-port authority) "44380")])
 				(let (
 						[addresses
 							(get-address-info host port
@@ -673,16 +673,15 @@ the server socket output port, and we post to the path provided by the parameter
 defined in the [[ARB Parameters]] chunk.
 
 <<Send HTTP Header>>=
-(format arb-output "~{~?\r\n~}"
+(format arb-output "~{~?\r\n~}\r\n"
 	(let ([uri (if (arb-test-mode) (arb-request-uri/debug) (arb-request-uri))])
-		`("POST ~{~a~^/~} HTTP/1.1"  ,(uri-path uri)
+		`("POST ~{~a~^/~} HTTP/1.1"  (,(uri-path uri))
 			"Host: ~a" 
-			,(or (let ([a (uri-authority uri)]) (and a (uri-authority-host a))) "localhost")
+			(,(or (let ([a (uri-authority uri)]) (and a (uri-authority-host a))) "localhost"))
 			"User-Agent: Authorize.net for Scheme (ARB)" ()
 			"Content-Type: text/xml" ()
 			"Content-Length: ~d" (,(string-length content))
-			"Connection: close" ()
-			"\r\n" ())))
+			"Connection: close" ())))
 @
 
 \noindent For the moment, we read back in the literal values we receive as input.
