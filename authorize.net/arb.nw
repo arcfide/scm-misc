@@ -20,7 +20,7 @@ which should be a list of the contents in the element.
 <<Verifier>>
 
 (define-record-type authnet-arb-elem
-	(fields name contents))
+	(fields name attributes contents))
 @
 
 \section{Verifying Fields}%
@@ -67,7 +67,7 @@ definition.
 		(lambda (n)
 			(lambda fields
 				(validate-fields '<name> fields (list (<verifier> . <required?>) ...))
-				((n <elem-string> fields))))))
+				((n <elem-string> #f fields))))))
 |endverbatim
 \medskip
 
@@ -122,10 +122,12 @@ call accordingly. Note that no new fields are ever created explicitely as record
 fields of a new element are just a list of these elements. 
 
 <<Datatypes>>=
+(define-auxilary-keywords attributes)
+
 (define-syntax define-elem-type
-	(syntax-rules ()
-		[(_ name elem-str spec ...)
-			(identifier? #'name)
+	(syntax-rules (attributes)
+		[(_ name elem-str (attributes attrs ...) spec ...)
+			(and (identifier? #'name) (string? (syntax->datum #'elem-str)))
 			(define-record-type name (parent authnet-arb-elem)
 				(protocol
 					(lambda (n)
@@ -138,7 +140,9 @@ fields of a new element are just a list of these elements.
 									(if all-opt?
 										(with-all-optional make-spec-pairs spec ...)
 										(make-spec-pairs spec ...)))
-								((n elem-str fields)))))))]))
+								((n elem-str '(attrs ...) fields)))))))]
+		[(_ name elem-str spec ...)
+			(define-elem-type name elem-str (attributes) spec ...)]))
 @
 
 \section{Authentication Elements}%
@@ -161,6 +165,7 @@ They are also used in the Update section below.
 
 <<Datatypes>>=
 (define-elem-type arb-create-subscription-request "ARBCreateSubscriptionRequest"
+	(attributes (xmlns "AnetApi/xml/v1/schema/AnetApiSchema.xsd"))
 	merchant-authentication?
 	(optional refid?)
 	subscription?)
@@ -206,8 +211,8 @@ and for how long.
 (define-elem-type payment-schedule "paymentSchedule"
 	interval?
 	start-date?
-	total-occurances?
-	(optional trial-occurances?))
+	total-occurrences?
+	(optional trial-occurrences?))
 @
 
 \noindent An [[interval]] element specifies a specific time duration 
@@ -243,22 +248,22 @@ server time, which is Standard Mountain time.
 			(for-all char-numeric? (string->list (substring x 8 10))))))
 @
 
-\noindent [[total-occurances]] is used to indicate how many times the 
-client should be billed. This should include trial occurances. If the 
+\noindent [[total-occurrences]] is used to indicate how many times the 
+client should be billed. This should include trial occurrences. If the 
 billing should continue indefinitely, the maximum value of 9999 should 
 be used.
 
 <<Datatypes>>=
-(define-elem-type total-occurances "totalOccurances"
+(define-elem-type total-occurrences "totalOccurrences"
 	(lambda (x) (and (integer? x) (<= 1 x 9999))))
 @
 
-\noindent [[trial-occurances]] elements specify a value no greater than 99 
+\noindent [[trial-occurrences]] elements specify a value no greater than 99 
 indicating the number of trial billing cycles the system should execute 
 before actually billing the customer. Trial cycles are not charged.
 
 <<Datatypes>>=
-(define-elem-type trial-occurances "trialOccurances"
+(define-elem-type trial-occurrences "trialOccurrences"
 	(lambda (x) (and (integer? x) (<= 1 x 99))))
 @
 
@@ -482,6 +487,7 @@ structure, Creating an update request entails the following:
 
 <<Datatypes>>=
 (define-elem-type arb-update-subscription-request "ARBUpdateSubscriptionRequest"
+	(attributes (xmlns "AnetApi/xml/v1/schema/AnetApiSchema.xsd"))
 	merchant-authentication?
 	subscription-id?
 	(optional refid?)
@@ -497,6 +503,7 @@ and merchant authentication information in them.
 
 <<Datatypes>>=
 (define-elem-type arb-cancel-subscription-request "ARBCancelSubscriptionRequest"
+	(attributes (xmlns "AnetApi/xml/v1/schema/AnetApiSchema.xsd"))
 	merchant-authentication?
 	ref-id?
 	subscription-id?)
@@ -517,11 +524,6 @@ To print out a tree, recursively descend down the tree, printing each element in
 
 <<Element Printer>>=
 (define (arb-print-tree op tree)
-	(assert (authnet-arb-elem? tree))
-	(%print-elem op tree 0))
-
-(define (%print-elem op tree indent-count)
-	(define indent (make-string (* indent-count 2) #\space))
 	(if (authnet-arb-elem? tree)
 		(begin 
 			<<Print ARB Record>>)
@@ -533,20 +535,19 @@ To print out a tree, recursively descend down the tree, printing each element in
 followed by the closing tag. 
 
 <<Print ARB Record>>=
-(put-string op indent)
-(put-string op (string-append "<" (authnet-arb-elem-name tree) ">\n"))
-(for-each (lambda (elem) (%print-elem op elem (1+ indent-count)))
+(put-string op 
+	(format "<~a ~:{~a=~s ~}>" 
+		(authnet-arb-elem-name tree)
+		(authnet-arb-elem-attributes tree)))
+(for-each (lambda (elem) (arb-print-tree op elem))
 	(authnet-arb-elem-contents tree))
-(put-string op indent)
-(put-string op (string-append "</" (authnet-arb-elem-name tree) ">\n"))
+(format op "</~a>" (authnet-arb-elem-name tree))
 @
 
 \noindent To print out datum, either print out the string or the datum.
 
 <<Print Datum>>=
-(put-string op indent)
 ((if (string? tree) put-string put-datum) op tree)
-(put-char op #\newline)
 @
 
 \chapter{Sending Requests}%
@@ -607,6 +608,7 @@ requests are created using the data constructors defned above.
 			[(content) (arb-request->string req)])
 		<<Send HTTP Header>>
 		(put-string arb-output content)
+		(flush-output-port arb-output)
 		<<Read ARB Response>>))
 
 <<Definition of connect-to-arb-server>>
@@ -687,7 +689,28 @@ defined in the [[ARB Parameters]] chunk.
 \noindent For the moment, we read back in the literal values we receive as input.
 
 <<Read ARB Response>>=
-(get-string-all arb-input)
+(let ([res (get-string-all arb-input)])
+	(close-port arb-output)
+	(let* (
+			[end (string-length res)]
+			[start
+				<<Get XML Index>>]
+			[iport (open-string-input-port (substring res start end))])
+		(printf "Start: ~d End: ~d\n~s\n" start end res)
+		(let ([xml-result (ssax:xml->sxml iport '((anet . "AnetApi/xml/v1/schema/AnetApiSchema.xsd")))])
+			(close-port iport)
+			xml-result)))		
+@
+
+\noindent We iterate over the result string until we find character [[#xFEFF]] which 
+indicates the start of the XML component. 
+
+<<Get XML Index>>=
+(let loop ([i 0])
+	(cond 
+		[(<= end i) end]
+		[(char=? #\xFEFF (string-ref res i)) (1+ i)]
+		[else (loop (1+ i))]))
 @
 
 \chapter{File Forms}%
