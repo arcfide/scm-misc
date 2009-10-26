@@ -427,36 +427,60 @@ internet-socket-address.
 get-address-info
 @
 
-Corresponds to [[getaddrinfo(3)]]. The optional domain, type, and protocol 
+Corresponds to [[getaddrinfo(3)]]. 
+Domain, type, protocol, and the flags are all optional.
+
+<<Code>>=
+(define get-address-info
+	(case-lambda
+		[(node service)
+			(%get-address-info node service #f #f #f '())]
+		[(node service dom type proto . flags)
+			(%get-address-info node service dom type proto flags)]))
+@
+
+\noindent To grab the address we make our foreign buffers, call [[$getaddrinfo]], 
+check for errors, and then convert the foreign address into a Scheme structure.
+
+<<Code>>=
+(define (%get-address-info node service domain type protocol flags)
+	<<Check get-address-info argument types>>
+	(let (
+			[addr-list-ptr (make-bytevector size-of/pointer)]
+			[hints (make-addrinfo-hints domain type protocol flags)]
+			[service (or (string? service) (number->string service 10))])
+		(let ([res ($getaddrinfo node service hints addr-list-ptr)])
+			(if (zero? res)
+				(foreign->address-info-list addr-list-ptr)
+				(error 'get-address-info
+					"getaddrinfo() failed with code"
+					`(code ,res)
+					($gai_strerror res))))))
+@
+
+\noindent The optional domain, type, and protocol 
 may be false or may correspond to some form of socket options. They are 
 used as hints for [[get-address-info]] in the same manner as the 
 corresponding hints structure for [[getaddrinfo(2)]]. The flags also 
 work in the same way, but they must all be values for which 
 [[address-info-option?]] returns true when applied to them.
+[[node]] should be a hostname string, and [[service]] should be either 
+a service name string, integer number string identifying a valid port, 
+or a positive integer representing a valid port.
 
-<<Code>>=
-(define get-address-info
-  (case-lambda
-    [(node service)
-     (%get-address-info node service #f #f #f '())]
-    [(node service dom type proto . flags)
-     (%get-address-info node service dom type proto flags)]))
-
-(define (%get-address-info node service domain type protocol flags)
-  (assert (or (not domain) (socket-domain? domain)))
-  (assert (or (not type) (socket-type? type)))
-  (assert (or (not protocol) (socket-protocol? protocol)))
-  (assert (for-all address-info-option? flags))
-  (let ([addr-list-ptr (make-bytevector size-of/pointer)]
-        [hints (make-addrinfo-hints domain type protocol flags)])
-    (let ([res ($getaddrinfo node service hints addr-list-ptr)])
-      (if (zero? res)
-          (foreign->address-info-list addr-list-ptr)
-          (error 'get-address-info
-            "getaddrinfo() failed with code"
-            `(code ,res)
-            ($gai_strerror res))))))
-
+<<Check get-address-info argument types>>=
+(assert (or (not domain) (socket-domain? domain)))
+(assert (or (not type) (socket-type? type)))
+(assert (or (not protocol) (socket-protocol? protocol)))
+(assert (for-all address-info-option? flags))
+(assert (string? node))
+(assert 
+	(or 
+		(string? service) 
+		(and 
+			(integer? service) 
+			(positive? service)
+			(< 0 service 65536))))
 @
 
 <<FFI Procedures>>=
