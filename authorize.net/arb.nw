@@ -609,10 +609,11 @@ requests are created using the data constructors defned above.
 		<<Send HTTP Header>>
 		(put-string arb-output content)
 		(flush-output-port arb-output)
-		<<Read ARB Response>>))
+		(get-arb-response arb-input)))
 
 <<Definition of connect-to-arb-server>>
 <<Definition of arb-request->string>>
+<<Definition of get-arb-response>>
 @
 
 \noindent Normally, ARB Requires an encrypted communication channel. Since we 
@@ -688,18 +689,21 @@ defined in the [[ARB Parameters]] chunk.
 
 \noindent For the moment, we read back in the literal values we receive as input.
 
-<<Read ARB Response>>=
-(let ([res (get-string-all arb-input)])
-	(close-port arb-output)
-	(let* (
-			[end (string-length res)]
-			[start
-				<<Get XML Index>>]
-			[iport (open-string-input-port (substring res start end))])
-		(printf "Start: ~d End: ~d\n~s\n" start end res)
-		(let ([xml-result (ssax:xml->sxml iport '((anet . "AnetApi/xml/v1/schema/AnetApiSchema.xsd")))])
-			(close-port iport)
-			xml-result)))		
+<<Definition of get-arb-response>>=
+(define (get-arb-response input)
+	(let ([res (get-string-all input)])
+		(close-port input)
+		(let* (
+				[end (string-length res)]
+				[start
+					<<Get XML Index>>]
+				[iport (open-string-input-port (substring res start end))])
+			(let (
+					[xml-result 
+						(ssax:xml->sxml iport 
+							'((anet . "AnetApi/xml/v1/schema/AnetApiSchema.xsd")))])
+				(close-port iport)
+				(make-response xml-result)))))
 @
 
 \noindent We iterate over the result string until we find character [[#xFEFF]] which 
@@ -712,6 +716,110 @@ indicates the start of the XML component.
 		[(char=? #\xFEFF (string-ref res i)) (1+ i)]
 		[else (loop (1+ i))]))
 @
+
+\noindent [[make-response]] extracts the relevant data from the xml-response and 
+creates an useful [[arb-response]] object that provides the information in a field form. 
+The record form should have a reference id, a result, a code, a message field, 
+and a subscription id. This is defined as a Scheme record.
+
+Here is an example XML Response:
+
+\medskip\verbatim
+<?xml version="1.0" encoding="utf-8"?>
+<ARBCreateSubscriptionResponse
+xmlns="AnetApi/xml/v1/schema/AnetApiSchema.xsd">
+	<refId>Sample</refId>
+	<messages>
+		<resultCode>Ok</resultCode>
+		<message>
+			<code>I00001</code>
+			<text>Successful.</text>
+		</message>
+	</messages>
+	<subscriptionId>100748</subscriptionId>
+</ARBCreateSubscriptionResponse>
+|endverbatim
+\medskip
+
+\noindent Which in SXML looks like:
+
+\medskip\verbatim
+(*TOP*
+	(@ 
+		(*NAMESPACES* 
+			(anet "AnetApi/xml/v1/schema/AnetApiSchema.xsd")))
+	(*PI* xml "version=\"1.0\" encoding=\"utf-8\"")
+	(anet:ARBCreateSubscriptionResponse
+		(anet:refid "Sample")
+		(anet:messages
+			(anet:resultCode "Ok")
+			(anet:message
+				(anet:code "I00001")
+				(anet:text "Successful")))
+		(anet:subscriptionId "100748")))
+|endverbatim
+\medskip
+
+\noindent We use SXPath to grab out the reference elements.
+
+<<Definition of get-arb-response>>=
+(define-record-type authnet-arb-response 
+	(fields reference-id result code message subscription-id))
+
+(define (make-response res)
+	<<Define accessor maker>>
+	<<Define accessors>>
+	(make-authnet-arb-response
+		(reference-id)
+		(result)
+		(code)
+		(message)
+		(subscription-id)))
+@
+
+\noindent Since all of the accessors share the same form, 
+make a generic accessor maker.
+
+<<Define accessor maker>>=
+(define (make-accessor path . maybe-convert)
+	(let (
+			[get (sxpath path)]
+			[convert 
+				(if (pair? maybe-convert) 
+					(car maybe-convert) 
+					(lambda (x) x))]) 
+		(lambda () 
+			(let ([x (get res)])
+				(if (pair? x) (convert (car x)) #f)))))
+@
+
+\noindent Each accessor has pretty much the same form.
+
+<<Define accessors>>=
+(define reference-id 
+	(make-accessor 
+		'(anet:ARBCreateSubscriptionResponse anet:refId *text*)))
+(define result 
+	(make-accessor
+		'(anet:ARBCreateSubscriptionResponse 
+			anet:messages anet:resultCode *text*)
+		(lambda (x) (string->symbol (string-downcase x)))))
+(define code 
+	(make-accessor
+		'(anet:ARBCreateSubscriptionResponse 
+			anet:messages anet:message anet:code *text*)))
+(define message 
+	(make-accessor
+		'(anet:ARBCreateSubscriptionResponse 
+			anet:messages anet:message anet:text *text*)))
+(define subscription-id 
+	(make-accessor
+		'(anet:ARBCreateSubscriptionResponse anet:subscriptionId *text*)
+		string->number))
+@
+
+\chapter{Testing Submissions}%
+We want to have some sample test to run against some example cases.
 
 \chapter{File Forms}%
 The code is ordered thus:
