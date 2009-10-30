@@ -505,7 +505,7 @@ and merchant authentication information in them.
 (define-elem-type arb-cancel-subscription-request "ARBCancelSubscriptionRequest"
 	(attributes (xmlns "AnetApi/xml/v1/schema/AnetApiSchema.xsd"))
 	merchant-authentication?
-	ref-id?
+	refid?
 	subscription-id?)
 @
 
@@ -798,23 +798,20 @@ make a generic accessor maker.
 <<Define accessors>>=
 (define reference-id 
 	(make-accessor 
-		'(anet:ARBCreateSubscriptionResponse anet:refId *text*)))
+		'(* anet:refId *text*)))
 (define result 
 	(make-accessor
-		'(anet:ARBCreateSubscriptionResponse 
-			anet:messages anet:resultCode *text*)
+		'(* anet:messages anet:resultCode *text*)
 		(lambda (x) (string->symbol (string-downcase x)))))
 (define code 
 	(make-accessor
-		'(anet:ARBCreateSubscriptionResponse 
-			anet:messages anet:message anet:code *text*)))
+		'(* anet:messages anet:message anet:code *text*)))
 (define message 
 	(make-accessor
-		'(anet:ARBCreateSubscriptionResponse 
-			anet:messages anet:message anet:text *text*)))
+		'(* anet:messages anet:message anet:text *text*)))
 (define subscription-id 
 	(make-accessor
-		'(anet:ARBCreateSubscriptionResponse anet:subscriptionId *text*)
+		'(* anet:subscriptionId *text*)
 		string->number))
 @
 
