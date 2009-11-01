@@ -6,5 +6,5 @@
 .dvi.ps:
 	dvips -o $@ $<
 
-.ps.pdf:
-	ps2pdf $<
+.dvi.pdf:
+	dvipdfm -o $@ $<
