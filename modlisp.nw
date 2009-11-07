@@ -180,12 +180,13 @@ URL encoded post messages.
 
 @
 
-To parse [[application/x-www-form-urlencoded]] we use Oleg's [[cgi:url-unquote]] 
+To parse [[application/x-www-form-urlencoded]] we use my modification of 
+Oleg's [[cgi:url-unquote]] 
 to handle the url-parameters. 
 
 <<MIME Registration>>=
 (register-mime-type-converter! 'application 'x-www-form-urlencoded
-	(lambda (data params) (cgi:url-unquote data)))
+	(lambda (data params) (query-string->parameters data)))
 @
 
 \chapter{Serving Requests}%
@@ -340,13 +341,13 @@ get-modlisp-parameter
 (define (get-modlisp-parameter key packet)
 	(let ([url (get-modlisp-header packet 'url #f)])
 		(and url 
-			(let ([res (assq key (cgi:url-unquote (or (uri-query url) "")))])
+			(let ([res (assq key (query-string->parameters (or (uri-query url) "")))])
 				(and res (cadr res))))))
 
 @
 
 <<Imports>>=
-(oleg cgi processing)
+(arcfide query-strings)
 @
 
 \procsig{[[make-html-response]]}{\var{body}}{\var{Response Packet}}

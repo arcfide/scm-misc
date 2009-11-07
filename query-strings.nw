@@ -11,10 +11,23 @@ with non-cgi applications.
 
 \noindent This makes it easy to convert a query string into a set of query parameters 
 in the form of an Association list. It is roughtly the same as [[cgi:url-unquote]] from 
-[[cgi-util.scm]] by Oleg.
+[[cgi-util.scm]] by Oleg. A difference is that we automatically consolidate the parameters.
 
 <<Code>>=
 (define (query-string->parameters parm-string)
+	(define (consolidate-duplicates alist)
+		(let loop ((old-l alist) (new-l '()))
+			(cond
+				((null? old-l) new-l)
+				((assq (caar old-l) new-l) =>
+					(lambda (duplicate-assoc)
+						(let last-link-loop ((link duplicate-assoc))
+							(if (null? (cdr link))
+								(set-cdr! link (cdar old-l))
+								(last-link-loop (cdr link))))
+						(loop (cdr old-l) new-l)))
+				(else
+					(loop (cdr old-l) (cons (car old-l) new-l))))))
   (let ((result '())
         (read-primitive-token
           (lambda ()
@@ -25,7 +38,7 @@ in the form of an Association list. It is roughtly the same as [[cgi:url-unquote
       (lambda ()
         (do ((action-prefix #\& (read-char)) (status 'init)
              (vals '()) (keyword #f))
-           ((eq? status 'stop) result)
+           ((eq? status 'stop) (consolidate-duplicates result))
            
            (let
              ((token (read-primitive-token)))
@@ -86,21 +99,7 @@ in the form of an Association list. It is roughtly the same as [[cgi:url-unquote
 parameters as an argument, and doesn't have the predefined values.
 
 <<Code>>=
-(define (query-parameter-lookup params name type . default-value-l)
-	(define (consolidate-duplicates alist)
-		(let loop ((old-l alist) (new-l '()))
-			(cond
-				((null? old-l) new-l)
-				((assq (caar old-l) new-l) =>
-					(lambda (duplicate-assoc)
-						(let last-link-loop ((link duplicate-assoc))
-							(if (null? (cdr link))
-								(set-cdr! link (cdar old-l))
-								(last-link-loop (cdr link))))
-						(loop (cdr old-l) new-l)))
-				(else
-					(loop (cdr old-l) (cons (car old-l) new-l))))))
-	(define query-parms (consolidate-duplicates params))
+(define (query-parameter-lookup query-parms name type . default-value-l)
 	(define (coerce type name . vals)
 		(case type
 			((token)
@@ -164,7 +163,8 @@ parameters as an argument, and doesn't have the predefined values.
 		(only (chezscheme)
 			with-input-from-string
 			with-output-to-string
-			display-condition)
+			display-condition
+			trace-define)
 		(only (srfi :13)
 			string-index-right
 			string-contains
