@@ -120,10 +120,7 @@ We also want to generate a C filename for compilation automatically.
 <<Utilities>>=
 (meta define (make-c-fname)
   (format "~a~a~a.c" (ffi-build-path) (directory-separator)
-    (collect-string (for c (in-string (format "~s" (gensym))))
-      (case c
-        [(#\space #\{ #\}) #\_]
-        [else c]))))
+    (gensym->unique-string (gensym))))
 @
 
 \chapter{Changing compiler options}
