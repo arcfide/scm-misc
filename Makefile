@@ -1,5 +1,7 @@
 FILES=extended-definitions.sls modlisp.sls sockets.sls swap.sls base64.sls ffi-bind.sls \
 	parser-util.sls rfc2822.sls mime.sls errno.sls
+        
+ROOT_DIR=/home/arcfide/code/arcfide/
 
 .SUFFIXES: .so .sls .ss .scm .tex .nw
 
@@ -18,4 +20,4 @@ ffi-bind-param:
 
 .nw.tex:
 	mkdir -p doc
-	noweave -tex -t2 $< > doc/$(subst /,_,$@)
+	noweave -tex -t2 $< > doc/$(subst /,_,$(subst ${ROOT_DIR},,$@))
