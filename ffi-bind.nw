@@ -412,6 +412,7 @@ and returns the path of the compiled object.
 <<License>>=
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Foreign Value Binding Constructs
+;;; Version 1.1
 ;;; 
 ;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
 ;;; 
