@@ -1,0 +1,119 @@
+\title{Predefined Foreign Types)%
+The following are some types that should always be predefined. This
+implementation is for Chez Scheme.
+
+The [[foreign-integer]] type should represent the standard integer on 64-bit and
+32-bit machines. This means that its size should be a signed 32-bit
+integer on 32-bit machines, and a signed 64-bit integer on 64-bit
+machines. 
+
+While I could use the (machine-type) to get the integer size, I've 
+decided that it is more flexible and nicer to use the
+[[define-foreign-constants]] syntax. 
+
+<<Types>>=
+(define-foreign-constants ()
+  ((size-of/integer int "int" "sizeof(int)")))
+
+(define (unsupported-integer-size proc)
+  (error proc "unsupported integer size"))
+
+(define type 
+  (case size-of/integer
+    [(4) 'integer-32]
+    [(8) 'integer-64]
+    [else (unsupported-integer-size #f)]))
+@
+
+\noindent At the moment, I don't know the black magic to handle 
+pointer settings in Chez Scheme, so I'm just defining this for
+bytevectors, and I'll provide an error for the pointers.
+
+<<Types>>=
+(define (foreign-integer-set! x offset val)
+  (define bv-set!
+    (case type 
+      [(integer-32) bytevector-s32-native-set!]
+      [(integer-64) bytevector-s64-native-set!]
+      [else (unsupported-integer-size 'foreign-integer-set!)]))
+  (cond
+    [(bytevector? x) (bv-set! x offset val)]
+    [(and (integer? x) (positive? x)) 
+     #;(#%$poke type x offset val)
+     (error 'foreign-integer-set! 
+       "setting foreign integer pointers is not supported")]
+    [else (errorf 'foreign-integer-set! "invalid foreign object ~s" x)]))
+@
+
+\noindent We do know how to get the value back from a pointer, so we'll
+support that in the getter. 
+
+<<Types>>=
+(define (get-foreign-integer x offset)
+  (define bv-ref
+    (case type
+      [(integer-32) bytevector-s32-native-ref]
+      [(integer-64) bytevector-s64-native-ref]
+      [else (unsupported-integer-size 'get-foreign-integer)]))
+  (cond
+    [(bytevector? x) (bv-ref x offset)]
+    [(and (integer? x) (positive? x)) (#%$peek type x offset)]
+    [else (errorf 'get-foreign-integer "invalid foreign object ~s" x)]))
+@
+
+\noindent All that is left is to define the constructor and the 
+actual type.
+
+<<Types>>=
+(define (make-foreign-integer x)
+  (let ([res (make-bytevector size-of/integer)])
+    (foreign-integer-set! res 0 x)
+    res))
+
+(define-foreign-type foreign-integer size-of/integer
+  make-foreign-integer get-foreign-integer foreign-integer-set!)
+@
+
+The [[foreign-char]] is an 8-bit signed character type. As for the
+[[foreign-integer]] type, I don't know how to do the pointer assignment
+yet, so I leave that out.
+
+<<Types>>=
+(define (get-foreign-char x offset)
+  (integer->char
+    (cond
+      [(bytevecotr? x) (bytevector-s8-ref x offset)]
+      [(and (integer? x) (positive? x)) (#%$peek 'signed-8 x offset)]
+      [else (errorf 'get-foreign-char "invalid foreign object ~s" x)])))
+@
+
+\noindent I do make sure that I can do pointer based retreival, though. 
+
+<<Types>>=
+(define (foreign-char-set! x offset c)
+  (let ([val (char->integer c)])
+    (assert (<= -128 val 127))
+    (cond
+      [(bytevector? x) (bytevector-s8-set! x offset val)]
+      [(and (integer? x) (positive? x))
+       #;(#%$poke 'integer-8 x offset val)
+       (error 'foreign-char-set! "pointer assignment is unsupported")]
+      [else 
+        (errorf 'foreign-char-set! "invalid foreign object ~s" x)])))
+@
+
+\noindent Since R6RS characters are Unicode, we must make sure to check 
+that the character we are assigning is a valid character. 
+
+<<Types>>=
+(define (make-foreign-char x)
+  (let ([cval (char->integer x)])
+    (assert (<= -128 cval 127))
+    (let ([res (make-bytevector 1)])
+      (foreign-char-set! res 0 cval)
+      res)))
+
+(define-foreign-type foreign-char 1
+  make-foreign-char get-foreign-char foreign-char-set!)
+@
+
