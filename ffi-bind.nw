@@ -184,12 +184,15 @@ straightforward.
     (syntax-case x ()
       [(_ struct-name offset-value offset name type)
         #`(begin
-          (define offset-value offset)
-          (define (#,(struct-field-mutator-name #'struct-name #'name) 
-                    struct value)
-            ((type mutator) struct offset-value value))
-          (define (#,(struct-field-accessor-name #'struct-name #'name) struct)
-            ((type accessor) struct offset-value)))])))
+            (define offset-value offset)
+            (define (#,(struct-field-mutator-name #'struct-name #'name) 
+                      struct value . args)
+              (apply (type mutator) 
+                `(,struct ,offset-value ,value ,@args)))
+            (define (#,(struct-field-accessor-name #'struct-name #'name) 
+                      struct . args)
+              (apply (type accessor) 
+                `(,struct ,offset-value ,@args)))]))))
 @
 
 \noindent We have assistant functions [[struct-field-accessor-name]] 

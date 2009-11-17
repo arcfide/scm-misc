@@ -115,3 +115,129 @@ that the character we are assigning is a valid character.
   make-foreign-char get-foreign-char foreign-char-set!)
 @
 
+\noindent For the moment, the idea of a string type as a fundamental 
+type seems to work pretty well, so I am going to go for that.
+
+<<Types>>=
+(define foreign-string-transcoder 
+  (make-transcoder (utf-8-codec) (eol-style none)))
+
+(define (make-foreign-string x)
+  (string->bytevector x foreign-string-transcoder))
+@
+
+\noindent When getting the string from a foreign structure, we provide
+two different situations. One, we know the size, and we can safely do
+whole block copies. In the other, we don't know the size, so we stick to
+checking for the null character before we build the string.
+
+<<Types>>=
+(define get-foreign-string 
+  (case-lambda
+    [(x offset) 
+     (get-foreign-string-of-length x offset
+       (get-foreign-string-length x offset))]
+    [(x offset len) (get-foreign-string-of-length x offset len)]))
+@
+
+\noindent If we do not know the length, we must scan the incoming string
+for the null byte, which gives us a size, and we can then do the byte
+copy, but not until then.
+
+<<Types>>=
+(define $strlen
+  (foreign-procedure "strlen" (ptr) int))
+
+(define (get-foreign-string-length x offset)
+  (cond
+    [(bytevector? x) 
+     (let ([len (bytevector-length x)])
+       (do ([i offset (1+ i)]) 
+         [(or (>= i len) 
+              (zero? (bytevector-u8-ref x i)))
+          i]))]
+    [(and (integer? x) (positive? x))
+     ($strlen (+ x offset))]))
+@
+
+\noindent Once we know the length of the string or are given it
+explicitly, we can use block copy operations to grab it. Note that in
+the case where we don't know what we are doing, it might be easier to
+just assign things explicitly as we count up the length. I don't know at
+the moment, and this is easier, so I am going with it.
+
+<<Types>>=
+(define (get-foreign-string-of-length x offset len)
+  (define $memcpy
+    (foreign-procedure "memcpy" (string ptr int) ptr))
+  (cond
+    [(bytevecotr? x)
+     (if (and (zero? offset) (= len (bytevector-length x)))
+         (bytevector->string x foreign-string-transcoder)
+         (let ([res (make-bytevector len)])
+           (bytevector-copy! x offset res 0 len)
+           (bytevector->string res foreign-string-transcoder)))]
+    [(and (integer? x) (positive? x))
+     (let ([res (make-bytevector len)])
+       ($memcpy res x len)
+       (bytevector->string res foreign-string-transcoder))]
+    [else (errorf "Invalid foreign object ~s" x)]))
+@
+
+\noindent As with getting a foreign string, we allow the copying of a
+string into a foreign string buffer. However, we must be especially
+careful in the case when no string size is provided.
+
+<<Types>>=
+(define foreign-string-set! 
+  (case-lambda
+    [(x offset val)
+     (foreign-string-set-size-unknown! x offset val)]
+    [(x offset val len)
+     (foreign-string-set-with-length! x offset val len)]))
+@
+
+\noindent When we don't have a length for the buffer explicitly, then we
+have one of two possibilities. Either the buffer is a Scheme bytevector,
+in which case we can check the sizes and everything is good. On the
+other hand, if the buffer is referenced by a pointer value, then we
+can't do this, and instead, we have to just break down into the unsafe
+[[strcpy()]] operation.
+
+<<Types>>=
+(define $strcpy
+  (foreign-procedure "strlen" (ptr string) ptr))
+
+(define (foreign-string-set-size-unknown! x offset val)
+  (cond
+    [(bytevector? x)
+     (let ([val-buf (string->bytevector val foreign-string-transcoder)]
+           [val-len (string-length val)]
+           [max-len (- (bytevector-length x) offset)])
+       (bytevector-fill! x offset val-buf 0 (min val-len max-len)))]
+    [(and (integer? x) (positive? x))
+     ($strcpy (+ x offset) val)
+     (void)]))
+@
+
+\noindent If we do know the size of the destination buffer, life becomes
+much easier. 
+
+<<Types>>=
+(define (foreign-string-set-with-length! x offset val len)
+  (define $memcpy
+    (foreign-procedure "memcpy" (ptr string int) ptr))
+  (cond
+    [(bytevector? x)
+     (bytevector-fill! 
+       x offset 
+       (string->bytevector val foreign-string-transcoder) 0
+       len)]
+    [(and (integer? x) (positive? x))
+     ($memcpy x val (min (string-length val) (- len offset 1)))
+     (#%$poke! 'integer-8 x (1- len) 0)]))
+@
+
+\noindent We can't define a foreign type just yet, because we don't know
+ahead of time the size of a string. However, the user can do that easily
+enough and use these string functions to do it. 
