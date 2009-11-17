@@ -91,10 +91,10 @@ composite  foreign type definitions.
 This form provides convenient creation of helpers for handling C like foreign structures.
 
 \medskip\centerline{%
-(define-foreign-struct \var{name} (\var{field-name} \var{field-type}) \dots)}
+(define-foreign-struct-type \var{name} (\var{field-name} \var{field-type}) \dots)}
 \medskip
 
-[[define-foreign-struct]] binds [[make-]]\var{name} to a constructor of
+[[define-foreign-struct-type]] binds [[make-]]\var{name} to a constructor of
 the same arity  as the number of fields specified. This constructor
 returns a bytevector containing the  foreign representations of each of
 the corresponding field values that were passed to it.  Additionally,
@@ -106,7 +106,7 @@ Accessors and  mutators behave similarly to those defined by
 or pointer reference as their object. They also do not take an  offset. 
 
 <<Binding Constructs>>=
-(define-syntax define-foreign-struct
+(define-syntax define-foreign-struct-type
   (lambda (x)
     <<struct-constructor-name>>
     (syntax-case x ()

@@ -25,9 +25,10 @@ decided that it is more flexible and nicer to use the
     [else (unsupported-integer-size #f)]))
 @
 
-\noindent At the moment, I don't know the black magic to handle 
-pointer settings in Chez Scheme, so I'm just defining this for
-bytevectors, and I'll provide an error for the pointers.
+Every setter should handle the incoming structure as either a byte
+vector or a pointer to a region in foreign allocated memory. I assume
+that the [[val]] parameter here will be checked by the functions
+[[bv-set!]] and [[#%$poke!]]. 
 
 <<Types>>=
 (define (foreign-integer-set! x offset val)
@@ -38,15 +39,12 @@ bytevectors, and I'll provide an error for the pointers.
       [else (unsupported-integer-size 'foreign-integer-set!)]))
   (cond
     [(bytevector? x) (bv-set! x offset val)]
-    [(and (integer? x) (positive? x)) 
-     #;(#%$poke type x offset val)
-     (error 'foreign-integer-set! 
-       "setting foreign integer pointers is not supported")]
+    [(and (integer? x) (positive? x)) (#%$poke! type x offset val)]
     [else (errorf 'foreign-integer-set! "invalid foreign object ~s" x)]))
 @
 
-\noindent We do know how to get the value back from a pointer, so we'll
-support that in the getter. 
+\noindent [[get-foreign-integer]] is the same as the above, except that
+it does not take a value, obviously. 
 
 <<Types>>=
 (define (get-foreign-integer x offset)
@@ -74,9 +72,9 @@ actual type.
   make-foreign-integer get-foreign-integer foreign-integer-set!)
 @
 
-The [[foreign-char]] is an 8-bit signed character type. As for the
-[[foreign-integer]] type, I don't know how to do the pointer assignment
-yet, so I leave that out.
+The [[foreign-char]] is a signed character type. At the moment I assume
+that a character is a C 8-bit type, and I don't think this is going to
+cause problems. {\it Note: famous last words.}
 
 <<Types>>=
 (define (get-foreign-char x offset)
@@ -84,10 +82,12 @@ yet, so I leave that out.
     (cond
       [(bytevecotr? x) (bytevector-s8-ref x offset)]
       [(and (integer? x) (positive? x)) (#%$peek 'signed-8 x offset)]
-      [else (errorf 'get-foreign-char "invalid foreign object ~s" x)])))
+      [else 
+        (errorf 'get-foreign-char "invalid foreign object ~s" x)])))
 @
 
-\noindent I do make sure that I can do pointer based retreival, though. 
+\noindent The setter is just about the same. I just make sure that the
+character is actually in the right signed 8-bit range.
 
 <<Types>>=
 (define (foreign-char-set! x offset c)
@@ -95,9 +95,7 @@ yet, so I leave that out.
     (assert (<= -128 val 127))
     (cond
       [(bytevector? x) (bytevector-s8-set! x offset val)]
-      [(and (integer? x) (positive? x))
-       #;(#%$poke 'integer-8 x offset val)
-       (error 'foreign-char-set! "pointer assignment is unsupported")]
+      [(and (integer? x) (positive? x)) (#%$poke! 'integer-8 x offset val)]
       [else 
         (errorf 'foreign-char-set! "invalid foreign object ~s" x)])))
 @

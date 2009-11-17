@@ -189,7 +189,7 @@ wrapper.
 
 @
 
-If we need to convert an unknown address type into a 
+\noindent If we need to convert an unknown address type into a 
 Scheme data structure, we use the following.
 
 <<Datatypes>>=
@@ -198,7 +198,7 @@ Scheme data structure, we use the following.
 
 @
 
-When constructing a bytevector container for foreign code, 
+\noindent When constructing a bytevector container for foreign code, 
 it is useful to know the size a structure should be before 
 creating it. This is defined as [[foreign-address-size]], 
 but it is defined as part of the record definition for 
