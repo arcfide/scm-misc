@@ -175,7 +175,7 @@ the moment, and this is easier, so I am going with it.
      (if (and (zero? offset) (= len (bytevector-length x)))
          (bytevector->string x foreign-string-transcoder)
          (let ([res (make-bytevector len)])
-           (bytevector-copy! res 0 x offset len)
+           (bytevector-copy! res 0 x offset (- len offset))
            (bytevector->string res foreign-string-transcoder)))]
     [(and (integer? x) (positive? x))
      (let ([res (make-bytevector len)])

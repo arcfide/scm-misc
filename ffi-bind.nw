@@ -192,7 +192,7 @@ straightforward.
             (define (#,(struct-field-accessor-name #'struct-name #'name) 
                       struct . args)
               (apply (type accessor) 
-                `(,struct ,offset-value ,@args)))]))))
+                `(,struct ,offset-value ,@args))))])))
 @
 
 \noindent We have assistant functions [[struct-field-accessor-name]] 
@@ -376,7 +376,7 @@ and returns the path of the compiled object.
   (export 
     define-foreign-constants
     define-foreign-type
-    define-foreign-struct)
+    define-foreign-struct-type)
   (import 
     (scheme)
     (riastradh foof-loop)
