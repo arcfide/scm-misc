@@ -13,7 +13,7 @@ decided that it is more flexible and nicer to use the
 
 <<Types>>=
 (define-foreign-constants ()
-  ((size-of/integer int "int" "sizeof(int)")))
+  (size-of/integer int "int" "sizeof(int)"))
 
 (define (unsupported-integer-size proc)
   (error proc "unsupported integer size"))
@@ -80,7 +80,7 @@ cause problems. {\it Note: famous last words.}
 (define (get-foreign-char x offset)
   (integer->char
     (cond
-      [(bytevecotr? x) (bytevector-s8-ref x offset)]
+      [(bytevector? x) (bytevector-s8-ref x offset)]
       [(and (integer? x) (positive? x)) (#%$peek 'signed-8 x offset)]
       [else 
         (errorf 'get-foreign-char "invalid foreign object ~s" x)])))
@@ -155,7 +155,7 @@ copy, but not until then.
        (do ([i offset (1+ i)]) 
          [(or (>= i len) 
               (zero? (bytevector-u8-ref x i)))
-          i]))]
+          (- i offset)]))]
     [(and (integer? x) (positive? x))
      ($strlen (+ x offset))]))
 @
@@ -171,11 +171,11 @@ the moment, and this is easier, so I am going with it.
   (define $memcpy
     (foreign-procedure "memcpy" (string ptr int) ptr))
   (cond
-    [(bytevecotr? x)
+    [(bytevector? x)
      (if (and (zero? offset) (= len (bytevector-length x)))
          (bytevector->string x foreign-string-transcoder)
          (let ([res (make-bytevector len)])
-           (bytevector-copy! x offset res 0 len)
+           (bytevector-copy! res 0 x offset len)
            (bytevector->string res foreign-string-transcoder)))]
     [(and (integer? x) (positive? x))
      (let ([res (make-bytevector len)])
@@ -214,7 +214,7 @@ can't do this, and instead, we have to just break down into the unsafe
      (let ([val-buf (string->bytevector val foreign-string-transcoder)]
            [val-len (string-length val)]
            [max-len (- (bytevector-length x) offset)])
-       (bytevector-fill! x offset val-buf 0 (min val-len max-len)))]
+       (bytevector-copy! val-buf 0 x offset (min val-len max-len)))]
     [(and (integer? x) (positive? x))
      ($strcpy (+ x offset) val)
      (void)]))
@@ -229,10 +229,10 @@ much easier.
     (foreign-procedure "memcpy" (ptr string int) ptr))
   (cond
     [(bytevector? x)
-     (bytevector-fill! 
-       x offset 
+     (bytevector-copy! 
        (string->bytevector val foreign-string-transcoder) 0
-       len)]
+       x offset 
+       (- len offset))]
     [(and (integer? x) (positive? x))
      ($memcpy x val (min (string-length val) (- len offset 1)))
      (#%$poke! 'integer-8 x (1- len) 0)]))
@@ -241,3 +241,69 @@ much easier.
 \noindent We can't define a foreign type just yet, because we don't know
 ahead of time the size of a string. However, the user can do that easily
 enough and use these string functions to do it. 
+
+\chapter{Files}%
+The following chunks are for file export or tangling.
+
+<<types.chezscheme.scm>>=
+<<License>>
+
+<<Types>>
+@
+
+<<types.chezscheme.sls>>=
+<<License>>
+
+#!chezscheme
+(library (arcfide ffi-bind types)
+  (export 
+    make-foreign-integer get-foreign-integer foreign-integer-set!
+    foreign-integer
+    get-foreign-char foreign-char-set! make-foreign-char foreign-char
+    make-foreign-string get-foreign-string foreign-string-set!)
+  (import (chezscheme) (arcfide ffi-bind))
+  
+<<Types>>
+
+)
+@
+
+<<types.chezscheme.ss>>=
+<<License>>
+
+#!chezscheme
+(module arcfide/ffi-bind/types
+  (make-foreign-integer get-foreign-integer foreign-integer-set!
+   foreign-integer
+   get-foreign-char foreign-char-set! make-foreign-char foreign-char
+   make-foreign-string get-foreign-string foreign-string-set!)
+  (import (chezscheme) (arcfide ffi-bind))
+
+<<Types>>
+
+)
+@
+
+\chapter{Licensing}%
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Default Type Definitions and Utilities for FFI Foreign Types
+;;; Version: 1.0
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@

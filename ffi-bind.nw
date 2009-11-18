@@ -85,7 +85,7 @@ composite  foreign type definitions.
                [(_ constructor) c]
                [(_ accessor) a]
                [(_ mutator) m])))])))
-@  
+@
 
 \section{Defining Structures}%
 This form provides convenient creation of helpers for handling C like foreign structures.
