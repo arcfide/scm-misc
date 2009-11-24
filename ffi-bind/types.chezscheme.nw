@@ -2,117 +2,110 @@
 The following are some types that should always be predefined. This
 implementation is for Chez Scheme.
 
-The [[foreign-integer]] type should represent the standard integer on 64-bit and
-32-bit machines. This means that its size should be a signed 32-bit
-integer on 32-bit machines, and a signed 64-bit integer on 64-bit
-machines. 
-
-While I could use the (machine-type) to get the integer size, I've 
-decided that it is more flexible and nicer to use the
-[[define-foreign-constants]] syntax. 
+While foreign integers are useful, getting the right size value is
+annoying, so the following is a general syntax for defining integer
+types.
 
 <<Types>>=
-(define-foreign-constants ()
-  (size-of/integer int "int" "sizeof(int)"))
+(define-auxilary-keywords signed unsigned)
 
-(define (unsupported-integer-size proc)
-  (error proc "unsupported integer size"))
-
-(define type 
-  (case size-of/integer
-    [(4) 'integer-32]
-    [(8) 'integer-64]
-    [else (unsupported-integer-size #f)]))
+(define-syntax define-foreign-integer-type
+  (syntax-rules (signed unsigned)
+    [(_ (name constructor getter setter!) size)
+     (define-integer-type 
+       (name constructor getter setter!) 
+       signed
+       size)]
+    [(_ (name constructor getter setter!) unsigned size)
+     (begin
+       (define size-val size)
+       (define type
+         (case size-val
+           [(1) 'unsigned-8]
+           [(2) 'unsigned-16]
+           [(4) 'unsigned-32]
+           [(8) 'unsigned-64]
+           [else (unsupported-integer-size #f size-val)]))
+       (%define-type type size-val name constructor getter setter!)
+       (define-foreign-type name size-val constructor getter setter!))]
+    [(_ (name constructor getter setter!) signed size)
+     (begin
+       (define size-val size)
+       (define type
+         (case size-val
+           [(1) 'integer-8]
+           [(2) 'integer-16]
+           [(4) 'integer-32]
+           [(8) 'integer-64]
+           [else (unsupported-integer-size #f size-val)]))
+       (%define-type type size-val name constructor getter setter!)
+       (define-foreign-type name size-val constructor getter setter!))]))
 @
 
-Every setter should handle the incoming structure as either a byte
-vector or a pointer to a region in foreign allocated memory. I assume
-that the [[val]] parameter here will be checked by the functions
-[[bv-set!]] and [[#%$poke!]]. 
+\noindent [[%define-type]] first defines an appropriate bytevector
+setter and getter, and then defines the standard versions of integer
+accessors and mutators.
 
 <<Types>>=
-(define (foreign-integer-set! x offset val)
-  (define bv-set!
-    (case type 
-      [(integer-32) bytevector-s32-native-set!]
-      [(integer-64) bytevector-s64-native-set!]
-      [else (unsupported-integer-size 'foreign-integer-set!)]))
-  (cond
-    [(bytevector? x) (bv-set! x offset val)]
-    [(and (integer? x) (positive? x)) (#%$poke! type x offset val)]
-    [else (errorf 'foreign-integer-set! "invalid foreign object ~s" x)]))
+(define-syntax %define-type
+  (syntax-rules ()
+    [(_ type size name const get set!)
+     (begin
+       (define bv-ref
+         (case type
+           [(integer-8) bytevector-s8-ref]
+           [(unsigned-8) bytevector-u8-ref]
+           [(integer-16) bytevector-s16-native-ref]
+           [(unsigned-16) bytevector-u16-native-ref]
+           [(integer-32) bytevector-s32-native-ref]
+           [(unsigned-32) bytevector-u32-native-ref]
+           [(integer-64) bytevector-s64-native-ref]
+           [(unsigned-64) bytevector-u64-native-ref]
+           [else (unsupported-integer-size 'get type)]))
+       (define bv-set!
+        (case type
+          [(integer-8) bytevector-s8-set!]
+          [(unsigned-8) bytevector-u8-set!]
+          [(integer-16) bytevector-s16-native-set!]
+          [(unsigned-16) bytevector-u16-native-set!]
+          [(integer-32) bytevector-s32-native-set!]
+          [(unsigned-32) bytevector-u32-native-set!]
+          [(integer-64) bytevector-s64-native-set!]
+          [(unsigned-64) bytevector-u64-native-set!]
+          [else (unsupported-integer-size 'set! type)]))
+       (define (set! x offset val)
+         (cond
+           [(bytevector? x) (bv-set! x offset val)]
+           [(and (integer? x) (positive? x)) (#%$poke! x type offset val)]
+           [else (invalid-object 'set! x)]))
+       (define (get x offset)
+         (cond
+           [(bytevector? x) (bv-ref x offset)]
+           [(and (integer? x) (positive? x)) (#%$peek x type offset)]
+           [else (invalid-object 'get x)]))
+       (define (const x)
+         (let ([res (make-bytevector size)])
+           (set! res 0 x)
+           res)))]))
 @
 
-\noindent [[get-foreign-integer]] is the same as the above, except that
-it does not take a value, obviously. 
+\noindent Above we use the same error messages so we put them into handy
+procedures.
 
 <<Types>>=
-(define (get-foreign-integer x offset)
-  (define bv-ref
-    (case type
-      [(integer-32) bytevector-s32-native-ref]
-      [(integer-64) bytevector-s64-native-ref]
-      [else (unsupported-integer-size 'get-foreign-integer)]))
-  (cond
-    [(bytevector? x) (bv-ref x offset)]
-    [(and (integer? x) (positive? x)) (#%$peek type x offset)]
-    [else (errorf 'get-foreign-integer "invalid foreign object ~s" x)]))
+(define (unsupported-integer-size proc-name size)
+  (errorf proc-name "Unsupported integer size ~s" size))
+(define (invalid-object proc-name val)
+  (errorf proc-name "Invalid foreign object ~s" val))
 @
 
-\noindent All that is left is to define the constructor and the 
-actual type.
+\noindent For example, we could use this to define [[foreign-char]].
 
 <<Types>>=
-(define (make-foreign-integer x)
-  (let ([res (make-bytevector size-of/integer)])
-    (foreign-integer-set! res 0 x)
-    res))
-
-(define-foreign-type foreign-integer size-of/integer
-  make-foreign-integer get-foreign-integer foreign-integer-set!)
-@
-
-The [[foreign-char]] is a signed character type. At the moment I assume
-that a character is a C 8-bit type, and I don't think this is going to
-cause problems. {\it Note: famous last words.}
-
-<<Types>>=
-(define (get-foreign-char x offset)
-  (integer->char
-    (cond
-      [(bytevector? x) (bytevector-s8-ref x offset)]
-      [(and (integer? x) (positive? x)) (#%$peek 'signed-8 x offset)]
-      [else 
-        (errorf 'get-foreign-char "invalid foreign object ~s" x)])))
-@
-
-\noindent The setter is just about the same. I just make sure that the
-character is actually in the right signed 8-bit range.
-
-<<Types>>=
-(define (foreign-char-set! x offset c)
-  (let ([val (char->integer c)])
-    (assert (<= -128 val 127))
-    (cond
-      [(bytevector? x) (bytevector-s8-set! x offset val)]
-      [(and (integer? x) (positive? x)) (#%$poke! 'integer-8 x offset val)]
-      [else 
-        (errorf 'foreign-char-set! "invalid foreign object ~s" x)])))
-@
-
-\noindent Since R6RS characters are Unicode, we must make sure to check 
-that the character we are assigning is a valid character. 
-
-<<Types>>=
-(define (make-foreign-char x)
-  (let ([cval (char->integer x)])
-    (assert (<= -128 cval 127))
-    (let ([res (make-bytevector 1)])
-      (foreign-char-set! res 0 cval)
-      res)))
-
-(define-foreign-type foreign-char 1
-  make-foreign-char get-foreign-char foreign-char-set!)
+(define-foreign-integer-type
+  (foreign-char make-foreign-char get-foreign-char foreign-char-set!)
+  signed
+  1)
 @
 
 \noindent For the moment, the idea of a string type as a fundamental 
@@ -242,6 +235,21 @@ much easier.
 ahead of time the size of a string. However, the user can do that easily
 enough and use these string functions to do it. 
 
+\chapter{Imports and Exports}%
+
+<<Exports>>=
+define-foreign-integer-type
+get-foreign-char foreign-char-set! make-foreign-char foreign-char
+make-foreign-string get-foreign-string foreign-string-set!
+unsigned signed
+@
+
+<<Imports>>=
+(chezscheme)
+(arcfide ffi-bind)
+(arcfide extended-definitions)
+@
+
 \chapter{Files}%
 The following chunks are for file export or tangling.
 
@@ -257,11 +265,9 @@ The following chunks are for file export or tangling.
 #!chezscheme
 (library (arcfide ffi-bind types)
   (export 
-    make-foreign-integer get-foreign-integer foreign-integer-set!
-    foreign-integer
-    get-foreign-char foreign-char-set! make-foreign-char foreign-char
-    make-foreign-string get-foreign-string foreign-string-set!)
-  (import (chezscheme) (arcfide ffi-bind))
+    <<Exports>>)
+  (import 
+    <<Imports>>)
   
 <<Types>>
 
@@ -273,11 +279,9 @@ The following chunks are for file export or tangling.
 
 #!chezscheme
 (module arcfide/ffi-bind/types
-  (make-foreign-integer get-foreign-integer foreign-integer-set!
-   foreign-integer
-   get-foreign-char foreign-char-set! make-foreign-char foreign-char
-   make-foreign-string get-foreign-string foreign-string-set!)
-  (import (chezscheme) (arcfide ffi-bind))
+  (<<Exports>>)
+  (import 
+    <<Imports>>)
 
 <<Types>>
 

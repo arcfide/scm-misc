@@ -186,7 +186,6 @@ wrapper.
 <<Datatypes>>=
 (define (socket-address->foreign sock-addr)
   ((socket-address-converter sock-addr) sock-addr))
-
 @
 
 \noindent If we need to convert an unknown address type into a 
@@ -195,7 +194,6 @@ Scheme data structure, we use the following.
 <<Datatypes>>=
 (define (foreign->socket-address domain addr addr-len)
   ((socket-domain-extractor domain) addr addr-len))
-
 @
 
 \noindent When constructing a bytevector container for foreign code, 
@@ -210,6 +208,14 @@ socket domains below.
 unix-address?
 make-unix-address
 unix-address-path
+make-foreign-unix-address
+foreign-unix-address-path
+foreign-unix-address-family
+make-foreign-unix-path
+get-foreign-unix-path
+foreign-unix-path-set!
+unix-address->foreign
+foreign->unix-address
 @
 
 UNIX domain sockets have addresses that are just paths, which in turn are simply strings. 
@@ -223,6 +229,45 @@ UNIX domain sockets have addresses that are just paths, which in turn are simply
 
 @
 
+\noindent We use [[define-foreign-struct-type]] to define a new type
+corresponding to the foreign equivalent of a [[unix-address]], which is
+type [[struct sockaddr_un]] in C.
+
+<<Datatypes>>=
+<<Define foreign-unix-path>>
+
+(define-foreign-integer-type 
+  (sa-family-type make-sa-family get-sa-family sa-family-set!)
+  unsigned
+  size-of/sa-family)
+
+(define-foreign-struct-type foreign-unix-address 
+  (family sa-family-type)
+  (path foreign-unix-path))
+@
+
+<<FFI Constants>>=
+(size-of/sa-family int "int" "sizeof(sa_family_t)")
+@
+
+\noindent A UNIX path is a character array with a maximum size of
+[[UNIX_PATH_MAX]]. 
+
+<<Define foreign-unix-path>>=
+(define (make-foreign-unix-path x)
+  (assert (< 0 (string-length x) unix-max-path))
+  (make-foreign-string x))
+
+(define get-foreign-unix-path get-foreign-string)
+
+(define (foreign-unix-path-set! x offset val)
+  (assert (< 0 (string-length val) unix-max-path))
+  (foreign-string-set! x offset val))
+
+(define-foreign-type foreign-unix-path unix-max-path
+  make-foreign-unix-path get-foreign-unix-path foreign-unix-path-set!)
+@
+
 The protocol uses [[unix-address->foreign]] as the converter 
 for a unix address. 
 It returns a bytevector that is the equivalent layout
@@ -230,26 +275,11 @@ of the sockaddr\_un structure.
 
 <<Datatypes>>=
 (define (unix-address->foreign addr) 
-  (let ([res (make-bytevector (+ size-of/family unix-max-path) 0)]
-        [opath (string->bytevector 
-                 (unix-address-path addr)
-                 (native-transcoder))])
-    (let ([opath-length (bytevector-length opath)])
-      (bytevector-uint-set! res 0 af-unix (native-endianness) 
-        size-of/family)
-      (bytevector-copy! opath 0 res size-of/family
-        (if (< unix-max-path opath-length)
-            (error 'unix-address->foreign "path length exceeds maximum path length" 
-        opath-length
-        (unix-address-path addr))
-            opath-length)))
-    res))
-
+  (make-foreign-unix-address af-unix (unix-address-path addr)))
 @
 
 <<FFI Constants>>=
 (af-unix fixnum "int" "AF_UNIX")
-(size-of/family fixnum "int" "sizeof(sa_family_t)")
 (unix-max-path fixnum "int" 
    "sizeof(x.sun_path)" "struct sockaddr_un x;")
 @
@@ -266,18 +296,7 @@ the start of the path to the first null.
 
 <<Datatypes>>=
 (define (foreign->unix-address addr addr-len)
-  (let* ([path-len (- (bytevector-sint-ref addr-len 0 
-                        (native-endianness) 
-                        size-of/integer) 
-                      size-of/family)]
-         [path (make-bytevector path-len)])
-    (bytevector-copy! addr size-of/family path 0 path-len)
-    (make-unix-address (bytevector->string path (native-transcoder)))))
-
-@
-
-<<FFI Constants>>=
-(size-of/integer fixnum "int" "sizeof(int)")
+  (make-unix-address (foreign-unix-address-path addr)))
 @
 
 \subsection{IPV4 Internet Socket Addresses}
@@ -302,7 +321,6 @@ their addresses using network byte ordering.
   (protocol 
     (lambda (n) (lambda (i p) ((n internet-address->foreign) i p))))
   (fields ip port))
-
 @
 
 Converting the internet-address to a foreign value is done 
@@ -326,6 +344,7 @@ by [[internet-address->foreign]].
 @
 
 <<FFI Constants>>=
+(size-of/family int "int" "sizeof(sa_family_t)")
 (size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
 (size-of/port fixnum "int" "sizeof(x.sin_port)"
    "struct sockaddr_in x;")
@@ -549,6 +568,7 @@ and set of flags into a [[struct addrinfo]] bytevector.
 @
 
 <<FFI Constants>>=
+(size-of/integer int "int" "sizeof(int)")
 (size-of/addrinfo fixnum "int" "sizeof(struct addrinfo)")
 (addrinfo/family-offset fixnum "int"
  "(char *)&x.ai_family - (char *)&x"
@@ -1507,7 +1527,8 @@ Scheme values at expansion time that are necessary to do these transformations.
     (only (srfi :13) string-tokenize)
     (arcfide ffi-bind)
     (arcfide errno)
-    (only (chezscheme) foreign-procedure void))
+    (arcfide ffi-bind types)
+    (only (chezscheme) foreign-procedure break void))
 
 <<Foreign Constants>>
 
