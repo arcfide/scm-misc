@@ -17,8 +17,8 @@ a better abstraction is written on top of the sockets.
 \chapter{Implementation}
 
 \procsig{[[socket->port]]}
-	{\var{socket} [\var{b-mode} [\var{transcoder}]]}
-	{\var{input port} \var{output port}}
+  {\var{socket} [\var{b-mode} [\var{transcoder}]]}
+  {\var{input port} \var{output port}}
 
 <<Exports>>=
 socket->port socket->input-port socket->output-port
@@ -34,47 +34,47 @@ but return either an input or an output port, respectively.
 
 <<Code>>=
 (define (make-reader sock)
-	<<Read Socket>>)
+  <<Read Socket>>)
 
 (define (make-writer sock)
-	<<Write Socket>>)
+  <<Write Socket>>)
 
 (define (make-closer sock)
-	<<Close Socket>>)
+  <<Close Socket>>)
 
 (define (socket-name sock) (format "Socket ~a" (socket-fd sock)))
 
 (define socket->port
-	(case-lambda
-		[(sock)
-			(let ([name (socket-name sock)])
-				(set-socket-nonblocking! sock #f)
-				(values
-					(make-custom-binary-input-port name
-						(make-reader sock) #f #f (make-closer sock))
-					(make-custom-binary-output-port name
-						(make-writer sock) #f #f (make-closer sock))))]
-		[(sock b-mod) (socket->port sock)]
-		[(sock b-mode transcoder)
-			(let-values ([(in out) (socket->port sock)])
-				(values 
-					(transcoded-port in transcoder)
-					(transcoded-port out transcoder)))]))
+  (case-lambda
+    [(sock)
+      (let ([name (socket-name sock)])
+        (set-socket-nonblocking! sock #f)
+        (values
+          (make-custom-binary-input-port name
+            (make-reader sock) #f #f (make-closer sock))
+          (make-custom-binary-output-port name
+            (make-writer sock) #f #f (make-closer sock))))]
+    [(sock b-mod) (socket->port sock)]
+    [(sock b-mode transcoder)
+      (let-values ([(in out) (socket->port sock)])
+        (values 
+          (transcoded-port in transcoder)
+          (transcoded-port out transcoder)))]))
 
 (define (make-socket-converter make-port operator)
-	(define maker
-		(case-lambda
-			[(sock)
-				(set-socket-nonblocking! sock #f)
-				(make-port (socket-name sock) (operator sock) #f #f (make-closer sock))]
-			[(sock b) (maker sock)]
-			[(sock b transcoder) (transcoded-port (maker sock) transcoder)]))
-	maker)
+  (define maker
+    (case-lambda
+      [(sock)
+        (set-socket-nonblocking! sock #f)
+        (make-port (socket-name sock) (operator sock) #f #f (make-closer sock))]
+      [(sock b) (maker sock)]
+      [(sock b transcoder) (transcoded-port (maker sock) transcoder)]))
+  maker)
 
 (define socket->input-port 
-	(make-socket-converter make-custom-binary-input-port make-reader))
+  (make-socket-converter make-custom-binary-input-port make-reader))
 (define socket->output-port
-	(make-socket-converter make-custom-binary-output-port make-writer))
+  (make-socket-converter make-custom-binary-output-port make-writer))
 
 @
 
@@ -86,11 +86,11 @@ moment.
 
 <<Read Socket>>=
 (let ([$read (foreign-procedure "read" (fixnum string fixnum) fixnum)])
-	(lambda (bv s c)
-		(let ([buf (make-bytevector c)])
-			(let ([res ($read (socket-fd sock) buf c)])
-				(bytevector-copy! buf 0 bv s res)
-				res))))
+  (lambda (bv s c)
+    (let ([buf (make-bytevector c)])
+      (let ([res ($read (socket-fd sock) buf c)])
+        (bytevector-copy! buf 0 bv s res)
+        res))))
 @
 
 Writing works in mostly the same way, 
@@ -100,14 +100,14 @@ EOF to the file.
 
 <<Write Socket>>=
 (let ([$write (foreign-procedure "write" (fixnum string fixnum) fixnum)])
-	(lambda (bv s c)
-		(let ([buf (make-bytevector c)])
-			(bytevector-copy! bv s buf 0 c)
-			(let ([res ($write (socket-fd sock) buf c)])
-				(cond
-					[(= -1 res) (socket-error 'socket->port 'write)]
-					[(negative? res) (error 'socket-write "Unknown foreign return value.")]
-					[else res])))))
+  (lambda (bv s c)
+    (let ([buf (make-bytevector c)])
+      (bytevector-copy! bv s buf 0 c)
+      (let ([res ($write (socket-fd sock) buf c)])
+        (cond
+          [(= -1 res) (socket-error 'socket->port 'write)]
+          [(negative? res) (error 'socket-write "Unknown foreign return value.")]
+          [else res])))))
 @
 
 Closing a socket is the simple matter of using [[close-socket]].
@@ -122,15 +122,15 @@ Closing a socket is the simple matter of using [[close-socket]].
 <<License>>
 
 (library (arcfide sockets socket-ports)
-	(export
-		<<Exports>>)
-	(import
-		(rnrs base)
-		(rnrs control)
-		(rnrs bytevectors)
-		(rnrs io ports)
-		(only (chezscheme) format foreign-procedure)
-		(arcfide sockets))
+  (export
+    <<Exports>>)
+  (import
+    (rnrs base)
+    (rnrs control)
+    (rnrs bytevectors)
+    (rnrs io ports)
+    (only (chezscheme) format foreign-procedure)
+    (arcfide sockets))
 
 <<Code>>
 

@@ -11,8 +11,8 @@ Chez Scheme already provides most of the features necessary, so the actual incan
 quite simple.
 
 \procsig{[[socket->port]]}
-	{\var{socket} [\var{b-mode} [\var{transcoder}]]}
-	{\var{Input Port} \var{Ouput Port}}
+  {\var{socket} [\var{b-mode} [\var{transcoder}]]}
+  {\var{Input Port} \var{Ouput Port}}
 
 \noindent The \var{b-mode} and \var{transcoder} correspond to their R6RS interpretations for 
 port creators. There are also analagous [[socket->input-port]] and [[socket->output-port]] 
@@ -21,16 +21,16 @@ be used for the input and output ports.
 
 <<Code>>=
 (define (socket->port  sock . args)
-	(let ([fd (socket-fd sock)])
-		(values
-			(apply open-fd-input-port (cons fd args))
-			(apply open-fd-output-port (cons fd args)))))
+  (let ([fd (socket-fd sock)])
+    (values
+      (apply open-fd-input-port (cons fd args))
+      (apply open-fd-output-port (cons fd args)))))
 
 (define (socket->input-port sock . args)
-	(apply open-fd-input-port (cons (socket-fd sock) args)))
+  (apply open-fd-input-port (cons (socket-fd sock) args)))
 
 (define (socket->output-port sock . args)
-	(apply open-fd-output-port (cons (socket-fd sock) args)))
+  (apply open-fd-output-port (cons (socket-fd sock) args)))
 @
 
 \chapter{R6RS Form}
@@ -39,13 +39,13 @@ be used for the input and output ports.
 <<License>>
 
 (library (arcfide sockets socket-ports)
-	(export socket->port socket->input-port socket->output-port)
-	(import (rnrs base) 
-		(arcfide sockets)
-		(only (chezscheme) 
-			open-fd-input-port 
-			open-fd-output-port
-			open-fd-input/output-port))
+  (export socket->port socket->input-port socket->output-port)
+  (import (rnrs base) 
+    (arcfide sockets)
+    (only (chezscheme) 
+      open-fd-input-port 
+      open-fd-output-port
+      open-fd-input/output-port))
 
 <<Code>>
 
