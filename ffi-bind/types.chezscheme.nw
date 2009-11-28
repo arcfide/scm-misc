@@ -2,6 +2,7 @@
 The following are some types that should always be predefined. This
 implementation is for Chez Scheme.
 
+\chapter{Integers}%
 While foreign integers are useful, getting the right size value is
 annoying, so the following is a general syntax for defining integer
 types.
@@ -99,7 +100,8 @@ procedures.
   (errorf proc-name "Invalid foreign object ~s" val))
 @
 
-\noindent For example, we could use this to define [[foreign-char]].
+\section{Character Type}%
+For example, we could use this to define [[foreign-char]].
 
 <<Types>>=
 (define-foreign-integer-type
@@ -108,7 +110,8 @@ procedures.
   1)
 @
 
-\noindent For the moment, the idea of a string type as a fundamental 
+\chapter{String Utilities}%
+For the moment, the idea of a string type as a fundamental 
 type seems to work pretty well, so I am going to go for that.
 
 <<Types>>=
@@ -160,19 +163,21 @@ just assign things explicitly as we count up the length. I don't know at
 the moment, and this is easier, so I am going with it.
 
 <<Types>>=
+(define $memcpy-gfsol
+  (foreign-procedure "memcpy" (string ptr int) ptr))
+
 (define (get-foreign-string-of-length x offset len)
-  (define $memcpy
-    (foreign-procedure "memcpy" (string ptr int) ptr))
   (cond
+    [(zero? len) ""]
     [(bytevector? x)
      (if (and (zero? offset) (= len (bytevector-length x)))
          (bytevector->string x foreign-string-transcoder)
          (let ([res (make-bytevector len)])
-           (bytevector-copy! res 0 x offset (- len offset))
+           (bytevector-copy! res 0 x offset len)
            (bytevector->string res foreign-string-transcoder)))]
     [(and (integer? x) (positive? x))
      (let ([res (make-bytevector len)])
-       ($memcpy res x len)
+       ($memcpy-gfsol res (+ x offset) len)
        (bytevector->string res foreign-string-transcoder))]
     [else (errorf "Invalid foreign object ~s" x)]))
 @
@@ -202,24 +207,26 @@ can't do this, and instead, we have to just break down into the unsafe
   (foreign-procedure "strlen" (ptr string) ptr))
 
 (define (foreign-string-set-size-unknown! x offset val)
-  (cond
-    [(bytevector? x)
-     (let ([val-buf (string->bytevector val foreign-string-transcoder)]
-           [val-len (string-length val)]
-           [max-len (- (bytevector-length x) offset)])
-       (bytevector-copy! val-buf 0 x offset (min val-len max-len)))]
-    [(and (integer? x) (positive? x))
-     ($strcpy (+ x offset) val)
-     (void)]))
+  (let ([val-buf (string->bytevector val foreign-string-transcoder)]
+        [val-len (string-length val)])
+    (cond 
+      [(bytevector? x)
+       (assert (<= val-len (- (bytevector-length x) offset)))
+       (bytevector-copy! val-buf 0 x offset val-len)]
+      [(and (integer? x) (positive? x))
+       ($strcpy (+ x offset) val)
+       (void)]
+      [else (errorf "Invalid foreign object ~s" x)])))
 @
 
 \noindent If we do know the size of the destination buffer, life becomes
 much easier. 
 
 <<Types>>=
+(define $memcpy-fsswl
+  (foreign-procedure "memcpy" (ptr string int) ptr))
+
 (define (foreign-string-set-with-length! x offset val len)
-  (define $memcpy
-    (foreign-procedure "memcpy" (ptr string int) ptr))
   (cond
     [(bytevector? x)
      (bytevector-copy! 
@@ -227,8 +234,10 @@ much easier.
        x offset 
        (- len offset))]
     [(and (integer? x) (positive? x))
-     ($memcpy x val (min (string-length val) (- len offset 1)))
-     (#%$poke! 'integer-8 x (1- len) 0)]))
+     (let ([ffi-len (min (string-length val) (- len offset 1))])
+       ($memcpy-fsswl (+ x offset) val ffi-len)
+       (#%$poke! 'integer-8 x (+ offset ffi-len 1)  0))]
+    [else (errorf "Invalid foreign object ~s" x)]))
 @
 
 \noindent We can't define a foreign type just yet, because we don't know
