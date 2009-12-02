@@ -71,20 +71,19 @@ composite  foreign type definitions.
 
 <<Binding Constructs>>=
 (define-syntax define-foreign-type
-  (lambda (x)
-    (syntax-case x ()
-      [(_ name size const access mutat)
-       #`(begin 
-           (define s size)
-           (define c const)
-           (define a access)
-           (define m mutat)
-           (define-syntax name
-             (syntax-rules (constructor accessor mutator sizeof)
-               [(_ sizeof) s]
-               [(_ constructor) c]
-               [(_ accessor) a]
-               [(_ mutator) m])))])))
+  (syntax-rules ()
+    [(_ name size const access mutat)
+     (begin 
+       (define s size)
+       (define c const)
+       (define a access)
+       (define m mutat)
+       (define-syntax name
+         (syntax-rules (constructor accessor mutator sizeof)
+           [(_ sizeof) s]
+           [(_ constructor) c]
+           [(_ accessor) a]
+           [(_ mutator) m])))]))
 @
 
 \section{Defining Structures}%
@@ -110,11 +109,11 @@ or pointer reference as their object. They also do not take an  offset.
   (lambda (x)
     <<struct-constructor-name>>
     (syntax-case x ()
-      [(_ name (field-name field-type) ...)
+      [(_ name size (field-name field-type) ...)
         #`(begin
           (define (#,(struct-constructor-name #'name) field-name ...)
             (populate-foreign-buffer
-              (make-bytevector (+ (field-type sizeof) ...) 0)
+              (make-bytevector size 0)
               0 (field-name ...) (field-type ...)))
           (define-field-mutators/accessors name 0 
             (field-name ...) (field-type ...)))])))

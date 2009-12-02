@@ -239,14 +239,17 @@ type [[struct sockaddr_un]] in C.
 (define-foreign-integer-type 
   (sa-family-type make-sa-family get-sa-family sa-family-set!)
   unsigned
-  size-of/sa-family)
+  size-of/sa-family
+  (native-endianness))
 
 (define-foreign-struct-type foreign-unix-address 
+  size-of/sockaddr-un
   (family sa-family-type)
   (path foreign-unix-path))
 @
 
 <<FFI Constants>>=
+(size-of/sockaddr-un int "int" "sizeof(struct sockaddr_un)")
 (size-of/sa-family int "int" "sizeof(sa_family_t)")
 @
 
@@ -308,44 +311,60 @@ internet-address-ip
 internet-address-port
 string->internet-address
 internet-address->string
+internet-address->foreign
+foreign->internet-address
 @
 
-Internet addresses are represented by an IP address and a port number.
-The IP address is a bytevector of 4 bytes.
-The port number is an integer. The bytevectors are expected to represent 
-their addresses using network byte ordering.
+\noindent Internet addresses are represented by an IP address and a port
+number. The highest eight bits of the ip address should be the first
+octet of the ip address, and so forth. The port value is a 16-bit
+unsigned integer. 
 
 <<Datatypes>>=
 (define-record-type internet-address 
   (parent socket-address)
   (protocol 
-    (lambda (n) (lambda (i p) ((n internet-address->foreign) i p))))
+    (lambda (n) 
+      (lambda (i p) ((n internet-address->foreign) i p))))
   (fields ip port))
 @
 
-Converting the internet-address to a foreign value is done 
-by [[internet-address->foreign]].
+\noindent The foreign equivalent looks like this:
+
+<<Datatypes>>=
+<<Define port and ip types>>
+
+(define-foreign-struct-type foreign-ipv4-address
+  size-of/sockaddr-in
+  (family sa-family-type)
+  (port port-type)
+  (ip ip-type))
+@
+
+\noindent Both of these values are supposed to be translated into
+network byte order before being stored in the final structure. 
+
+<<Define port and ip types>>=
+(define-foreign-integer-type (port-type make-port get-port port-set!)
+  unsigned size-of/port (endianness big))
+
+(define-foreign-integer-type (ip-type make-ip get-ip ip-set!)
+  unsigned size-of/ip (endianness big))
+@
+
+\noindent Converting the internet-address to a foreign value is done  by
+[[internet-address->foreign]].
 
 <<Datatypes>>=
 (define (internet-address->foreign addr)
-  (let ([res (make-bytevector size-of/addr-in 0)])
-    (bytevector-uint-set! res 0 af-inet 
-      (native-endianness) 
-      size-of/family)
-    (bytevector-uint-set! res size-of/family 
-      (internet-address-port addr)
-      (endianness big)
-      size-of/port)
-    (bytevector-copy! (internet-address-ip addr) 0
-      res (+ size-of/port size-of/family)
-      size-of/ip)
-    res))
-
+  (make-foreign-ipv4-address
+    af-inet
+    (internet-address-port addr)
+    (internet-address-ip addr)))
 @
 
 <<FFI Constants>>=
-(size-of/family int "int" "sizeof(sa_family_t)")
-(size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
+(size-of/sockaddr-in int "int" "sizeof(struct sockaddr_in)")
 (size-of/port fixnum "int" "sizeof(x.sin_port)"
    "struct sockaddr_in x;")
 (size-of/ip fixnum "int" "sizeof(struct in_addr)")
@@ -356,16 +375,13 @@ by [[internet-address->foreign]].
 <netinet/in.h>
 @
 
-Converting back is pretty easy.
+\noindent Converting back is pretty easy.
 
 <<Datatypes>>=
 (define (foreign->internet-address addr addr-len)
-  (let ([ip (make-bytevector 4)]
-        [ipi (+ size-of/family size-of/port)])
-    (bytevector-copy! addr ipi ip 0 4)
-    (make-internet-address ip
-      (bytevector-uint-ref addr size-of/family (endianness big) size-of/port))))
-
+  (make-internet-address
+    (foreign-ipv4-address-ip addr)
+    (foreign-ipv4-address-port addr)))
 @
 
 \noindent Usually internet addresses are given as a colon delimited ip 
@@ -373,33 +389,42 @@ address string and a port number. [[string->internet-address]] converts
 this to a proper internet address structure.
 
 <<Datatypes>>=
-(define string->internet-address
-  (lambda (s)
-    <<Definition for splitting an address string>>
-    <<Definition for maping a string ip address to a bytevector>>
-    (let-values ([(ip-string port-string) (split s)])
-      (let ([ip (s->ip ip-string)]
-            [port (string->number port-string)])
-        (assert (= 4 (bytevector-length ip)))
-        (assert (< 0 port 65536))
-        (make-internet-address ip port)))))
+(define (string->internet-address s)
+  (let-values ([(ip-string port-string) (split-ipv4-address s)])
+    (let ([ip (and ip-string (s->ip ip-string))]
+          [port (and port-string (string->number port-string))])
+      (assert (or (not ip) (>= 32 (bitwise-length ip))))
+      (assert (or (not port) (< 0 port 65536)))
+      (make-internet-address ip port))))
 @
 
 \noindent I define a helper to split the address into ip and port.
 
-<<Definition for splitting an address string>>=
-(define (split s)
-  (apply values (string-tokenize s (char-set-complement (char-set #\:)))))
+<<Datatypes>>=
+(define (split-ipv4-address s)
+  (let ([val (string-tokenize s (char-set-complement (char-set #\:)))])
+    (if (pair? val)
+        (values
+          (car val)
+          (and (pair? (cdr val)) (cadr val)))
+        (values #f #f))))
 @
 
 \noindent Another helper splits the ip address and converts it to a bytevector 
 in big endian or network byte order.
 
-<<Definition for maping a string ip address to a bytevector>>=
+<<Datatypes>>=
 (define (s->ip s)
-  (u8-list->bytevector
-    (map string->number
-      (string-tokenize s (char-set-complement (char-set #\.))))))
+  (let ([bytes (map string->number 
+                 (string-tokenize s 
+                   (char-set-complement (char-set #\.))))])
+    (assert (= 4 (length bytes)))
+    (fold-left
+      (lambda (s x)
+        (assert (<= 0 x 255))
+        (+ (bitwise-arithmetic-shift s 8) x))
+      0
+      bytes)))
 @
 
 \noindent The reverse procedure [[internet-address->string]] is more 
@@ -408,18 +433,14 @@ straightforward.
 <<Datatypes>>=
 (define (internet-address->string addr)
   (let (
-      [ip (internet-address-ip addr)]
+      [ip (or (internet-address-ip addr) 0)]
       [port (internet-address-port addr)])
-    (assert (< 0 port 65536))
-    (assert (= 4 (bytevector-length ip)))
-    (call-with-string-output-port
-      (lambda (output)
-        (do ([bytes (bytevector->u8-list ip) (cdr bytes)])
-          [(null? bytes) 
-            (put-char output #\:)
-            (put-datum output port)]
-          (put-datum output (car bytes))
-          (when (pair? (cdr bytes)) (put-char output #\.)))))))
+    (assert (or (not port) (< 0 port 65536)))
+    (assert (>= 32 (bitwise-length ip)))
+    (do ([ip ip (bitwise-arithmetic-shift ip -8)]
+         [res '() (cons (mod ip 256) res)])
+      [(zero? ip)
+       (format "~{~d~^.~}~@[:~d~]" res port)])))
 @
 
 \section{Address Information}
@@ -433,7 +454,7 @@ address-info-protocol
 address-info-address
 @
 
-The [[get-address-info]] procedure returns a list of [[address-info]] 
+The [[get-address-info]] procedure returns a list of [[address-info]] h
 structures that specify different means by which a host may be contacted. 
 
 <<Datatypes>>=
@@ -758,6 +779,7 @@ explicitly knowing the type of the domain beforehand.
 (%socket-domain/internet fixnum "int" "AF_INET")
 (%socket-domain/internet-v6 fixnum "int" "AF_INET6")
 (size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
+(size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
 @
 
 Socket domains sometimes need to be grabbed by just their 
@@ -1519,6 +1541,7 @@ Scheme values at expansion time that are necessary to do these transformations.
     (rnrs control)
     (rnrs conditions)
     (rnrs arithmetic fixnums)
+    (rnrs arithmetic bitwise)
     (rnrs lists)
     (rnrs mutable-pairs)
     (rnrs exceptions)
@@ -1528,7 +1551,7 @@ Scheme values at expansion time that are necessary to do these transformations.
     (arcfide ffi-bind)
     (arcfide errno)
     (arcfide ffi-bind types)
-    (only (chezscheme) foreign-procedure break void))
+    (only (chezscheme) foreign-procedure format void))
 
 <<Foreign Constants>>
 

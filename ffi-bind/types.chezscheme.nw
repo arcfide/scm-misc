@@ -13,36 +13,51 @@ types.
 (define-syntax define-foreign-integer-type
   (syntax-rules (signed unsigned)
     [(_ (name constructor getter setter!) size)
-     (define-integer-type 
+     (define-foreign-integer-type 
        (name constructor getter setter!) 
        signed
-       size)]
-    [(_ (name constructor getter setter!) unsigned size)
+       size
+       (native-endianness))]
+    [(_ (name constructor getter setter!) unsigned size endian)
      (begin
        (define size-val size)
-       (define type
-         (case size-val
-           [(1) 'unsigned-8]
-           [(2) 'unsigned-16]
-           [(4) 'unsigned-32]
-           [(8) 'unsigned-64]
-           [else (unsupported-integer-size #f size-val)]))
-       (%define-type type size-val name constructor getter setter!)
+       (define endian-val endian)
+       (define type (get-type 'unsigned size-val))
+       (%define-type 
+         type size-val endian-val 
+         name constructor getter setter!)
        (define-foreign-type name size-val constructor getter setter!))]
-    [(_ (name constructor getter setter!) signed size)
+    [(_ (name constructor getter setter!) signed size endian)
      (begin
        (define size-val size)
-       (define type
-         (case size-val
-           [(1) 'integer-8]
-           [(2) 'integer-16]
-           [(4) 'integer-32]
-           [(8) 'integer-64]
-           [else (unsupported-integer-size #f size-val)]))
-       (%define-type type size-val name constructor getter setter!)
+       (define endian-val endian)
+       (define type (get-type 'signed size-val))
+       (%define-type 
+         type size-val endian-val 
+         name constructor getter setter!)
        (define-foreign-type name size-val constructor getter setter!))]))
 @
 
+\noindent The integer type can be signed/unsigned and 1, 2, 4, or 8
+bytes.
+
+<<Types>>=
+(define (get-type sign size)
+  (if (eq? 'signed sign)
+      (case size
+        [(1) 'integer-8]
+        [(2) 'integer-16]
+        [(4) 'integer-32]
+        [(8) 'integer-64]
+        [else (unsupported-integer-size #f size)])
+      (case size
+        [(1) 'unsigned-8]
+        [(2) 'unsigned-16]
+        [(4) 'unsigned-32]
+        [(8) 'unsigned-64]
+        [else (unsupported-integer-size #f size)])))
+@
+      
 \noindent [[%define-type]] first defines an appropriate bytevector
 setter and getter, and then defines the standard versions of integer
 accessors and mutators.
@@ -50,44 +65,96 @@ accessors and mutators.
 <<Types>>=
 (define-syntax %define-type
   (syntax-rules ()
-    [(_ type size name const get set!)
+    [(_ type size endian name const get set!)
      (begin
-       (define bv-ref
-         (case type
-           [(integer-8) bytevector-s8-ref]
-           [(unsigned-8) bytevector-u8-ref]
-           [(integer-16) bytevector-s16-native-ref]
-           [(unsigned-16) bytevector-u16-native-ref]
-           [(integer-32) bytevector-s32-native-ref]
-           [(unsigned-32) bytevector-u32-native-ref]
-           [(integer-64) bytevector-s64-native-ref]
-           [(unsigned-64) bytevector-u64-native-ref]
-           [else (unsupported-integer-size 'get type)]))
-       (define bv-set!
-        (case type
-          [(integer-8) bytevector-s8-set!]
-          [(unsigned-8) bytevector-u8-set!]
-          [(integer-16) bytevector-s16-native-set!]
-          [(unsigned-16) bytevector-u16-native-set!]
-          [(integer-32) bytevector-s32-native-set!]
-          [(unsigned-32) bytevector-u32-native-set!]
-          [(integer-64) bytevector-s64-native-set!]
-          [(unsigned-64) bytevector-u64-native-set!]
-          [else (unsupported-integer-size 'set! type)]))
+       (define bv-ref (make-ref-type type endian))
+       (define bv-set! (make-set-type type endian))
+       (define bv-native-ref (make-native-ref-type type endian))
+       (define switch (make-switcher bv-native-ref bv-set! size))
        (define (set! x offset val)
          (cond
            [(bytevector? x) (bv-set! x offset val)]
-           [(and (integer? x) (positive? x)) (#%$poke! x type offset val)]
+           [(and (integer? x) (positive? x)) 
+            (#%$poke! x type offset (switch val))]
            [else (invalid-object 'set! x)]))
        (define (get x offset)
          (cond
            [(bytevector? x) (bv-ref x offset)]
-           [(and (integer? x) (positive? x)) (#%$peek x type offset)]
+           [(and (integer? x) (positive? x)) 
+            (switch (#%$peek x type offset))]
            [else (invalid-object 'get x)]))
        (define (const x)
          (let ([res (make-bytevector size)])
            (set! res 0 x)
            res)))]))
+@
+
+\noindent Making the reference procedure consists of choosing the right
+bytevector procedure for the given type:
+
+<<Types>>=
+(define (make-ref endian proc)
+  (lambda (bv n) (proc bv n endian)))
+  
+(define (make-ref-type type endian)
+  (case type
+    [(integer-8) bytevector-s8-ref]
+    [(unsigned-8) bytevector-u8-ref]
+    [(integer-16) (make-ref endian bytevector-s16-ref)]
+    [(unsigned-16) (make-ref endian bytevector-u16-ref)]
+    [(integer-32) (make-ref endian bytevector-s32-ref)]
+    [(unsigned-32) (make-ref endian bytevector-u32-ref)]
+    [(integer-64) (make-ref endian bytevector-s64-ref)]
+    [(unsigned-64) (make-ref endian bytevector-u64-ref)]
+    [else (unsupported-integer-size 'get type)]))
+@
+
+\noindent We need to have a native getter in any case, since we have to
+convert the endianness on foreign pointer types.
+
+<<Types>>=
+(define (make-native-ref-type type endian)
+  (case type
+    [(integer-8) bytevector-s8-ref]
+    [(unsigned-8) bytevector-u8-ref]
+    [(integer-16) bytevector-s16-native-ref]
+    [(unsigned-16) bytevector-u16-native-ref]
+    [(integer-32) bytevector-s32-native-ref]
+    [(unsigned-32) bytevector-u32-native-ref]
+    [(integer-64) bytevector-s64-native-ref]
+    [(unsigned-64) bytevector-u64-native-ref]
+    [else (unsupported-integer-size 'get type)]))
+@
+
+\noindnet The Setter procedure maker is basically the same.
+
+<<Types>>=
+(define (make-set endian proc)
+  (lambda (bv n v) (proc bv n v endian)))
+  
+(define (make-set-type type endian)
+  (case type
+    [(integer-8) bytevector-s8-set!]
+    [(unsigned-8) bytevector-u8-set!]
+    [(integer-16) (make-set endian bytevector-s16-set!)]
+    [(unsigned-16) (make-set endian bytevector-u16-set!)]
+    [(integer-32) (make-set endian bytevector-s32-set!)]
+    [(unsigned-32) (make-set endian bytevector-u32-set!)]
+    [(integer-64) (make-set endian bytevector-s64-set!)]
+    [(unsigned-64) (make-set endian bytevector-u64-set!)]
+    [else (unsupported-integer-size 'set! type)]))
+@
+
+\noindent We need to be able to convert from little to big endian and
+vice versa for when we use the [[#%$peek]] and [[#%$poke]] features of
+Chez Scheme.
+
+<<Types>>=
+(define (make-switcher ref set! size)
+  (lambda (val)
+    (let ([res (make-bytevector size)])
+      (set! res 0 val)
+      (ref res 0))))
 @
 
 \noindent Above we use the same error messages so we put them into handy
@@ -106,7 +173,6 @@ For example, we could use this to define [[foreign-char]].
 <<Types>>=
 (define-foreign-integer-type
   (foreign-char make-foreign-char get-foreign-char foreign-char-set!)
-  signed
   1)
 @
 
@@ -116,7 +182,7 @@ type seems to work pretty well, so I am going to go for that.
 
 <<Types>>=
 (define foreign-string-transcoder 
-  (make-transcoder (utf-8-codec) (eol-style none)))
+  (make-transcoder (latin-1-codec) (eol-style none)))
 
 (define (make-foreign-string x)
   (string->bytevector x foreign-string-transcoder))
