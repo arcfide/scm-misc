@@ -15,19 +15,19 @@ in the form of an Association list. It is roughtly the same as [[cgi:url-unquote
 
 <<Code>>=
 (define (query-string->parameters parm-string)
-	(define (consolidate-duplicates alist)
-		(let loop ((old-l alist) (new-l '()))
-			(cond
-				((null? old-l) new-l)
-				((assq (caar old-l) new-l) =>
-					(lambda (duplicate-assoc)
-						(let last-link-loop ((link duplicate-assoc))
-							(if (null? (cdr link))
-								(set-cdr! link (cdar old-l))
-								(last-link-loop (cdr link))))
-						(loop (cdr old-l) new-l)))
-				(else
-					(loop (cdr old-l) (cons (car old-l) new-l))))))
+  (define (consolidate-duplicates alist)
+    (let loop ((old-l alist) (new-l '()))
+      (cond
+        ((null? old-l) new-l)
+        ((assq (caar old-l) new-l) =>
+          (lambda (duplicate-assoc)
+            (let last-link-loop ((link duplicate-assoc))
+              (if (null? (cdr link))
+                (set-cdr! link (cdar old-l))
+                (last-link-loop (cdr link))))
+            (loop (cdr old-l) new-l)))
+        (else
+          (loop (cdr old-l) (cons (car old-l) new-l))))))
   (let ((result '())
         (read-primitive-token
           (lambda ()
@@ -43,11 +43,11 @@ in the form of an Association list. It is roughtly the same as [[cgi:url-unquote
            (let
              ((token (read-primitive-token)))
 
-             	; If #\% left on stream, read it and the following
-             	; two characters (hex digits), unquote the char and
-             	; append it to the rest of the token
+               ; If #\% left on stream, read it and the following
+               ; two characters (hex digits), unquote the char and
+               ; append it to the rest of the token
              (do () ((not (eq? (peek-char) #\%)))
-               (read-char)		; read the percent char
+               (read-char)    ; read the percent char
                (let ((quoted-char-str (make-string 2)))
                  (string-set! quoted-char-str 0 (read-char))
                  (string-set! quoted-char-str 1 (read-char))
@@ -62,10 +62,10 @@ in the form of an Association list. It is roughtly the same as [[cgi:url-unquote
                (set! action-prefix '*eof*))
              (set! status
                (case action-prefix 
-                 ((#\& *eof* #\/)		; new parmset to follow
+                 ((#\& *eof* #\/)    ; new parmset to follow
                    (case status
                      ((init) #t)
-                     ((have-read-keyword)	; parm without any values
+                     ((have-read-keyword)  ; parm without any values
                        (set! result (cons (list keyword) result)))
                      ((have-read-value)
                        (set! result (cons (cons keyword (reverse vals)) result)))
@@ -84,9 +84,9 @@ in the form of an Association list. It is roughtly the same as [[cgi:url-unquote
                    (case status
                      ((have-read-keyword)
                        (error "+ unexpected after a keyword"))
-                     ((have-read-value)		; other values after the keyword
+                     ((have-read-value)    ; other values after the keyword
                        (if (equal? (car vals) "")
-                         (set-car! vals token)	; if the previous token was empty, ditch it
+                         (set-car! vals token)  ; if the previous token was empty, ditch it
                          (set! vals (cons token vals)))
                          'have-read-value)
                      (else (error "unexpected status " status))))
@@ -100,44 +100,44 @@ parameters as an argument, and doesn't have the predefined values.
 
 <<Code>>=
 (define (query-parameter-lookup query-parms name type . default-value-l)
-	(define (coerce type name . vals)
-		(case type
-			((token)
-	 			(if (null? vals) #f (car vals)))
-			((tokens) vals)
-			((string)
-			 (cond
-				((null? vals) "")
-				((null? (cdr vals)) (car vals))
-				(else
-					(apply string-append (list-intersperse vals " ")))))
-			((io)
-				(cond
-					((null? vals) '(""))
-					((null? (cdr vals)) vals)
-					(else (list-intersperse vals " "))))
-			((int number)
-				(let* (
-						(val-raw (and (pair? vals) (null? (cdr vals)) (car vals)))
-						(val-c 
-							(if (eq? type 'int)
-							 	(string->integer val-raw 0 (string-length val-raw))
-				 				(string->number val-raw))))
-		 			(or val-c
-				 		(abort
-						(make-property-condition 'cgi-type-error
-							 'name name
-					 		'type type)))))
-			(else
-	 			(error "invalid type: " type))))
-	(let ((found-assoc (assq name query-parms)))
-		(cond
-			((and found-assoc (not (equal? '("") (cdr found-assoc))))
-				(apply coerce (cons type found-assoc)))
-			((null? default-value-l)
-				(error "CGI name " name
-					" was not found among form parameters: " query-parms))
-			(else (car default-value-l)))))
+  (define (coerce type name . vals)
+    (case type
+      ((token)
+         (if (null? vals) #f (car vals)))
+      ((tokens) vals)
+      ((string)
+       (cond
+        ((null? vals) "")
+        ((null? (cdr vals)) (car vals))
+        (else
+          (apply string-append (list-intersperse vals " ")))))
+      ((io)
+        (cond
+          ((null? vals) '(""))
+          ((null? (cdr vals)) vals)
+          (else (list-intersperse vals " "))))
+      ((int number)
+        (let* (
+            (val-raw (and (pair? vals) (null? (cdr vals)) (car vals)))
+            (val-c 
+              (if (eq? type 'int)
+                 (string->integer val-raw 0 (string-length val-raw))
+                 (string->number val-raw))))
+           (or val-c
+             (abort
+            (make-property-condition 'cgi-type-error
+               'name name
+               'type type)))))
+      (else
+         (error "invalid type: " type))))
+  (let ((found-assoc (assq name query-parms)))
+    (cond
+      ((and found-assoc (not (equal? '("") (cdr found-assoc))))
+        (apply coerce (cons type found-assoc)))
+      ((null? default-value-l)
+        (error "CGI name " name
+          " was not found among form parameters: " query-parms))
+      (else (car default-value-l)))))
 @
 
 \chapter{File Forms}%
@@ -148,33 +148,33 @@ parameters as an argument, and doesn't have the predefined values.
 
 <<query-strings.sls>>=
 (library (arcfide query-strings)
-	(export query-parameter-lookup query-string->parameters)
-	(import
-		(except (rnrs base) error)
-		(rnrs programs)
-		(rnrs io simple)
-		(rnrs mutable-pairs)
-		(rnrs unicode)
-		(rnrs exceptions)
-		(rnrs conditions)
-		(rnrs lists)
-		(rnrs control)
-		(rnrs mutable-strings)
-		(only (chezscheme)
-			with-input-from-string
-			with-output-to-string
-			display-condition
-			trace-define)
-		(only (srfi :13)
-			string-index-right
-			string-contains
-			string-null?
-			string-concatenate-reverse)
-		(oleg sxml-to-html)
-		(oleg prelude)
-		(srfi :23)
-		(srfi :0)
-		(srfi private include))
+  (export query-parameter-lookup query-string->parameters)
+  (import
+    (except (rnrs base) error)
+    (rnrs programs)
+    (rnrs io simple)
+    (rnrs mutable-pairs)
+    (rnrs unicode)
+    (rnrs exceptions)
+    (rnrs conditions)
+    (rnrs lists)
+    (rnrs control)
+    (rnrs mutable-strings)
+    (only (chezscheme)
+      with-input-from-string
+      with-output-to-string
+      display-condition
+      trace-define)
+    (only (srfi :13)
+      string-index-right
+      string-contains
+      string-null?
+      string-concatenate-reverse)
+    (oleg sxml-to-html)
+    (oleg prelude)
+    (srfi :23)
+    (srfi :0)
+    (srfi private include))
 
 (define parser-error
   (lambda (port msg . args)
