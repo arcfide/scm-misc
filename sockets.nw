@@ -208,14 +208,6 @@ socket domains below.
 unix-address?
 make-unix-address
 unix-address-path
-make-foreign-unix-address
-foreign-unix-address-path
-foreign-unix-address-family
-make-foreign-unix-path
-get-foreign-unix-path
-foreign-unix-path-set!
-unix-address->foreign
-foreign->unix-address
 @
 
 UNIX domain sockets have addresses that are just paths, which in turn are simply strings. 
@@ -311,8 +303,7 @@ internet-address-ip
 internet-address-port
 string->internet-address
 internet-address->string
-internet-address->foreign
-foreign->internet-address
+string->ipv4
 @
 
 \noindent Internet addresses are represented by an IP address and a port
@@ -391,7 +382,7 @@ this to a proper internet address structure.
 <<Datatypes>>=
 (define (string->internet-address s)
   (let-values ([(ip-string port-string) (split-ipv4-address s)])
-    (let ([ip (and ip-string (s->ip ip-string))]
+    (let ([ip (and ip-string (string->ipv4 ip-string))]
           [port (and port-string (string->number port-string))])
       (assert (or (not ip) (>= 32 (bitwise-length ip))))
       (assert (or (not port) (< 0 port 65536)))
@@ -414,7 +405,7 @@ this to a proper internet address structure.
 in big endian or network byte order.
 
 <<Datatypes>>=
-(define (s->ip s)
+(define (string->ipv4 s)
   (let ([bytes (map string->number 
                  (string-tokenize s 
                    (char-set-complement (char-set #\.))))])
@@ -452,41 +443,125 @@ address-info-domain
 address-info-type
 address-info-protocol
 address-info-address
+get-address-info
 @
 
-The [[get-address-info]] procedure returns a list of [[address-info]] h
-structures that specify different means by which a host may be contacted. 
-
-<<Datatypes>>=
-(define-record-type address-info (fields domain type protocol address))
-@
-
-The [[address]] field of an [[address-info]] record should be an 
-internet-socket-address.
+\noindent The [[get-address-info]] procedure returns a list of [[address-info]]
+structures that specify different means by which a host may be
+contacted and a string representing the canonical name of the host if
+this information was requested. Otherwise, the second returned value is
+false. It corresponds to the [[getaddrinfo(3)]] UNIX system call, with a
+few things modified to be more Schemely.
 
 \procsig{[[get-address-info]]}{\var{node} \var{service}
   [\var{domain} \var{type} \var{protocol}] 
   [\var{flags} \dots ]}
   {\var{List of addresses}}
 
-<<Exports>>=
-get-address-info
+\noindent Each [[address-info]] structure identifies or associates an
+address with a given domain, type, and protocol, which is enough to
+create a socket and connect to that address using the right types.
+
+<<Datatypes>>=
+(define-record-type address-info (fields domain type protocol address))
 @
 
-Corresponds to [[getaddrinfo(3)]]. 
-Domain, type, protocol, and the flags are all optional.
+\noindent The [[address]] field of an [[address-info]] record should be
+an  [[internet-socket-address]]. Also note that in the normal C
+equivalent of this record type, [[struct addrinfo]], there is also a
+field for the canonical name. Because this is given only once, it does
+not make sense to have a field for this in every structure that is
+returned, so I have decided to place this as an additional value that is
+returned by [[get-address-info]] instead, which makes more sense, since
+it really is a separate thing to be returned. 
+
+The downside to this approach is that it requires two values to be
+accepted when calling [[get-address-info]], even if one does not care
+about the canonical name. I am open to better approaches, but this does
+not seem to be too inconvenient in practice.
+
+The foreign equivalent, [[struct addrinfo]] can be expressed with
+[[define-foreign-struct-type]] and [[define-foreign-integer-type]]. 
+
+We first define a foreign integer type which corresponds to the C
+[[int]] type. 
+
+<<Code>>=
+(define-foreign-integer-type 
+  (foreign-integer 
+   make-foreign-integer 
+   get-foreign-integer
+   foreign-integer-set!)
+  signed
+  size-of/integer
+  (native-endianness))
+@
+
+<<FFI Constants>>=
+(size-of/integer int "int" "sizeof(int)")
+@
+
+\noindent Next we need a [[size_t]] equivalent.
+
+<<Code>>=
+(define-foreign-integer-type
+  (size-t make-size-t get-size-t size-t-set!)
+  unsigned size-of/size-t (native-endianness))
+@
+
+<<FFI Constants>>=
+(size-of/size-t int "int" "sizeof(size_t)")
+@
+
+\noindent And finally, we need some sort of pointer type.
+
+<<Code>>=
+(define-foreign-integer-type
+  (foreign-pointer 
+   make-foreign-pointer 
+   get-foreign-pointer
+   foreign-pointer-set!)
+  unsigned size-of/pointer (native-endianness))
+@
+
+<<FFI Constants>>=
+(size-of/pointer int "int" "sizeof(void *)")
+@
+
+\noindent Then we can define the address info foreign structure.
+
+<<Code>>=
+(define-foreign-struct-type foreign-address-info size-of/addrinfo
+  (flags foreign-integer)
+  (domain foreign-integer)
+  (type foreign-integer)
+  (protocol foreign-integer)
+  (address-length size-t)
+  (address foreign-pointer)
+  (canonical-name foreign-pointer)
+  (next foreign-pointer))
+@
+
+<<FFI Constants>>=
+(size-of/addrinfo int "int" "sizeof(struct addrinfo)")
+@
+
+\noindent [[get-address-info]] takes an optional set of hints, such as
+the domain, type, protocol, or a set of flags that can be used to filter
+out the results obtained from the call. 
 
 <<Code>>=
 (define get-address-info
   (case-lambda
     [(node service)
-      (%get-address-info node service #f #f #f '())]
+     (%get-address-info node service #f #f #f '())]
     [(node service dom type proto . flags)
-      (%get-address-info node service dom type proto flags)]))
+     (%get-address-info node service dom type proto flags)]))
 @
 
-\noindent To grab the address we make our foreign buffers, call [[$getaddrinfo]], 
-check for errors, and then convert the foreign address into a Scheme structure.
+\noindent To grab the address we make our foreign buffers, call
+[[$getaddrinfo]],  check for errors, and then convert the foreign
+address foreign-integero a Scheme structure.
 
 <<Code>>=
 (define (%get-address-info node service domain type protocol flags)
@@ -555,7 +630,7 @@ There are a few built in address info options.
 (%ai/passive fixnum "int" "AI_PASSIVE")
 @
 
-[[make-addrinfo-hints converts a domain, type, protocol, 
+[[make-addrinfo-hints]] converts a domain, type, protocol, 
 and set of flags into a [[struct addrinfo]] bytevector.
 
 <<Code>>=
@@ -589,8 +664,6 @@ and set of flags into a [[struct addrinfo]] bytevector.
 @
 
 <<FFI Constants>>=
-(size-of/integer int "int" "sizeof(int)")
-(size-of/addrinfo fixnum "int" "sizeof(struct addrinfo)")
 (addrinfo/family-offset fixnum "int"
  "(char *)&x.ai_family - (char *)&x"
  "struct addrinfo x;")
@@ -671,7 +744,6 @@ The following procedures help to access data from a field.
 (addrinfo/next-offset fixnum "int"
   "(char *)&x.ai_next - (char *)&x"
   "struct addrinfo x;")
-(size-of/size-t fixnum "int" "sizeof(size_t)")
 @
 
 <<FFI Procedures>>=
@@ -979,7 +1051,6 @@ in its own way.}
 @
 
 <<FFI Constants>>=
-(size-of/pointer fixnum "int" "sizeof(char *)")
 (protoent/name-offset fixnum "int" 
  "(char *)&x.p_name - (char *)&x"
  "struct protoent x;")
