@@ -77,46 +77,46 @@ The following procedures read and write packets to a given port.
 
 <<Packet I/O>>=
 (define (put-packet packet port)
-	(for-each 
-		(lambda (x) 
-			(put-datum port (car x))
-			(put-char port #\newline)
-			(put-string port (cdr x))
-			(put-char port #\newline))
-		(modlisp-packet-headers packet))
-	(when (keep-alive?)
-		(put-string port "Keep-Socket\n1\n"))
-	(put-string port "Content-Length\n")
-	(put-string port (number->string (string-length (modlisp-packet-contents packet))))
-	(put-char port #\newline)
-	(put-string port "end\n")
-	(put-string port (modlisp-packet-contents packet))
-	(flush-output-port port))
+  (for-each 
+    (lambda (x) 
+      (put-datum port (car x))
+      (put-char port #\newline)
+      (put-string port (cdr x))
+      (put-char port #\newline))
+    (modlisp-packet-headers packet))
+  (when (keep-alive?)
+    (put-string port "Keep-Socket\n1\n"))
+  (put-string port "Content-Length\n")
+  (put-string port (number->string (string-length (modlisp-packet-contents packet))))
+  (put-char port #\newline)
+  (put-string port "end\n")
+  (put-string port (modlisp-packet-contents packet))
+  (flush-output-port port))
 
 <<Header Processing>>
 
 <<Content Processing>>
 
 (define (get-packet port)
-	(call-with-current-continuation
-		(lambda (return)
-			(define (return-on-disconnect x)
-				(if (eof-object? x) (return #f) x))
-			(define (get-header)
-				(let ([key (return-on-disconnect (get-line port))])
-					(and (not (string=? "end" key))
-						(cons (string->symbol (string-downcase key))
-							(return-on-disconnect (get-line port))))))
-			(loop (
-					[with header (get-header) (get-header)]
-					[for headers (listing (process-header header))]
-					[while header])
-				=> (make-modlisp-packet headers
-						(let ([len (assq 'content-length headers)])
-							(and len 
-								(process-contents headers 
-									(return-on-disconnect 
-										(get-string-n port (string->number (cdr len))))))))))))
+  (call-with-current-continuation
+    (lambda (return)
+      (define (return-on-disconnect x)
+        (if (eof-object? x) (return #f) x))
+      (define (get-header)
+        (let ([key (return-on-disconnect (get-line port))])
+          (and (not (string=? "end" key))
+            (cons (string->symbol (string-downcase key))
+              (return-on-disconnect (get-line port))))))
+      (loop (
+          [with header (get-header) (get-header)]
+          [for headers (listing (process-header header))]
+          [while header])
+        => (make-modlisp-packet headers
+            (let ([len (assq 'content-length headers)])
+              (and len 
+                (process-contents headers 
+                  (return-on-disconnect 
+                    (get-string-n port (string->number (cdr len))))))))))))
 @
 
 \chapter{Processing Headers}%
@@ -134,19 +134,19 @@ here for customization of mod\_lisp.}
 
 <<Header Processing>>=
 (define (parse-content-type buf)
-	(parse-string mime-parser:content-value buf #f
-		(lambda (res con s) res)
-		(lambda (err con s)
-			(error 'parse-content-type
-				"Failed to parse content-type header"
-				(parse-error/position err)
-				(parse-error/messages err)))))
+  (parse-string mime-parser:content-value buf #f
+    (lambda (res con s) res)
+    (lambda (err con s)
+      (error 'parse-content-type
+        "Failed to parse content-type header"
+        (parse-error/position err)
+        (parse-error/messages err)))))
 
 (define (process-header header)
-	(case (car header)
-		[(url) (cons 'url (string->uri (cdr header)))]
-		[(content-type) (cons 'content-type (parse-content-type (cdr header)))]
-		[else header]))
+  (case (car header)
+    [(url) (cons 'url (string->uri (cdr header)))]
+    [(content-type) (cons 'content-type (parse-content-type (cdr header)))]
+    [else header]))
 @
 
 \chapter{Processing Contents}%
@@ -170,13 +170,13 @@ URL encoded post messages.
 
 <<Content Processing>>=
 (define (process-contents headers contents)
-	(parse-string (mime-parser:contents headers) (string-append "\r\n" contents) #f
-		(lambda (res c s) res)
-		(lambda (err c s)
-			(error 'process-contents "Failed to parse contents" 
-				headers contents 
-				(parse-error/position err) 
-				(parse-error/messages err)))))
+  (parse-string (mime-parser:contents headers) (string-append "\r\n" contents) #f
+    (lambda (res c s) res)
+    (lambda (err c s)
+      (error 'process-contents "Failed to parse contents" 
+        headers contents 
+        (parse-error/position err) 
+        (parse-error/messages err)))))
 
 @
 
@@ -186,7 +186,7 @@ to handle the url-parameters.
 
 <<MIME Registration>>=
 (register-mime-type-converter! 'application 'x-www-form-urlencoded
-	(lambda (data params) (query-string->parameters data)))
+  (lambda (data params) (query-string->parameters data)))
 @
 
 \chapter{Serving Requests}%
@@ -198,15 +198,15 @@ the handler.
 <<Handlers>>
 
 (define (serve-request in out)
-	(define empty-uri (string->uri ""))
-	(define (packet-url p) (uri->string (get-modlisp-header p 'url empty-uri)))
-	(define (get-response url p) 
-		(if url ((lookup-request-handler url) p) (make-500-response)))
-	(let ([incoming (get-packet in)])
-		(and incoming
-			(begin 
-				(put-packet (get-response (packet-url incoming) incoming) out)
-				#t))))
+  (define empty-uri (string->uri ""))
+  (define (packet-url p) (uri->string (get-modlisp-header p 'url empty-uri)))
+  (define (get-response url p) 
+    (if url ((lookup-request-handler url) p) (make-500-response)))
+  (let ([incoming (get-packet in)])
+    (and incoming
+      (begin 
+        (put-packet (get-response (packet-url incoming) incoming) out)
+        #t))))
 @
 
 \chapter{Request Handlers}%
@@ -225,22 +225,22 @@ handle-404 register-request-handler!
 
 <<Handlers>>=
 (define (handle-404 incoming)
-	(define contents 
+  (define contents 
 "<html><head><title>404 Resource not found</title></head>
 <body><h1>404</h1><h2>Resource not found</h2>
 <p>Unable to find the resource. Please check the URL.</p></body></html>")
-	(make-modlisp-packet
-		`((status . "200 OK")
-			(content-type . "text/html"))
-		contents))
+  (make-modlisp-packet
+    `((status . "200 OK")
+      (content-type . "text/html"))
+    contents))
 
 (define request-handlers
-	(make-parameter `((,(irregex ".*") . ,handle-404))))
+  (make-parameter `((,(irregex ".*") . ,handle-404))))
 
 (define (register-request-handler! match proc)
-	(request-handlers
-		(cons (cons (irregex match) proc) 
-			(request-handlers))))
+  (request-handlers
+    (cons (cons (irregex match) proc) 
+      (request-handlers))))
 
 @
 
@@ -249,10 +249,10 @@ compared against the URL in order to grab a given handler.
 
 <<Handlers>>=
 (define (lookup-request-handler url)
-	(let ([res (find (lambda (x) (irregex-match (car x) url)) (request-handlers))])
-		(if res (cdr res)
-			(error 'lookup-request-handler "Failed to find handler!" 
-				url (request-handlers)))))
+  (let ([res (find (lambda (x) (irregex-match (car x) url)) (request-handlers))])
+    (if res (cdr res)
+      (error 'lookup-request-handler "Failed to find handler!" 
+        url (request-handlers)))))
 @
 
 \chapter{Server Application}%
@@ -282,14 +282,15 @@ start-modlisp-server modlisp-transcoder
 (import (only (chezscheme) fork-thread))
 
 (define (start-modlisp-server port)
-	(let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
-		(bind-socket s (make-internet-address #vu8(127 0 0 1) port))
-		(listen-socket s (socket-maximum-connections))
-		(set-socket-nonblocking! s #f)
-		(loop ()
-			(let-values ([(sock addr) (accept-socket s)])
-				(let-values ([(in out) (socket->port sock (buffer-mode block) modlisp-transcoder)])
-					(fork-thread (lambda () (loop ([while (serve-request in out)])))))))))
+  (let ([s (create-socket socket-domain/internet socket-type/stream socket-protocol/auto)])
+    (bind-socket s 
+      (make-internet-address (string->ipv4 "127.0.0.1") port))
+    (listen-socket s (socket-maximum-connections))
+    (set-socket-nonblocking! s #f)
+    (loop ()
+      (let-values ([(sock addr) (accept-socket s)])
+        (let-values ([(in out) (socket->port sock (buffer-mode block) modlisp-transcoder)])
+          (fork-thread (lambda () (loop ([while (serve-request in out)])))))))))
 @
 
 \chapter{Utilities and Helpers}%
@@ -310,7 +311,7 @@ any parameters passed in the URL.
 
 <<Utilities>>=
 (define (modlisp-subtree-matcher url)
-	(string-append url ".*"))
+  (string-append url ".*"))
 
 @
 
@@ -324,8 +325,8 @@ get-modlisp-header
 
 <<Utilities>>=
 (define (get-modlisp-header packet key . default)
-	(let ([res (assq key (modlisp-packet-headers packet))])
-		(if res (cdr res) (and (not (null? default)) (car default)))))
+  (let ([res (assq key (modlisp-packet-headers packet))])
+    (if res (cdr res) (and (not (null? default)) (car default)))))
 
 @
 
@@ -339,10 +340,10 @@ get-modlisp-parameter
 
 <<Utilities>>=
 (define (get-modlisp-parameter key packet)
-	(let ([url (get-modlisp-header packet 'url #f)])
-		(and url 
-			(let ([res (assq key (query-string->parameters (or (uri-query url) "")))])
-				(and res (cadr res))))))
+  (let ([url (get-modlisp-header packet 'url #f)])
+    (and url 
+      (let ([res (assq key (query-string->parameters (or (uri-query url) "")))])
+        (and res (cadr res))))))
 
 @
 
@@ -361,7 +362,7 @@ it makes sense to make this as easy as possible.
 
 <<Utilities>>=
 (define (make-html-response body)
-	(make-modlisp-packet '((content-type . "text/html") (status . "200 OK")) body))
+  (make-modlisp-packet '((content-type . "text/html") (status . "200 OK")) body))
 
 @
 
@@ -376,9 +377,9 @@ any special requirements.
 
 <<Utilities>>=
 (define (make-typed-response type contents)
-	(make-modlisp-packet
-		`((content-type . ,(mime-type->string type)) (status . "200 OK"))
-		contents))
+  (make-modlisp-packet
+    `((content-type . ,(mime-type->string type)) (status . "200 OK"))
+    contents))
 
 @
 
@@ -390,8 +391,8 @@ make-500-response
 
 <<Utilities>>=
 (define (make-500-response)
-	(make-html-response
-		"<html><head><title>500 Internal Server Error</title></head>
+  (make-html-response
+    "<html><head><title>500 Internal Server Error</title></head>
 <body><h1>500</h1><h2>Internal Server Error</h2>
 <p>A problem occured with your request. Please contact 
 the administrator about this problem.</p></body></html>"))
@@ -415,10 +416,10 @@ make-404-response
 <<License>>
 
 (library (arcfide modlisp)
-	(export
-		<<Exports>>)
-	(import
-		<<Imports>>)
+  (export
+    <<Exports>>)
+  (import
+    <<Imports>>)
 
 <<Datatypes>>
 
