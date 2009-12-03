@@ -1,5 +1,6 @@
 FILES=extended-definitions.sls modlisp.sls sockets.sls swap.sls base64.sls \
-	ffi-bind.sls parser-util.sls rfc2822.sls mime.sls errno.sls
+	ffi-bind.sls parser-util.sls rfc2822.sls mime.sls errno.sls \
+        ffi-bind/types.chezscheme.sls
 
 DOC_DIR=doc/
 
