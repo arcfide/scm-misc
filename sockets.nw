@@ -33,7 +33,6 @@ The following is a development to-do list of intended features
 and possible improvements.
 
 \orderedlist
-\li Clean up the handling of structures by abstracting and specializing
 \li Consider IP field name replaced with ADDRESS
 \li Consider name change of RECEIVE-FROM-SOCKET
 \li Consider name change of ACCEPT-SOCKET
