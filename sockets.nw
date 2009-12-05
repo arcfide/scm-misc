@@ -951,23 +951,20 @@ struct protoent {
   (protocol foreign-integer))
 @
 
-<<Exports>>=
-foreign-protocol-entry-name
-foreign-protocol-entry-aliases
-foreign-protocol-entry-protocol
-get-foreign-pointer
-@
-
 \noindent [[foreign->protocol-entry]] converts the foreign value into
 the normal [[protocol-entry]]. 
 
 <<Constants>>=
-(trace-define (foreign->protocol-entry x)
+(define (foreign->protocol-entry x)
   (make-protocol-entry
     (get-foreign-string (foreign-protocol-entry-name x) 0)
     (do ([ptr (foreign-protocol-entry-aliases x) 
               (+ ptr size-of/pointer)]
-         [res '() (cons (get-foreign-string ptr 0) res)])
+         [res '() 
+           (cons (get-foreign-string 
+                   (get-foreign-pointer ptr 0) 
+                   0)
+                 res)])
       [(zero? (get-foreign-pointer ptr 0)) (reverse res)])
     (foreign-protocol-entry-protocol x)))
 @
@@ -1599,7 +1596,7 @@ Scheme values at expansion time that are necessary to do these transformations.
     (arcfide ffi-bind)
     (arcfide errno)
     (arcfide ffi-bind types)
-    (only (chezscheme) foreign-procedure format trace-define void))
+    (only (chezscheme) foreign-procedure format void))
 
 <<Foreign Constants>>
 
