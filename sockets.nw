@@ -444,6 +444,9 @@ address-info-type
 address-info-protocol
 address-info-address
 get-address-info
+address-info/canonical-name
+address-info/numeric-host
+address-info/passive
 @
 
 \noindent The [[get-address-info]] procedure returns a list of [[address-info]]
@@ -456,7 +459,7 @@ few things modified to be more Schemely.
 \procsig{[[get-address-info]]}{\var{node} \var{service}
   [\var{domain} \var{type} \var{protocol}] 
   [\var{flags} \dots ]}
-  {\var{List of addresses}}
+  {\var{List of addresses} \var{Canonical Name}}
 
 \noindent Each [[address-info]] structure identifies or associates an
 address with a given domain, type, and protocol, which is enough to
@@ -486,7 +489,7 @@ The foreign equivalent, [[struct addrinfo]] can be expressed with
 We first define a foreign integer type which corresponds to the C
 [[int]] type. 
 
-<<Code>>=
+<<Datatypes>>=
 (define-foreign-integer-type 
   (foreign-integer 
    make-foreign-integer 
@@ -503,7 +506,7 @@ We first define a foreign integer type which corresponds to the C
 
 \noindent Next we need a [[size_t]] equivalent.
 
-<<Code>>=
+<<Datatypes>>=
 (define-foreign-integer-type
   (size-t make-size-t get-size-t size-t-set!)
   unsigned size-of/size-t (native-endianness))
@@ -515,7 +518,7 @@ We first define a foreign integer type which corresponds to the C
 
 \noindent And finally, we need some sort of pointer type.
 
-<<Code>>=
+<<Datatypes>>=
 (define-foreign-integer-type
   (foreign-pointer 
    make-foreign-pointer 
@@ -530,7 +533,7 @@ We first define a foreign integer type which corresponds to the C
 
 \noindent Then we can define the address info foreign structure.
 
-<<Code>>=
+<<Datatypes>>=
 (define-foreign-struct-type foreign-address-info size-of/addrinfo
   (flags foreign-integer)
   (domain foreign-integer)
@@ -566,17 +569,24 @@ address foreign-integero a Scheme structure.
 <<Code>>=
 (define (%get-address-info node service domain type protocol flags)
   <<Check get-address-info argument types>>
-  (let (
-      [addr-list-ptr (make-bytevector size-of/pointer)]
-      [hints (make-addrinfo-hints domain type protocol flags)]
-      [service (or (string? service) (number->string service 10))])
+  (let ([addr-list-ptr (make-foreign-pointer 0)]
+        [hints (make-addrinfo-hints domain type protocol flags)]
+        [service (or (and (string? service) service) 
+                     (number->string service 10))])
     (let ([res ($getaddrinfo node service hints addr-list-ptr)])
       (if (zero? res)
-        (foreign->address-info-list addr-list-ptr)
-        (error 'get-address-info
-          "getaddrinfo() failed with code"
-          `(code ,res)
-          ($gai_strerror res))))))
+          (values 
+            (foreign->address-info-list addr-list-ptr)
+            ;#f)
+            (let ([canon-name 
+                    (foreign-address-info-canonical-name
+                      (get-foreign-pointer addr-list-ptr 0))])
+              (and (not (zero? canon-name))
+                   (get-foreign-string canon-name 0))))
+          (error 'get-address-info
+            "getaddrinfo() failed with code"
+            `(code ,res)
+            ($gai_strerror res))))))
 @
 
 \noindent The optional domain, type, and protocol 
@@ -616,7 +626,7 @@ There are a few built in address info options.
 <<Constants>>=
 (define-record-type address-info-option (parent socket-constant))
 
-(define address-info/canon-name
+(define address-info/canonical-name
   (make-address-info-option %ai/canonname))
 (define address-info/numeric-host
   (make-address-info-option %ai/numerichost))
@@ -635,47 +645,19 @@ and set of flags into a [[struct addrinfo]] bytevector.
 
 <<Code>>=
 (define (make-addrinfo-hints domain type protocol flags)
-  (let ([res (make-bytevector size-of/addrinfo 0)])
-    (bytevector-sint-set! res addrinfo/flags-offset 
-      (fold-left
-        (lambda (s v)
-          (fxior s (socket-constant-value v)))
-        0
-        flags)
-      (native-endianness)
-      size-of/integer)
-    (when domain
-      (bytevector-sint-set! res addrinfo/family-offset
-        (socket-constant-value domain)
-        (native-endianness)
-        size-of/integer))
-    (when type
-      (bytevector-sint-set! res addrinfo/type-offset
-        (socket-constant-value type)
-        (native-endianness)
-        size-of/integer))
-    (when protocol
-      (bytevector-sint-set! res addrinfo/proto-offset
-        (socket-constant-value protocol)
-        (native-endianness)
-        size-of/integer))
-    res))
-
-@
-
-<<FFI Constants>>=
-(addrinfo/family-offset fixnum "int"
- "(char *)&x.ai_family - (char *)&x"
- "struct addrinfo x;")
-(addrinfo/flags-offset fixnum "int"
- "(char *)&x.ai_flags - (char *)&x"
- "struct addrinfo x;")
-(addrinfo/type-offset fixnum "int"
- "(char *)&x.ai_socktype - (char *)&x"
- "struct addrinfo x;")
-(addrinfo/proto-offset fixnum "int"
- "(char *)&x.ai_protocol - (char *)&x"
- "struct addrinfo x;")
+  (make-foreign-address-info
+    (fold-left
+      (lambda (s v)
+        (fxior s (socket-constant-value v)))
+      0
+      flags)
+    (or (and domain (socket-constant-value domain)) 0)
+    (or (and type (socket-constant-value type)) 0)
+    (or (and protocol (socket-constant-value protocol)) 0)
+    0
+    0
+    0
+    0))
 @
 
 Converting from a foreign [[struct addrinfo]] structure 
@@ -684,73 +666,23 @@ with [[foreign->address-info-list]].
 This walks through the linked list, grabbing each element from it.
 
 <<Code>>=
-(define (foreign->address-info-list addr-list-ptr)
-  <<Definition of grab to get element of list>>
-  (do (
-      [ptr 
-        (get-pointer-field addr-list-ptr 0) 
-        (foreign->pointer (+ ptr addrinfo/next-offset))]
-      [res '() (cons (grab ptr) res)])
+(define (foreign->address-info-list alp)
+  (do ([ptr (get-foreign-pointer alp 0) (foreign-address-info-next ptr)]
+       [res '() (cons (get-address-info-entry ptr) res)])
     [(zero? ptr) (reverse res)]))
+
+(define (get-address-info-entry alp)
+  (let ([dom (lookup-domain (foreign-address-info-domain alp))])
+    (make-address-info
+      dom
+      (make-socket-type (foreign-address-info-type alp))
+      (make-socket-protocol (foreign-address-info-protocol alp))
+      (foreign->socket-address 
+        dom
+        (foreign-address-info-address alp)
+        (foreign-address-info-address-length alp)))))
 @
-
-\noindent To grab the element, we make a buffer and copy in 
-the data from the pointer. We then extract the field values from 
-the element and make a proper structure.
-
-<<Definition of grab to get element of list>>=
-(define (grab ptr)
-  (let ([buf (make-bytevector size-of/addrinfo)])
-    ($memcpy buf ptr size-of/addrinfo) 
-    (let ([domain (lookup-domain (get-integer-field buf addrinfo/family-offset))])
-      (make-address-info
-        domain
-        (make-socket-type (get-integer-field buf addrinfo/type-offset))
-        (make-socket-protocol (get-integer-field buf addrinfo/proto-offset))
-        (let ([addr-size (get-integer-field buf addrinfo/addrlen-offset)])
-          (foreign->socket-address domain 
-            (get-buffer-field buf addrinfo/addr-offset addr-size)
-            (make-integer-container addr-size)))))))
-@
-
-The following procedures help to access data from a field.
-
-<<Code>>=
-(define (get-buffer-field buf offset count)
-  (let ([new (make-bytevector count)])
-    ($memcpy new (get-pointer-field buf offset) count)
-    new))
-
-(define (get-integer-field buf offset)
-  (bytevector-sint-ref buf offset (native-endianness) size-of/integer))
   
-(define (get-pointer-field buf offset)
-  (bytevector-uint-ref buf offset (native-endianness) size-of/pointer))
-
-(define (make-integer-container n)
-  (let ([res (make-bytevector size-of/integer)])
-    (bytevector-sint-set! res 0 n (native-endianness) size-of/integer)
-    res))
-  
-@
-
-<<FFI Constants>>=
-(addrinfo/addrlen-offset fixnum "int" 
- "(char *)&x.ai_addrlen - (char *)&x"
- "struct addrinfo x;")
-(addrinfo/addr-offset fixnum "int"
- "(char *)&x.ai_addr - (char *)&x"
- "struct addrinfo x;")
-(addrinfo/next-offset fixnum "int"
-  "(char *)&x.ai_next - (char *)&x"
-  "struct addrinfo x;")
-@
-
-<<FFI Procedures>>=
-(define $memcpy
-  (foreign-procedure "memcpy" (string uptr fixnum) uptr))
-@
-
 \chapter{Socket Constants}
 
 Procedures such as [[create-socket]] accept records which wrap 
@@ -999,6 +931,51 @@ will return false when they are at the end of the protocols database or if there
 
 @
 
+The foreign protocol structure has the following definition:
+
+\medskip\verbatim
+struct protoent {
+  char *p_name;
+  char **p_aliases;
+  int p_proto;
+}
+|endverbatim
+\medskip
+
+\noindent Which we convert to the following foreign struct type.
+
+<<Constants>>=
+(define-foreign-struct-type foreign-protocol-entry size-of/protoent
+  (name foreign-pointer)
+  (aliases foreign-pointer)
+  (protocol foreign-integer))
+@
+
+<<Exports>>=
+foreign-protocol-entry-name
+foreign-protocol-entry-aliases
+foreign-protocol-entry-protocol
+get-foreign-pointer
+@
+
+\noindent [[foreign->protocol-entry]] converts the foreign value into
+the normal [[protocol-entry]]. 
+
+<<Constants>>=
+(trace-define (foreign->protocol-entry x)
+  (make-protocol-entry
+    (get-foreign-string (foreign-protocol-entry-name x) 0)
+    (do ([ptr (foreign-protocol-entry-aliases x) 
+              (+ ptr size-of/pointer)]
+         [res '() (cons (get-foreign-string ptr 0) res)])
+      [(zero? (get-foreign-pointer ptr 0)) (reverse res)])
+    (foreign-protocol-entry-protocol x)))
+@
+
+<<FFI Constants>>=
+(size-of/protoent int "int" "sizeof(struct protoent)")
+@
+
 Converting the C structure to the [[protocol-entry]] form 
 is performed by the following function [[foreign->protocol-entry]].
 All of the foreign converters here expect pointers.
@@ -1007,7 +984,7 @@ All of the foreign converters here expect pointers.
 introspection library so that each implementation can handle this 
 in its own way.}
 
-<<Constants>>=
+<<Old Constants>>=
 (define (protoent-name x) (+ x protoent/name-offset))
 (define (protoent-aliases x) (+ x protoent/aliases-offset))
 (define (protoent-value x) (+ x protoent/proto-offset))
@@ -1031,7 +1008,7 @@ in its own way.}
 
 \noindent The explicit check for the null pointer return takes place below. 
 
-<<Constants>>=
+<<Old Constants>>=
 (define (foreign->protocol-entry x)
   (if (zero? x) #f
     (make-protocol-entry
@@ -1043,14 +1020,14 @@ in its own way.}
       (make-socket-protocol (foreign->integer (protoent-value x))))))
 @
 
-<<FFI Procedures>>=
+<<Old FFI Procedures>>=
 (define $strcpy
   (foreign-procedure "strcpy" (string uptr) uptr))
 (define $strlen
   (foreign-procedure "strlen" (uptr) fixnum))
 @
 
-<<FFI Constants>>=
+<<Old FFI Constants>>=
 (protoent/name-offset fixnum "int" 
  "(char *)&x.p_name - (char *)&x"
  "struct protoent x;")
@@ -1622,7 +1599,7 @@ Scheme values at expansion time that are necessary to do these transformations.
     (arcfide ffi-bind)
     (arcfide errno)
     (arcfide ffi-bind types)
-    (only (chezscheme) foreign-procedure format void))
+    (only (chezscheme) foreign-procedure format trace-define void))
 
 <<Foreign Constants>>
 

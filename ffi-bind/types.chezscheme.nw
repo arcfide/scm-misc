@@ -81,7 +81,7 @@ accessors and mutators.
          (cond
            [(bytevector? x) (bv-ref x offset)]
            [(and (integer? x) (positive? x)) 
-            (switch (#%$peek x type offset))]
+            (switch (#%$peek type x offset))]
            [else (invalid-object 'get x)]))
        (define (const x)
          (let ([res (make-bytevector size)])
@@ -208,7 +208,7 @@ copy, but not until then.
 
 <<Types>>=
 (define $strlen
-  (foreign-procedure "strlen" (ptr) int))
+  (foreign-procedure "strlen" (uptr) int))
 
 (define (get-foreign-string-length x offset)
   (cond
@@ -230,7 +230,7 @@ the moment, and this is easier, so I am going with it.
 
 <<Types>>=
 (define $memcpy-gfsol
-  (foreign-procedure "memcpy" (string ptr int) ptr))
+  (foreign-procedure "memcpy" (string uptr unsigned) ptr))
 
 (define (get-foreign-string-of-length x offset len)
   (cond
