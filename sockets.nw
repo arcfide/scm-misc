@@ -640,6 +640,10 @@ There are a few built in address info options.
 (%ai/passive fixnum "int" "AI_PASSIVE")
 @
 
+<<FFI Headers>>=
+<netdb.h>
+@
+
 [[make-addrinfo-hints]] converts a domain, type, protocol, 
 and set of flags into a [[struct addrinfo]] bytevector.
 
@@ -973,74 +977,6 @@ the normal [[protocol-entry]].
 (size-of/protoent int "int" "sizeof(struct protoent)")
 @
 
-Converting the C structure to the [[protocol-entry]] form 
-is performed by the following function [[foreign->protocol-entry]].
-All of the foreign converters here expect pointers.
-
-{\it XXX: this should really be abstracted into a general structure 
-introspection library so that each implementation can handle this 
-in its own way.}
-
-<<Old Constants>>=
-(define (protoent-name x) (+ x protoent/name-offset))
-(define (protoent-aliases x) (+ x protoent/aliases-offset))
-(define (protoent-value x) (+ x protoent/proto-offset))
-
-(define (foreign->string x)
-  (let ([v (make-bytevector ($strlen x))])
-    ($strcpy v x)
-    (bytevector->string v (native-transcoder))))
-
-(define (foreign->integer x)
-  (let ([v (make-bytevector size-of/integer)])
-    ($memcpy v x size-of/integer)
-    (bytevector-sint-ref v 0 (native-endianness) size-of/integer)))
-
-(define (foreign->pointer x)
-  (let ([v (make-bytevector size-of/pointer)])
-    ($memcpy v x size-of/pointer)
-    (bytevector-uint-ref v 0 (native-endianness) size-of/pointer)))
-
-@
-
-\noindent The explicit check for the null pointer return takes place below. 
-
-<<Old Constants>>=
-(define (foreign->protocol-entry x)
-  (if (zero? x) #f
-    (make-protocol-entry
-      (foreign->string (foreign->pointer (protoent-name x)))
-      (do (
-          [i (foreign->pointer (protoent-aliases x)) (+ i size-of/pointer)]
-          [res '() (cons (foreign->string (foreign->pointer i)) res)])
-        [(zero? ($strlen i)) (reverse res)])
-      (make-socket-protocol (foreign->integer (protoent-value x))))))
-@
-
-<<Old FFI Procedures>>=
-(define $strcpy
-  (foreign-procedure "strcpy" (string uptr) uptr))
-(define $strlen
-  (foreign-procedure "strlen" (uptr) fixnum))
-@
-
-<<Old FFI Constants>>=
-(protoent/name-offset fixnum "int" 
- "(char *)&x.p_name - (char *)&x"
- "struct protoent x;")
-(protoent/aliases-offset fixnum "int" 
- "(char *)&x.p_aliases - (char *)&x"
- "struct protoent x;")
-(protoent/proto-offset fixnum "int" 
- "(char *)&x.p_proto - (char *)&x"
- "struct protoent x;")
-@
-
-<<FFI Headers>>=
-<netdb.h>
-@
-
-
 \procsig{[[bind-socket]]}{\var{socket} \var{socket address}}{}
 
 <<Exports>>=
@@ -1053,8 +989,14 @@ bind-socket
 (define (bind-socket sock addr)
   (let ([foreign-addr (socket-address->foreign addr)])
     (call-with-errno
-      (lambda () ($bind (socket-fd sock) foreign-addr (bytevector-length foreign-addr)))
-      (lambda (ret err) (if (zero? ret) (void) (socket-error 'bind-socket 'bind err))))))
+      (lambda () 
+        ($bind (socket-fd sock) 
+               foreign-addr 
+               (bytevector-length foreign-addr)))
+      (lambda (ret err) 
+        (if (zero? ret) 
+            (void) 
+            (socket-error 'bind-socket 'bind err))))))
 
 @
 
@@ -1099,27 +1041,25 @@ and the address as its return values.
 <<Code>>=
 (define (accept-socket sock)
   (let ([size (foreign-address-size (socket-domain sock))])
-    (let (
-        [addr (make-bytevector size 0)]
-        [addr-len (make-bytevector size-of/integer 0)])
-      (bytevector-sint-set! addr-len 0 size 
-        (native-endianness) 
-        size-of/integer)
-      (call-with-errno (lambda () ($accept (socket-fd sock) addr addr-len))
+    (let ([addr (make-bytevector size 0)]
+          [addr-len (make-foreign-integer size)])
+      (call-with-errno 
+        (lambda () ($accept (socket-fd sock) addr addr-len))
         (lambda (ret err)
           (if (negative? ret) 
-            (values #f 
-              (socket-raise/unless 'accept-socket 'accept err
-                $error-again $error-would-block))
-            (values 
-              (make-socket ret
-                (socket-domain sock)
-                (socket-type sock)
-                (socket-protocol sock))
-              (foreign->socket-address 
-                (socket-domain sock) 
-                addr 
-                addr-len))))))))
+              (values 
+                #f 
+                (socket-raise/unless 'accept-socket 'accept err
+                  $error-again $error-would-block))
+              (values 
+                (make-socket ret
+                  (socket-domain sock)
+                  (socket-type sock)
+                  (socket-protocol sock))
+                (foreign->socket-address 
+                  (socket-domain sock) 
+                  addr 
+                  addr-len))))))))
 
 @
 
@@ -1146,12 +1086,21 @@ connect-socket
 <<Code>>=
 (define (connect-socket sock addr)
   (let ([fa (socket-address->foreign addr)])
-    (call-with-errno (lambda () ($connect (socket-fd sock) fa (bytevector-length fa)))
+    (call-with-errno 
+      (lambda () 
+        ($connect (socket-fd sock) fa (bytevector-length fa)))
       (lambda (ret err)
         (case ret
           [(0) (void)]
-          [(-1) (socket-raise/unless 'connect-socket 'connect err $error-in-progress)]
-          [else (error 'connect-socket "Unknown foreign return value.")])))))
+          [(-1) 
+           (socket-raise/unless 
+             'connect-socket 
+             'connect 
+             err 
+             $error-in-progress)]
+          [else 
+            (error 'connect-socket 
+                   "Unknown foreign return value.")])))))
     
 
 @
@@ -1202,12 +1151,16 @@ Corresponds to [[shutdown(s)]].
 <<Code>>=
 (define (shutdown-socket sock how)
   (assert (shutdown-method? how))
-  (call-with-errno (lambda () ($shutdown (socket-fd sock) (socket-constant-value how)))
+  (call-with-errno 
+    (lambda () 
+      ($shutdown (socket-fd sock) (socket-constant-value how)))
     (lambda (ret err)
       (case ret
         [(0) (void)]
         [(-1) (socket-error 'shutdown-socket 'shutdown err)]
-        [else (error 'shutdown-socket "Unknown foreign return value.")]))))
+        [else 
+          (error 'shutdown-socket 
+                 "Unknown foreign return value.")]))))
   
 
 @
@@ -1248,13 +1201,18 @@ Corresponds to the [[sendto(2)]] system call.
 <<Code>>=
 (define (send-to-socket sock buf addr . flags)
   (assert (for-all send-to-option? flags))
-  (let* (
-      [fa (socket-address->foreign addr)]
-      [fa-len (bytevector-length fa)])
+  (let* ([fa (socket-address->foreign addr)]
+         [fa-len (bytevector-length fa)])
     (call-with-errno 
       (lambda () 
-        ($sendto (socket-fd sock) buf (bytevector-length buf)
-          (fold-left  (lambda (s v) (fxior s (socket-constant-value v))) 0 flags)
+        ($sendto 
+          (socket-fd sock) 
+          buf 
+          (bytevector-length buf)
+          (fold-left 
+            (lambda (s v) (fxior s (socket-constant-value v))) 
+            0 
+            flags)
           fa fa-len))
       (lambda (res err)
         (cond
@@ -1314,25 +1272,30 @@ see this as a good thing.}
 <<Code>>=
 (define (receive-from-socket sock c . flags)
   (assert (for-all receive-from-option? flags))
-  (let (
-      [buf (make-bytevector c)]
-      [addr-len (foreign-address-size (socket-domain sock))])
-    (let* (
-        [addr (make-bytevector addr-len)]
-        [addr-len-buf (make-bytevector size-of/integer)])
-      (bytevector-sint-set! addr-len-buf 0 addr-len 
-        (native-endianness) size-of/integer)
+  (let ([buf (make-bytevector c)]
+        [addr-len (foreign-address-size (socket-domain sock))])
+    (let ([addr (make-bytevector addr-len)]
+          [addr-len-buf (make-foreign-integer addr-len)])
       (call-with-errno
         (lambda ()
-          ($recvfrom (socket-fd sock) buf c 
-            (fold-left (lambda (s v) (fxior s (socket-constant-value v))) 0 flags)
-            addr addr-len))
+          ($recvfrom 
+            (socket-fd sock) 
+            buf 
+            c 
+            (fold-left 
+              (lambda (s v) (fxior s (socket-constant-value v))) 
+              0 
+              flags)
+            addr 
+            addr-len))
         (lambda (n err)
           (cond
             [(= -1 n) 
               (socket-raise/unless 'receive-from-socket 'recvfrom err
                 $error-again $error-would-block)]
-            [(negative? n) (error 'receive-from-socket "Unknown foreign return value.")]
+            [(negative? n) 
+             (error 'receive-from-socket 
+                    "Unknown foreign return value.")]
             [else
               (values 
                 (if (< n c)
@@ -1340,8 +1303,10 @@ see this as a good thing.}
                     (bytevector-copy! buf 0 res 0 n)
                     res)
                   buf)
-                (foreign->socket-address (socket-domain sock) 
-                  addr addr-len-buf))]))))))
+                (foreign->socket-address 
+                  (socket-domain sock) 
+                  addr 
+                  addr-len-buf))]))))))
 
 @
 
@@ -1407,10 +1372,19 @@ get-socket-option
 See the above chapter on Socket Options for the format of socket options. 
 
 <<Code>>=
+(define-foreign-integer-type 
+  (socket-length-type 
+   make-socket-length 
+   get-socket-length
+   socket-length-set!)
+  unsigned
+  size-of/socklen-t
+  (native-endianness))
+
 (define (get-socket-option sock opt)
   (let ([len (socket-option-foreign-size opt)])
-    (let ([fbuf (make-bytevector len)] [flen (make-bytevector size-of/socklen-t)])
-      (bytevector-uint-set! flen 0 len (native-endianness) size-of/socklen-t)
+    (let ([fbuf (make-bytevector len)] 
+          [flen (make-socket-length len)])
       (call-with-errno
         (lambda () 
           ($getsockopt (socket-fd sock) 
@@ -1422,7 +1396,7 @@ See the above chapter on Socket Options for the format of socket options.
             (socket-error 'get-socket-option 'getsockopt err))
           ((socket-option-foreign-converter opt)
             fbuf
-            (bytevector-uint-ref flen 0 (native-endianness) size-of/socklen-t)))))))
+            (get-socket-length flen)))))))
 @
 
 <<FFI Procedures>>=
