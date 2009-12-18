@@ -428,9 +428,19 @@ straightforward.
     (assert (or (not port) (< 0 port 65536)))
     (assert (>= 32 (bitwise-length ip)))
     (do ([ip ip (bitwise-arithmetic-shift ip -8)]
+         [i 0 (+ i 1)]
          [res '() (cons (mod ip 256) res)])
-      [(zero? ip)
-       (format "~{~d~^.~}~@[:~d~]" res port)])))
+      [(= 4 i)
+       (fold-right
+         (lambda (x s)
+           (cond 
+             [(string? s)
+              (string-append (number->string x) "." s)]
+             [(number? s)
+              (string-append (number->string x) ":" (number->string s))]
+             [else (number->string x)]))
+          port
+          res)])))
 @
 
 \section{Address Information}
@@ -1395,7 +1405,7 @@ See the above chapter on Socket Options for the format of socket options.
             (socket-error 'get-socket-option 'getsockopt err))
           ((socket-option-foreign-converter opt)
             fbuf
-            (get-socket-length flen)))))))
+            (get-socket-length flen 0)))))))
 @
 
 <<FFI Procedures>>=
@@ -1569,7 +1579,7 @@ Scheme values at expansion time that are necessary to do these transformations.
     (arcfide ffi-bind)
     (arcfide errno)
     (arcfide ffi-bind types)
-    (only (chezscheme) foreign-procedure format void))
+    (only (chezscheme) foreign-procedure void))
 
 <<Foreign Constants>>
 
