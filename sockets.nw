@@ -567,13 +567,6 @@ or a positive integer representing a valid port.
       (< 0 service 65536))))
 @
 
-<<FFI Procedures>>=
-(define $getaddrinfo
-  (foreign-procedure "getaddrinfo" (string string string string) int))
-(define $gai_strerror
-  (foreign-procedure "gai_strerror" (int) string))
-@
-
 There are a few built in address info options.
 
 <<Constants>>=
@@ -685,15 +678,8 @@ socket-type/random
 
 @
 
-\noindent [[$socket]] refers directly to the system call:
-
-<<FFI Procedures>>=
-(define $socket 
-  (foreign-procedure "socket" (fixnum fixnum fixnum) fixnum))
-@
-
-[[create-socket]] uses three different constant types for 
-the domain, type, and protocol of the socket.
+\noindent [[create-socket]] uses three different constant types for  the
+domain, type, and protocol of the socket.
 
 Socket domains determine the family to which the socket belongs. 
 They also must embed an extracter and a size value so that 
@@ -822,19 +808,6 @@ For protocol entries, we expect the value to be a protocol constant.
 (define-record-type protocol-entry (fields name aliases value))
 @
 
-<<FFI Procedures>>=
-(define $getprotoent 
-  (foreign-procedure "getprotoent" () uptr))
-(define $getprotobyname 
-  (foreign-procedure "getprotobyname" (string) uptr))
-(define $getprotobynumber
-  (foreign-procedure "getprotobynumber" (fixnum) uptr))
-(define $setprotoent
-  (foreign-procedure "setprotoent" (boolean) void))
-(define $endprotoent
-  (foreign-procedure "endprotoent" () void))
-@
-
 <<Exports>>=
 next-protocol-entry
 get-protocol-by-name
@@ -922,11 +895,6 @@ bind-socket
 
 @
 
-<<FFI Procedures>>=
-(define $bind
-  (foreign-procedure "bind" (fixnum string fixnum) fixnum))
-@
-
 \procsig{[[listen-socket]]}{\var{socket} \var{queue length}}{}
 
 <<Exports>>=
@@ -944,11 +912,6 @@ listen-socket
         [(-1) (socket-error 'listen-socket 'listen err)]
         [else (error 'listen "Unknown return" ret)]))))
 
-@
-
-<<FFI Procedures>>=
-(define $listen
-  (foreign-procedure "listen" (fixnum fixnum) fixnum))
 @
 
 \procsig{[[accept-socket]]}{\var{socket}}{\var{socket} \var{address}}
@@ -985,11 +948,6 @@ and the address as its return values.
 
 @
 
-<<FFI Procedures>>=
-(define $accept
-  (foreign-procedure "accept" (fixnum string string) fixnum))
-@
-
 \procsig{[[connect-socket]]}{\var{socket} \var{address}}{}
 
 <<Exports>>=
@@ -1018,11 +976,6 @@ connect-socket
 
 @
 
-<<FFI Procedures>>=
-(define $connect
-  (foreign-procedure "connect" (fixnum string fixnum) fixnum))
-@
-
 \procsig{[[close-socket]]}{\var{socket}}{}
 
 <<Exports>>=
@@ -1042,10 +995,6 @@ Equivalent to [[close(2)]].
 
 @
 
-<<FFI Procedures>>=
-(define $close
-  (foreign-procedure "close" (fixnum) fixnum))
-@
 \procsig{[[shutdown-socket]]}{\var{socket} \var{method}}{}
 
 <<Exports>>=
@@ -1074,12 +1023,7 @@ Corresponds to [[shutdown(s)]].
 
 @
 
-<<FFI Procedures>>=
-(define $shutdown
-  (foreign-procedure "shutdown" (fixnum fixnum) fixnum))
-@
-
-The shutdown method is a constant value defined as follows.
+\noindent The shutdown method is a constant value defined as follows.
 
 <<Constants>>=
 (define-record-type shutdown-method (parent socket-constant))
@@ -1128,14 +1072,7 @@ Corresponds to the [[sendto(2)]] system call.
 
 @
 
-<<FFI Procedures>>=
-(define $sendto
-  (foreign-procedure "sendto" 
-    (fixnum string fixnum fixnum string fixnum) 
-    fixnum))
-@
-
-There are a number of system depended flags
+\noindent There are a number of system depended flags
 that can be passed to [[send-to-socket]],
 but only those reasonably portable ones are defined here.
 
@@ -1208,14 +1145,7 @@ see this as a good thing.}
 
 @
 
-<<FFI Procedures>>=
-(define $recvfrom
-  (foreign-procedure "recvfrom" 
-    (fixnum string fixnum fixnum string string)
-    fixnum))
-@
-
-A few flags are pre-defined.
+\noindent A few flags are pre-defined.
 
 <<Exports>>=
 receive-from/out-of-band receive-from/peek 
@@ -1287,11 +1217,6 @@ See the above chapter on Socket Options for the format of socket options.
             (get-socket-length flen 0)))))))
 @
 
-<<FFI Procedures>>=
-(define $getsockopt
-  (foreign-procedure "getsockopt" (int int int string string) int))
-@
-
 \procsig{[[set-socket-option!]]}{\var{socket} \var{socket option} \var{value}}{}
 
 <<Exports>>=
@@ -1319,11 +1244,6 @@ approach is the same.
 
 @
 
-<<FFI Procedures>>=
-(define $setsockopt
-  (foreign-procedure "setsockopt" (int int int string int) int))
-@
-
 \chapter{Blocking Sockets}%
 The following options allow you to determine if a socket is blocking or non-blocking and 
 set the nonblocking state of the socket. Use of these options is not recommended or 
@@ -1349,11 +1269,6 @@ socket-nonblocking?
 (define (socket-nonblocking? sock)
   (not (zero? (fxand $option-non-blocking ($fcntl (socket-fd sock) $file-get-flag 0)))))
 
-@
-
-<<FFI Procedures>>=
-(define $fcntl
-  (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))
 @
 
 \chapter{Handling Socket Errors}
@@ -1430,8 +1345,7 @@ error. The following provides this functionality.
     (only (srfi :13) string-tokenize)
     (arcfide ffi-bind)
     (arcfide ffi-bind types)
-    (arcfide sockets compat)
-    (only (chezscheme) foreign-procedure))
+    (arcfide sockets compat))
 
 <<Datatypes>>
 
@@ -1440,8 +1354,6 @@ error. The following provides this functionality.
 <<Constants>>
 
 <<Code>>
-
-<<FFI Procedures>>
 
 <<Domain Registration>>
 

@@ -179,6 +179,61 @@ On WIndows, when sockets return errors, you are not supposed to use the
 call-with-errno errno-message
 @
 
+\chapter{Foreign Procedures}{}%
+Sockets use quite a bit of foreign procedures.
+
+<<Exports>>=
+$getaddrinfo $gai_strerror $socket $getprotoent $getprotobyname 
+$getprotobynumber $setprotoent $endprotoent $bind $listen 
+$accept $connect $close $shutdown $sendto $recvfrom $getsockopt
+$setsockopt $fcntl
+@
+
+<<Foreign Procedures>>=
+(define $getaddrinfo
+  (foreign-procedure "getaddrinfo" (string string string string) int))
+(define $gai_strerror
+  (foreign-procedure "gai_strerror" (int) string))
+(define $socket 
+  (foreign-procedure "socket" (fixnum fixnum fixnum) fixnum))
+(define $getprotoent 
+  (foreign-procedure "getprotoent" () uptr))
+(define $getprotobyname 
+  (foreign-procedure "getprotobyname" (string) uptr))
+(define $getprotobynumber
+  (foreign-procedure "getprotobynumber" (fixnum) uptr))
+(define $setprotoent
+  (foreign-procedure "setprotoent" (boolean) void))
+(define $endprotoent
+  (foreign-procedure "endprotoent" () void))
+(define $bind
+  (foreign-procedure "bind" (fixnum string fixnum) fixnum))
+(define $listen
+  (foreign-procedure "listen" (fixnum fixnum) fixnum))
+(define $accept
+  (foreign-procedure "accept" (fixnum string string) fixnum))
+(define $connect
+  (foreign-procedure "connect" (fixnum string fixnum) fixnum))
+(define $close
+  (foreign-procedure "close" (fixnum) fixnum))
+(define $shutdown
+  (foreign-procedure "shutdown" (fixnum fixnum) fixnum))
+(define $sendto
+  (foreign-procedure "sendto" 
+    (fixnum string fixnum fixnum string fixnum) 
+    fixnum))
+(define $recvfrom
+  (foreign-procedure "recvfrom" 
+    (fixnum string fixnum fixnum string string)
+    fixnum))
+(define $getsockopt
+  (foreign-procedure "getsockopt" (int int int string string) int))
+(define $setsockopt
+  (foreign-procedure "setsockopt" (int int int string int) int))
+(define $fcntl
+  (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))
+@
+
 \chapter{Files}{}%
 
 <<compat.chezscheme.scm>>=
@@ -199,6 +254,7 @@ call-with-errno errno-message
   
 <<Constants>>
 <<Error Handling>>
+<<Foreign Procedures>>
 <<Miscellaneous Bindings>>
 
 )
