@@ -88,10 +88,6 @@ socket-option? make-socket-option socket-option
 
 @
 
-<<FFI Constants>>=
-($sol-socket int "int" "SOL_SOCKET")
-@
-
 \noindent The [[level]] field should be a number identifying the highlevel setting 
 group, and [[id]] should be a number identifying the setting itself, as 
 described in [[getsockopt(2)]]. 
@@ -138,13 +134,6 @@ tcp-option? udp-option? raw-option? ip-option?
 (define-socket-option-type raw-option $ipproto-raw)
 (define-socket-option-type ip-option $ipproto-ip)
 
-@
-
-<<FFI Constants>>=
-($ipproto-tcp int "int" "IPPROTO_TCP")
-($ipproto-udp int "int" "IPPROTO_UDP")
-($ipproto-raw int "int" "IPPROTO_RAW")
-($ipproto-ip int "int" "IPPROTO_IP")
 @
 
 \section{Socket Addresses}
@@ -239,11 +228,6 @@ type [[struct sockaddr_un]] in C.
   (path foreign-unix-path))
 @
 
-<<FFI Constants>>=
-(size-of/sockaddr-un int "int" "sizeof(struct sockaddr_un)")
-(size-of/sa-family int "int" "sizeof(sa_family_t)")
-@
-
 \noindent A UNIX path is a character array with a maximum size of
 [[UNIX_PATH_MAX]]. 
 
@@ -270,18 +254,6 @@ of the sockaddr\_un structure.
 <<Datatypes>>=
 (define (unix-address->foreign addr) 
   (make-foreign-unix-address af-unix (unix-address-path addr)))
-@
-
-<<FFI Constants>>=
-(af-unix fixnum "int" "AF_UNIX")
-(unix-max-path fixnum "int" 
-   "sizeof(x.sun_path)" "struct sockaddr_un x;")
-@
-
-<<FFI Headers>>=
-<sys/types.h>
-<sys/socket.h>
-<sys/un.h>
 @
 
 Converting the foreign address back to a UNIX address 
@@ -351,18 +323,6 @@ network byte order before being stored in the final structure.
     af-inet
     (internet-address-port addr)
     (internet-address-ip addr)))
-@
-
-<<FFI Constants>>=
-(size-of/sockaddr-in int "int" "sizeof(struct sockaddr_in)")
-(size-of/port fixnum "int" "sizeof(x.sin_port)"
-   "struct sockaddr_in x;")
-(size-of/ip fixnum "int" "sizeof(struct in_addr)")
-(af-inet fixnum "int" "AF_INET")
-@
-
-<<FFI Headers>>=
-<netinet/in.h>
 @
 
 \noindent Converting back is pretty easy.
@@ -509,20 +469,12 @@ We first define a foreign integer type which corresponds to the C
   (native-endianness))
 @
 
-<<FFI Constants>>=
-(size-of/integer int "int" "sizeof(int)")
-@
-
 \noindent Next we need a [[size_t]] equivalent.
 
 <<Datatypes>>=
 (define-foreign-integer-type
   (size-t make-size-t get-size-t size-t-set!)
   unsigned size-of/size-t (native-endianness))
-@
-
-<<FFI Constants>>=
-(size-of/size-t int "int" "sizeof(size_t)")
 @
 
 \noindent And finally, we need some sort of pointer type.
@@ -534,10 +486,6 @@ We first define a foreign integer type which corresponds to the C
    get-foreign-pointer
    foreign-pointer-set!)
   unsigned size-of/pointer (native-endianness))
-@
-
-<<FFI Constants>>=
-(size-of/pointer int "int" "sizeof(void *)")
 @
 
 \noindent Then we can define the address info foreign structure.
@@ -552,10 +500,6 @@ We first define a foreign integer type which corresponds to the C
   (address foreign-pointer)
   (canonical-name foreign-pointer)
   (next foreign-pointer))
-@
-
-<<FFI Constants>>=
-(size-of/addrinfo int "int" "sizeof(struct addrinfo)")
 @
 
 \noindent [[get-address-info]] takes an optional set of hints, such as
@@ -643,17 +587,7 @@ There are a few built in address info options.
   (make-address-info-option %ai/passive))
 @
 
-<<FFI Constants>>=
-(%ai/canonname fixnum "int" "AI_CANONNAME")
-(%ai/numerichost fixnum "int" "AI_NUMERICHOST")
-(%ai/passive fixnum "int" "AI_PASSIVE")
-@
-
-<<FFI Headers>>=
-<netdb.h>
-@
-
-[[make-addrinfo-hints]] converts a domain, type, protocol, 
+\noindent [[make-addrinfo-hints]] converts a domain, type, protocol, 
 and set of flags into a [[struct addrinfo]] bytevector.
 
 <<Code>>=
@@ -743,7 +677,7 @@ socket-type/random
         (socket-constant-value type)
         (socket-constant-value protocol)))
     (lambda (ret err)
-      (if (negative? ret)
+      (if (= ret invalid-socket)
         (socket-error 'create-socket 'socket err)
         (let ([sock (make-socket ret domain type protocol)])
           (set-socket-nonblocking! sock #t)
@@ -788,15 +722,6 @@ explicitly knowing the type of the domain beforehand.
     foreign->internet-address
     size-of/addr-in))
 
-@
-
-<<FFI Constants>>=
-(%socket-domain/unix fixnum "int" "AF_UNIX")
-(%socket-domain/local fixnum "int" "AF_LOCAL")
-(%socket-domain/internet fixnum "int" "AF_INET")
-(%socket-domain/internet-v6 fixnum "int" "AF_INET6")
-(size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
-(size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
 @
 
 Socket domains sometimes need to be grabbed by just their 
@@ -858,14 +783,6 @@ more details.
 (define socket-type/random
   (make-socket-type %socket-type/random))
 
-@
-
-<<FFI Constants>>=
-(%socket-type/stream fixnum "int" "SOCK_STREAM")
-(%socket-type/datagram fixnum "int" "SOCK_DGRAM")
-(%socket-type/sequence-packet fixnum "int" "SOCK_SEQPACKET")
-(%socket-type/raw fixnum "int" "SOCK_RAW")
-(%socket-type/random fixnum "int" "SOCK_RDM")
 @
 
 <<Exports>>=
@@ -982,10 +899,6 @@ the normal [[protocol-entry]].
     (foreign-protocol-entry-protocol x)))
 @
 
-<<FFI Constants>>=
-(size-of/protoent int "int" "sizeof(struct protoent)")
-@
-
 \procsig{[[bind-socket]]}{\var{socket} \var{socket address}}{}
 
 <<Exports>>=
@@ -1055,7 +968,7 @@ and the address as its return values.
       (call-with-errno 
         (lambda () ($accept (socket-fd sock) addr addr-len))
         (lambda (ret err)
-          (if (negative? ret) 
+          (if (= ret invalid-socket) 
               (values 
                 #f 
                 (socket-raise/unless 'accept-socket 'accept err
@@ -1075,15 +988,6 @@ and the address as its return values.
 <<FFI Procedures>>=
 (define $accept
   (foreign-procedure "accept" (fixnum string string) fixnum))
-@
-
-<<FFI Headers>>=
-<errno.h>
-@
-
-<<FFI Constants>>=
-($error-again fixnum "int" "EAGAIN")
-($error-would-block fixnum "int" "EWOULDBLOCK")
 @
 
 \procsig{[[connect-socket]]}{\var{socket} \var{address}}{}
@@ -1117,10 +1021,6 @@ connect-socket
 <<FFI Procedures>>=
 (define $connect
   (foreign-procedure "connect" (fixnum string fixnum) fixnum))
-@
-
-<<FFI Constants>>=
-($error-in-progress fixnum "int" "EINPROGRESS")
 @
 
 \procsig{[[close-socket]]}{\var{socket}}{}
@@ -1193,12 +1093,6 @@ The shutdown method is a constant value defined as follows.
 
 @
 
-<<FFI Constants>>=
-(%shutdown/write fixnum "int" "SHUT_RD")
-(%shutdown/read fixnum "int" "SHUT_WR")
-(%shutdown/read&write fixnum "int" "SHUT_RDWR")
-@
-
 \procsig{[[send-to-socket]]}{\var{socket} \var{buffer} \var{address}}{\var{bytes sent}}
 
 <<Exports>>=
@@ -1258,11 +1152,6 @@ make-send-to-option
 (define send-to/out-of-band
   (make-send-to-option %msg/out-of-band))
 
-@
-
-<<FFI Constants>>=
-(%msg/dont-route fixnum "int" "MSG_DONTROUTE")
-(%msg/out-of-band fixnum "int" "MSG_OOB")
 @
 
 \procsig{[[receive-from-socket]]}
@@ -1348,12 +1237,6 @@ make-receive-from-option
 
 @
 
-<<FFI Constants>>=
-(%msg/peek fixnum "int" "MSG_PEEK")
-(%msg/wait-all fixnum "int" "MSG_WAITALL")
-(%msg/dont-wait fixnum "int" "MSG_DONTWAIT")
-@
-
 \procsig{[[socket-maximum-connections]]}{}{\var{integer}}
 
 <<Exports>>=
@@ -1365,10 +1248,6 @@ This is a procedure for accessing the [[SOMAXCONN]] value.
 <<Code>>=
 (define (socket-maximum-connections)
   %somaxconn)
-@
-
-<<FFI Constants>>=
-(%somaxconn fixnum "int" "SOMAXCONN")
 @
 
 \procsig{[[get-socket-option]]}{\var{socket} \var{socket option}}{\var{value}}
@@ -1411,10 +1290,6 @@ See the above chapter on Socket Options for the format of socket options.
 <<FFI Procedures>>=
 (define $getsockopt
   (foreign-procedure "getsockopt" (int int int string string) int))
-@
-
-<<FFI Constants>>=
-(size-of/socklen-t int "int" "sizeof(socklen_t)")
 @
 
 \procsig{[[set-socket-option!]]}{\var{socket} \var{socket option} \var{value}}{}
@@ -1476,20 +1351,9 @@ socket-nonblocking?
 
 @
 
-<<FFI Headers>>=
-<sys/unistd.h>
-<sys/fcntl.h>
-@
-
 <<FFI Procedures>>=
 (define $fcntl
   (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))
-@
-
-<<FFI Constants>>=
-($file-set-flag fixnum "int" "F_SETFL")
-($file-get-flag fixnum "int" "F_GETFL")
-($option-non-blocking fixnum "int" "O_NONBLOCK")
 @
 
 \chapter{Handling Socket Errors}
@@ -1541,18 +1405,6 @@ error. The following provides this functionality.
 
 @
 
-\chapter{Handling Foreign Constants}
-
-A number of structures have to be converted to and from foreign equivalents. 
-The following provides the necessary foreign constants expanded into 
-Scheme values at expansion time that are necessary to do these transformations. 
-
-<<Foreign Constants>>=
-(define-foreign-constants 
-  (<<FFI Headers>>)
-  <<FFI Constants>>)
-@
-
 \chapter{R6RS Form}
 
 <<sockets.sls>>=
@@ -1577,21 +1429,19 @@ Scheme values at expansion time that are necessary to do these transformations.
     (srfi :39 parameters)
     (only (srfi :13) string-tokenize)
     (arcfide ffi-bind)
-    (arcfide errno)
     (arcfide ffi-bind types)
-    (only (chezscheme) foreign-procedure void))
-
-<<Foreign Constants>>
+    (arcfide sockets compat)
+    (only (chezscheme) foreign-procedure))
 
 <<Datatypes>>
 
 <<Conditions>>
 
-<<FFI Procedures>>
-
 <<Constants>>
 
 <<Code>>
+
+<<FFI Procedures>>
 
 <<Domain Registration>>
 
@@ -1603,13 +1453,9 @@ Scheme values at expansion time that are necessary to do these transformations.
 <<sockets.scm>>=
 <<License>>
 
-<<Foreign Constants>>
-
 <<Datatypes>>
 
 <<Conditions>>
-
-<<FFI Procedures>>
 
 <<Constants>>
 

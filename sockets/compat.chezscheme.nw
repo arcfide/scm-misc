@@ -1,0 +1,229 @@
+\title{Sockets Compatibility Layer}
+
+\chapter{Overview}{}%
+The following bindings are those bindings necessary to the sockets
+library implementation, but which are likely to be unportable, and thus,
+warrant their own implementation outside of the main sockets code.
+
+\chapter{Void}{}%
+For some reason, not enough people have void available. This needs to be
+available, but I just make sure that it is exported from the
+[[(chezscheme)]] library.
+
+<<Exports>>=
+void
+@
+
+\chapter{Constants}{}%
+We need these constants defined:
+
+<<Exports>>=
+$error-again $error-in-progress $error-would-block $file-get-flag
+$file-set-flag $ipproto-ip $ipproto-raw $ipproto-tcp $ipproto-udp
+$option-non-blocking $sol-socket %ai/canonname %ai/numerichost
+%ai/passive %msg/dont-route %msg/dont-wait %msg/out-of-band %msg/peek
+%msg/wait-all %shutdown/read %shutdown/read&write %shutdown/write
+%socket-domain/internet %socket-domain/internet-v6 %socket-domain/local
+%socket-domain/unix %socket-type/datagram %socket-type/random
+%socket-type/raw %socket-type/sequence-packet %socket-type/stream
+%somaxconn af-inet af-unix invalid-socket size-of/addr-in
+size-of/addr-un size-of/addrinfo size-of/integer size-of/ip
+size-of/pointer size-of/port size-of/protoent size-of/sa-family
+size-of/size-t size-of/sockaddr-in size-of/sockaddr-un size-of/socklen-t
+unix-max-path
+@
+
+\noindent While foreign constants are normally quite portable, it is
+unfortunate that Windows Sockets requires/recommends some different
+names.
+
+<<Constants>>=
+(meta define (windows?) (memq (machine-type) '(i3nt ti3nt)))
+
+(meta-cond
+  [(windows?)
+   <<Windows Constants Definition>>]
+  [else
+    <<BSD Constants Definition>>])
+@
+
+\noindent For starters, the BSD sockets has a different set of include
+files that are used than the Windows. Microsoft recommends recommends
+using just [[Winsock2.h]] instead of the others.
+
+<<BSD Constants Definition>>=
+(define-foreign-constants 
+  (<sys/types.h>
+	 <sys/socket.h>
+	 <sys/un.h>
+	 <netinet/in.h>
+	 <netdb.h>
+	 <errno.h>
+	 <sys/unistd.h>
+	 <sys/fcntl.h>)
+  <<Common Constants>>
+  <<BSD Constants>>)
+@
+
+<<Windows Constants Definition>>=
+(define-foreign-constants 
+  (<Winsock2.h>)
+  <<Common Constants>>
+  <<Windows Constants>>)
+@
+
+\noindent Fortunately, there are many constants that remain the same.
+
+<<Common Constants>>=
+($file-get-flag fixnum "int" "F_GETFL")
+($file-set-flag fixnum "int" "F_SETFL")
+($ipproto-ip int "int" "IPPROTO_IP")
+($ipproto-raw int "int" "IPPROTO_RAW")
+($ipproto-tcp int "int" "IPPROTO_TCP")
+($ipproto-udp int "int" "IPPROTO_UDP")
+($option-non-blocking fixnum "int" "O_NONBLOCK")
+($sol-socket int "int" "SOL_SOCKET")
+(%ai/canonname fixnum "int" "AI_CANONNAME")
+(%ai/numerichost fixnum "int" "AI_NUMERICHOST")
+(%ai/passive fixnum "int" "AI_PASSIVE")
+(%msg/dont-route fixnum "int" "MSG_DONTROUTE")
+(%msg/dont-wait fixnum "int" "MSG_DONTWAIT")
+(%msg/out-of-band fixnum "int" "MSG_OOB")
+(%msg/peek fixnum "int" "MSG_PEEK")
+(%msg/wait-all fixnum "int" "MSG_WAITALL")
+(%shutdown/read fixnum "int" "SHUT_WR")
+(%shutdown/read&write fixnum "int" "SHUT_RDWR")
+(%shutdown/write fixnum "int" "SHUT_RD")
+(%socket-domain/internet fixnum "int" "AF_INET")
+(%socket-domain/internet-v6 fixnum "int" "AF_INET6")
+(%socket-domain/local fixnum "int" "AF_LOCAL")
+(%socket-domain/unix fixnum "int" "AF_UNIX")
+(%socket-type/datagram fixnum "int" "SOCK_DGRAM")
+(%socket-type/random fixnum "int" "SOCK_RDM")
+(%socket-type/raw fixnum "int" "SOCK_RAW")
+(%socket-type/sequence-packet fixnum "int" "SOCK_SEQPACKET")
+(%socket-type/stream fixnum "int" "SOCK_STREAM")
+(%somaxconn fixnum "int" "SOMAXCONN")
+(af-inet fixnum "int" "AF_INET")
+(af-unix fixnum "int" "AF_UNIX")
+(size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
+(size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
+(size-of/addrinfo int "int" "sizeof(struct addrinfo)")
+(size-of/integer int "int" "sizeof(int)")
+(size-of/ip fixnum "int" "sizeof(struct in_addr)")
+(size-of/pointer int "int" "sizeof(void *)")
+(size-of/port fixnum "int" "sizeof(x.sin_port)" "struct sockaddr_in x;")
+(size-of/protoent int "int" "sizeof(struct protoent)")
+(size-of/sa-family int "int" "sizeof(sa_family_t)")
+(size-of/size-t int "int" "sizeof(size_t)")
+(size-of/sockaddr-in int "int" "sizeof(struct sockaddr_in)")
+(size-of/sockaddr-un int "int" "sizeof(struct sockaddr_un)")
+(size-of/socklen-t int "int" "sizeof(socklen_t)")
+(unix-max-path fixnum "int" "sizeof(x.sun_path)" "struct sockaddr_un x;")
+@
+
+\section{Error Codes}{}%
+Mainly, it seems, the error constants are different on UNIX than on
+Windows, where some of the values that are usually defined overlap with
+other things.
+
+<<BSD Constants>>=
+($error-again fixnum "int" "EAGAIN")
+($error-in-progress fixnum "int" "EINPROGRESS")
+($error-would-block fixnum "int" "EWOULDBLOCK")
+@
+
+<<Windows Constants>>=
+($error-again fixnum "int" "WSAEAGAIN")
+($error-in-progress fixnum "int" "WSAEINPROGRESS")
+($error-would-block fixnum "int" "WSAEWOULDBLOCK")
+@
+
+\section{Socket Data Types}{}%
+Socket Types in WIndows are unsigned integers that could be
+very large, whereas they are signed and usually very small on UNIX
+machines.
+
+<<Miscellaneous Bindings>>=
+(define invalid-socket
+  (meta-cond
+    [(windows?) $invalid-socket]
+    [else -1]))
+@
+
+<<Windows Constants>>=
+($invalid-socket unsigned "unsigned int" "INVALID-SOCKET")
+@
+
+\chapter{Handling Errors}{}%
+On WIndows, when sockets return errors, you are not supposed to use the
+[[errno]] value to get the value. Instead, you are supposed to use
+[[WSAGetLastError]]. 
+
+<<Error Handling>>=
+(meta-cond
+  [(windows?)
+   (define errno (foreign-procedure "WSAGetLastError" () int))
+   (define (call-with-errno thunk receiver)
+     (call-with-values
+       (lambda () 
+         (critical-section 
+           (let ([v (thunk)]) (values v (errno)))))
+       receiver))]
+  [else (import (arcfide errno))])
+@
+
+\noindent We really want [[call-with-errno]] and [[errno-message]].
+
+<<Exports>>=
+call-with-errno errno-message
+@
+
+\chapter{Files}{}%
+
+<<compat.chezscheme.scm>>=
+<<License>>
+
+<<Constants>>
+<<Error Handling>>
+<<Miscellaneous Bindings>>
+@
+
+<<compat.chezscheme.sls>>=
+<<License>>
+
+(library (arcfide sockets compat)
+  (export
+    <<Exports>>)
+  (import (chezscheme) (arcfide ffi-bind))
+  
+<<Constants>>
+<<Error Handling>>
+<<Miscellaneous Bindings>>
+
+)
+@
+
+\chapter{Licensing}{}%
+
+<<License>>=
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Compatibility file for Portable Sockets
+;;; Version: 1.0
+;;; 
+;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
+;;; 
+;;; Permission to use, copy, modify, and distribute this software for
+;;; any purpose with or without fee is hereby granted, provided that the
+;;; above copyright notice and this permission notice appear in all
+;;; copies.
+;;; 
+;;; THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+;;; WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+;;; AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+;;; DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+;;; OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;;; PERFORMANCE OF THIS SOFTWARE.
+@
