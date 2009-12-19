@@ -14,19 +14,18 @@ beware!
 
 <<Code>>=
 (define errno
-	(let ([errno-ent (#%$foreign-entry "errno")])
-		(lambda ()
-			(#%$object-ref 'integer-32 errno-ent 0))))
+  (let ([errno-ent (#%$foreign-entry "errno")])
+    (lambda ()
+      (#%$object-ref 'integer-32 errno-ent 0))))
 
 (define errno-message
-	(let ([$strerror (foreign-procedure "strerror" (fixnum) string)])
-		(lambda (num) ($strerror num))))
+  (let ([$strerror (foreign-procedure "strerror" (fixnum) string)])
+    (lambda (num) ($strerror num))))
 
 (define (call-with-errno thunk receiver)
-	(call-with-values
-		(lambda () (critical-section (let ([v (thunk)]) (values v (errno)))))
-		receiver))
-
+  (call-with-values
+    (lambda () (critical-section (let ([v (thunk)]) (values v (errno)))))
+    receiver))
 @
 
 \chapter{Modules, Libraries, &c.}
@@ -34,8 +33,8 @@ beware!
 <<errno.sls>>=
 #!chezscheme
 (library (arcfide errno)
-	(export errno errno-message call-with-errno)
-	(import (chezscheme))
+  (export errno errno-message call-with-errno)
+  (import (chezscheme))
 
 <<Code>>
 
@@ -44,8 +43,8 @@ beware!
 
 <<errno.ss>>=
 (module arcfide-errno
-	(errno errno-message call-with-errno)
-	(import (chezscheme))
+  (errno errno-message call-with-errno)
+  (import (chezscheme))
 
 <<Code>>
 
