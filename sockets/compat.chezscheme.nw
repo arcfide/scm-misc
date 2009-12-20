@@ -151,7 +151,7 @@ other things.
 @
 
 <<Windows Constants>>=
-($error-again fixnum "int" "WSAEAGAIN")
+($error-again fixnum "int" "WSAEWOULDBLOCK")
 ($error-in-progress fixnum "int" "WSAEINPROGRESS")
 ($error-would-block fixnum "int" "WSAEWOULDBLOCK")
 @

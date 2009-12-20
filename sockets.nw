@@ -894,9 +894,8 @@ bind-socket
                foreign-addr 
                (bytevector-length foreign-addr)))
       (lambda (ret err) 
-        (if (zero? ret) 
-            (void) 
-            (socket-error 'bind-socket 'bind err))))))
+        (when (= ret $socket-error)
+          (socket-error 'bind-socket 'bind err))))))
 
 @
 
@@ -912,10 +911,8 @@ listen-socket
 (define (listen-socket sock queue-length)
   (call-with-errno (lambda () ($listen (socket-fd sock) queue-length))
     (lambda (ret err)
-      (case ret
-        [(0) (void)]
-        [(-1) (socket-error 'listen-socket 'listen err)]
-        [else (error 'listen "Unknown return" ret)]))))
+      (when (= ret $socket-error)
+        (socket-error 'listen-socket 'listen err)))))
 
 @
 
@@ -966,19 +963,11 @@ connect-socket
       (lambda () 
         ($connect (socket-fd sock) fa (bytevector-length fa)))
       (lambda (ret err)
-        (case ret
-          [(0) (void)]
-          [(-1) 
-           (socket-raise/unless 
-             'connect-socket 
-             'connect 
-             err 
-             $error-in-progress)]
-          [else 
-            (error 'connect-socket 
-                   "Unknown foreign return value.")])))))
-    
-
+        (when (= ret $socket-error)
+          (socket-raise/unless 'connect-socket 
+                               'connect 
+                               err
+                               $error-in-progress))))))
 @
 
 \procsig{[[close-socket]]}{\var{socket}}{}
@@ -993,11 +982,8 @@ Equivalent to [[close(2)]].
 (define (close-socket sock)
   (call-with-errno (lambda () ($close (socket-fd sock)))
     (lambda (ret err)
-      (case ret
-        [(0) (void)]
-        [(-1) (socket-error 'close-socket 'close err)]
-        [else (error 'close-socket "Unknown foreign return value.")]))))
-
+      (when (= ret $socket-error)
+        (socket-error 'close-socket 'close err)))))
 @
 
 \procsig{[[shutdown-socket]]}{\var{socket} \var{method}}{}
@@ -1018,14 +1004,8 @@ Corresponds to [[shutdown(s)]].
     (lambda () 
       ($shutdown (socket-fd sock) (socket-constant-value how)))
     (lambda (ret err)
-      (case ret
-        [(0) (void)]
-        [(-1) (socket-error 'shutdown-socket 'shutdown err)]
-        [else 
-          (error 'shutdown-socket 
-                 "Unknown foreign return value.")]))))
-  
-
+      (when (= ret $socket-error)
+        (socket-error 'shutdown-socket 'shutdown err)))))
 @
 
 \noindent The shutdown method is a constant value defined as follows.
@@ -1067,14 +1047,10 @@ Corresponds to the [[sendto(2)]] system call.
             flags)
           fa fa-len))
       (lambda (res err)
-        (cond
-          [(= -1 res) 
+        (if (= res $socket-error)
             (socket-raise/unless 'send-to-socket 'sendto err
-              $error-again $error-would-block)]
-          [(negative? res)
-            (error 'send-to-socket "Unknown foreign return value.")]
-          [else res])))))
-
+              $error-again $error-would-block)
+            res)))))
 @
 
 \noindent There are a number of system depended flags
@@ -1129,14 +1105,9 @@ see this as a good thing.}
             addr 
             addr-len))
         (lambda (n err)
-          (cond
-            [(= -1 n) 
+          (if (= n $socket-error)
               (socket-raise/unless 'receive-from-socket 'recvfrom err
-                $error-again $error-would-block)]
-            [(negative? n) 
-             (error 'receive-from-socket 
-                    "Unknown foreign return value.")]
-            [else
+                $error-again $error-would-block)
               (values 
                 (if (< n c)
                   (let ([res (make-bytevector n)])
@@ -1146,8 +1117,7 @@ see this as a good thing.}
                 (foreign->socket-address 
                   (socket-domain sock) 
                   addr 
-                  addr-len-buf))]))))))
-
+                  addr-len-buf))))))))
 @
 
 \noindent A few flags are pre-defined.
@@ -1215,11 +1185,11 @@ See the above chapter on Socket Options for the format of socket options.
             (socket-option-id opt)
             fbuf flen))
         (lambda (ret err)
-          (when (negative? ret)
-            (socket-error 'get-socket-option 'getsockopt err))
-          ((socket-option-foreign-converter opt)
-            fbuf
-            (get-socket-length flen 0)))))))
+          (if (= ret $socket-error)
+              (socket-error 'get-socket-option 'getsockopt err))
+              ((socket-option-foreign-converter opt)
+                fbuf
+                (get-socket-length flen 0)))))))
 @
 
 \procsig{[[set-socket-option!]]}{\var{socket} \var{socket option} \var{value}}{}
@@ -1243,9 +1213,8 @@ approach is the same.
           (socket-option-id opt)
           buf (bytevector-length buf))))
     (lambda (ret err)
-      (when (negative? ret)
-        (socket-error 'set-socket-option! 'setsockopt err))
-      (void))))
+      (when (= ret $socket-error)
+        (socket-error 'set-socket-option! 'setsockopt err)))))
 
 @
 
