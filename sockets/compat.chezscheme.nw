@@ -20,17 +20,17 @@ We need these constants defined:
 <<Exports>>=
 $error-again $error-in-progress $error-would-block $file-get-flag
 $file-set-flag $ipproto-ip $ipproto-raw $ipproto-tcp $ipproto-udp
-$option-non-blocking $sol-socket %ai/canonname %ai/numerichost
-%ai/passive %msg/dont-route %msg/dont-wait %msg/out-of-band %msg/peek
-%msg/wait-all %shutdown/read %shutdown/read&write %shutdown/write
-%socket-domain/internet %socket-domain/internet-v6 %socket-domain/local
-%socket-domain/unix %socket-type/datagram %socket-type/random
-%socket-type/raw %socket-type/sequence-packet %socket-type/stream
-%somaxconn af-inet af-unix invalid-socket size-of/addr-in
-size-of/addr-un size-of/addrinfo size-of/integer size-of/ip
-size-of/pointer size-of/port size-of/protoent size-of/sa-family
-size-of/size-t size-of/sockaddr-in size-of/sockaddr-un size-of/socklen-t
-unix-max-path
+$option-non-blocking $socket-error $sol-socket %ai/canonname
+%ai/numerichost %ai/passive %msg/dont-route %msg/dont-wait
+%msg/out-of-band %msg/peek %msg/wait-all %shutdown/read
+%shutdown/read&write %shutdown/write %socket-domain/internet
+%socket-domain/internet-v6 %socket-domain/local %socket-domain/unix
+%socket-type/datagram %socket-type/random %socket-type/raw
+%socket-type/sequence-packet %socket-type/stream %somaxconn af-inet
+af-unix invalid-socket size-of/addr-in size-of/addr-un size-of/addrinfo
+size-of/integer size-of/ip size-of/pointer size-of/port size-of/protoent
+size-of/sa-family size-of/size-t size-of/sockaddr-in size-of/sockaddr-un
+size-of/socklen-t unix-max-path
 @
 
 \noindent While foreign constants are normally quite portable, it is
@@ -75,13 +75,10 @@ using just [[Winsock2.h]] instead of the others.
 \noindent Fortunately, there are many constants that remain the same.
 
 <<Common Constants>>=
-($file-get-flag fixnum "int" "F_GETFL")
-($file-set-flag fixnum "int" "F_SETFL")
 ($ipproto-ip int "int" "IPPROTO_IP")
 ($ipproto-raw int "int" "IPPROTO_RAW")
 ($ipproto-tcp int "int" "IPPROTO_TCP")
 ($ipproto-udp int "int" "IPPROTO_UDP")
-($option-non-blocking fixnum "int" "O_NONBLOCK")
 ($sol-socket int "int" "SOL_SOCKET")
 (%ai/canonname fixnum "int" "AI_CANONNAME")
 (%ai/numerichost fixnum "int" "AI_NUMERICHOST")
@@ -120,6 +117,26 @@ using just [[Winsock2.h]] instead of the others.
 (size-of/sockaddr-un int "int" "sizeof(struct sockaddr_un)")
 (size-of/socklen-t int "int" "sizeof(socklen_t)")
 (unix-max-path fixnum "int" "sizeof(x.sun_path)" "struct sockaddr_un x;")
+@
+
+\section{Non-blocking Sockets}{}%
+The values for blocking and non blocking are different in WIndows.
+
+<<BSD Constants>>=
+($file-get-flag fixnum "int" "F_GETFL")
+($file-set-flag fixnum "int" "F_SETFL")
+($option-non-blocking fixnum "int" "O_NONBLOCK")
+@
+
+<<Windows Constants>>=
+($file-set-flag unsigned "unsigned int" "FIONBIO")
+($socket-error int "int" "SOCKET_ERROR")
+@
+
+<<Constants>>=
+(meta-cond 
+  [(windows?) (define $option-non-blocking 1)]
+  [else (define $socket-error -1)])
 @
 
 \section{Error Codes}{}%
@@ -214,8 +231,6 @@ $setsockopt $fcntl
   (foreign-procedure "accept" (fixnum string string) fixnum))
 (define $connect
   (foreign-procedure "connect" (fixnum string fixnum) fixnum))
-(define $close
-  (foreign-procedure "close" (fixnum) fixnum))
 (define $shutdown
   (foreign-procedure "shutdown" (fixnum fixnum) fixnum))
 (define $sendto
@@ -230,8 +245,22 @@ $setsockopt $fcntl
   (foreign-procedure "getsockopt" (int int int string string) int))
 (define $setsockopt
   (foreign-procedure "setsockopt" (int int int string int) int))
-(define $fcntl
-  (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))
+@
+
+\noindent Unfortunately, not everything is so simple with Windows.
+
+<<Foreign Procedures>>=
+(meta-cond 
+  [(windows?)
+   (define $close
+     (foreign-procedure "closesocket" (unsigned) int))
+   (define $fcntl
+     (foreign-procedure "ioctlsocket" (unsigned unsigned unsigned) int))]
+  [else
+    (define $close
+      (foreign-procedure "close" (fixnum) fixnum))
+    (define $fcntl
+      (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))])
 @
 
 \chapter{Files}{}%

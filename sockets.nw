@@ -57,7 +57,12 @@ The [[socket]] datatype also defines fields for easily determining
 the domain, the type, and the protocol of the socket.
 
 <<Datatypes>>=
-(define-record-type socket (fields fd domain type protocol))
+(define-record-type socket 
+  (fields fd domain type protocol (mutable nonblocking?))
+  (protocol
+    (lambda (n)
+      (lambda (fd domain type protocol)
+        (n fd domain type protocol #f)))))
 @
 
 The [[fd]] field should be a socket field descriptor, which is a positive integer. 
@@ -1260,15 +1265,12 @@ socket-nonblocking?
   (call-with-errno 
     (lambda () 
       (if val 
-        ($fcntl (socket-fd sock) $file-set-flag $option-non-blocking) 
-        ($fcntl (socket-fd sock) $file-set-flag 0)))
+          ($fcntl (socket-fd sock) $file-set-flag $option-non-blocking) 
+          ($fcntl (socket-fd sock) $file-set-flag 0)))
     (lambda (ret err)
-      (when (negative? ret)
-        (socket-error 'set-socket-nonblocking! 'fcntl err)))))
-
-(define (socket-nonblocking? sock)
-  (not (zero? (fxand $option-non-blocking ($fcntl (socket-fd sock) $file-get-flag 0)))))
-
+      (when (= ret $socket-error)
+        (socket-error 'set-socket-nonblocking! 'fcntl err))
+      (socket-nonblocking?-set! sock val))))
 @
 
 \chapter{Handling Socket Errors}
