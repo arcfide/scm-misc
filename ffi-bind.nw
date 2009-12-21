@@ -1,5 +1,3 @@
-\input bnf
-
 \title {Foreign Value Binding Constructs}
 
 \chapter{Introduction}
@@ -9,405 +7,83 @@ code and obtain results from them without forcing  the user to write
 their own stub files or compiling them  outside of compiling the scheme
 file. 
 
-\chapter{Defining Foreign Types}% The following specifies and implements
-a [[define-foreign-type]]  that permits the definition of foreign types
-that can be handled efficiently  and conveniently in Scheme code. 
-
-\medskip\centerline{%
-(define-foreign-type 
-  \var{name} 
-  \var{size} 
-  \var{constructor} 
-  \var{accessor} 
-  \var{mutator})}
-\medskip
-
-\noindent [[define-foreign-type]] defines simple, non-composite foreign
-types,  and allows you to allocate and create them in the Scheme side,
-where their storage can  be reclaimed by the collector, as well as
-accessing its value and converting it to a  Scheme value. 
-
-{\bf The name} should be an identifier that will be used as the name to
-identify the type, and can be used  as a reference in other type
-definitions.
-
-{\bf Constructors} are procedures that take some Scheme value  and
-return the equivalent foreign value, which in R6RS will usually be a 
-bytevector that can be passed to the foreign procedures. ({\em
-Implementor's Note:} I decided to make these bytevectors because  these
-constructors are really meant to allocate the data space where we  would
-normally have to use [[malloc(2)]]. If we can use the literal Scheme 
-values or other things like this, then there is no reason to use the
-foreign  types abstraction. This means that yes, we usually only use the
-constructors  when they expect a pointer to the value.) 
-
-{\bf Accessors} will receive an encapsulation of foreign data, usually
-as a bytevector (though this may change depending on the
-implementation),  as well as an offset within that vector. The procedure
-should then extract out  the data at that offset as if it were of the
-associated foreign type, and  convert this data to a Scheme value
-suitable for normal use. 
-
-A second use of accessors occurs when accessors are passed an
-nonnegative  fixnum. The accessor should treat this value as a pointer
-to the foreign type  that was allocated in foreign code, rather than
-using the constructor. Thus,  the accessor should reference the data
-pointed to by the pointer when doing  the conversion.  Otherwise, the
-behavior should be the same. 
-
-{\bf Mutators} are the [[set!]] equivalent of accessors.
-
-The above abstraction enables the creation and manipulation of foreign
-values  that are allocated in foreign code. They also make it possible
-to allocate and create  foreign values in Scheme and pass this data to
-foreign code, where you would  usually have to use [[malloc(2)]]. Note
-that these abstractions are not for passing  literal non-composite
-types, which can easily be passed through in almost all  foreign
-function interfaces. These are for handling cases when you may need to 
-pass pointers to these values, such as with return-value arguments. 
-
-[[define-foreign-type]] will bind name to a keyword that can be used in
-composite  foreign type definitions. 
-
-<<Binding Constructs>>=
-(define-syntax define-foreign-type
-  (syntax-rules ()
-    [(_ name size const access mutat)
-     (begin 
-       (define s size)
-       (define c const)
-       (define a access)
-       (define m mutat)
-       (define-syntax name
-         (syntax-rules (constructor accessor mutator sizeof)
-           [(_ sizeof) s]
-           [(_ constructor) c]
-           [(_ accessor) a]
-           [(_ mutator) m])))]))
-@
-
-\section{Defining Structures}%
-This form provides convenient creation of helpers for handling C like foreign structures.
-
-\medskip\centerline{%
-(define-foreign-struct-type 
-  \var{name} 
-  \var{size} 
-  (\var{field-name} \var{field-type}) \dots)}
-\medskip
-
-[[define-foreign-struct-type]] binds [[make-]]\var{name} to a constructor of
-the same arity  as the number of fields specified. This constructor
-returns a bytevector containing the  foreign representations of each of
-the corresponding field values that were passed to it.  Additionally,
-for each field specifier, [[define-foreign-struct]] binds 
-\var{name}[[-]]\var{field-name} to an accessor for that field, and
-\var{name}[[-]]\var{field-name}[[-set!]] to a mutator for that field.
-Accessors and  mutators behave similarly to those defined by
-[[define-foreign-type]] but they take the  entire structure bytevector
-or pointer reference as their object. They also do not take an  offset. 
-
-<<Binding Constructs>>=
-(define-syntax define-foreign-struct-type
-  (lambda (x)
-    <<struct-constructor-name>>
-    (syntax-case x ()
-      [(_ name size (field-name field-type) ...)
-        #`(begin
-          (define (#,(struct-constructor-name #'name) field-name ...)
-            (populate-foreign-buffer
-              (make-bytevector size 0)
-              0 (field-name ...) (field-type ...)))
-          (define-field-mutators/accessors name 0 
-            (field-name ...) (field-type ...)))])))
-@
-
-\noindent [[struct-constructor-name]] constructs the constructor name 
-from the struct name.
-
-<<struct-constructor-name>>=
-(define (struct-constructor-name name)
-  (datum->syntax
-    name
-    (string->symbol
-      (string-append
-        "make-"
-        (symbol->string (syntax->datum name))))))
-@
-
-\noindent [[populate-foreign-buffer]] takes a bytevector, offset, and a
-set of  paired field names and types. It then expands to the code that
-will populate  the passed bytevector, making sure that the correct
-offsets are chosen.  The value of the expansion should be the buffer.
-
-<<Binding Constructs>>=
-(define-syntax populate-foreign-buffer
-  (syntax-rules ()
-    [(_ buffer offset (name) (type))
-      (let ([buffer-value buffer]) 
-        ((type mutator) buffer-value offset name)
-        buffer-value)]
-    [(_ buffer offset (name other-names ...) (type other-types ...))
-      (let ([offset-value offset] [buffer-value buffer])
-        ((type mutator) buffer-value offset-value name)
-        (populate-foreign-buffer 
-          buffer-value 
-          (+ offset-value (type sizeof))
-          (other-names ...) (other-types ...)))]))
-@
-
-\noindent [[define-field-mutators/accessors]] helps to define the 
-mutators and accessors associated with any given field name. 
-We give it the field names and types in order, and it increments the 
-offset as it builds the procedures.
-
-<<Binding Constructs>>=
-(define-syntax define-field-mutators/accessors
-  (syntax-rules ()
-    [(_ struct-name offset (name) (type))
-      (define-field-mutator/accessor 
-        struct-name offset-value offset name type)]
-    [(_ struct-name offset (name other-names ...) (type other-types ...))
-      (begin
-        (define-field-mutator/accessor 
-          struct-name offset-value offset name type)
-        (define-field-mutators/accessors struct-name 
-          (+ offset-value (type sizeof))
-          (other-names ...) (other-types ...)))]))
-@
-
-\noindent Defining an individual field mutator accessor set is
-straightforward.
-
-<<Binding Constructs>>=
-(define-syntax define-field-mutator/accessor
-  (lambda (x)
-    <<name procedures>>
-    (syntax-case x ()
-      [(_ struct-name offset-value offset name type)
-        #`(begin
-            (define offset-value offset)
-            (define (#,(struct-field-mutator-name #'struct-name #'name) 
-                      struct value . args)
-              (apply (type mutator) 
-                `(,struct ,offset-value ,value ,@args)))
-            (define (#,(struct-field-accessor-name #'struct-name #'name) 
-                      struct . args)
-              (apply (type accessor) 
-                `(,struct ,offset-value ,@args))))])))
-@
-
-\noindent We have assistant functions [[struct-field-accessor-name]] 
-and [[struct-field-mutator-name]] to help build the right names.
-
-<<name procedures>>=
-(define (struct-field-accessor-name struct name)
-  (datum->syntax 
-    name
-    (string->symbol
-      (string-append
-        (symbol->string (syntax->datum struct))
-        "-"
-        (symbol->string (syntax->datum name))))))
-
-(define (struct-field-mutator-name struct name)
-  (datum->syntax
-    name
-    (string->symbol
-      (string-append 
-        (symbol->string (syntax->datum struct))
-        "-"
-        (symbol->string (syntax->datum name))
-        "-set!"))))
-@
-
 \chapter{Binding Foreign Values}
 
 <<Exports>>=
-define-foreign-constants
+define-foreign-values
 @
 
 \procsig{[[define-foreign-constants]]}
-{\var{includes} \var{bindings}} {}
+  {(\var{shared-object-path} \var{get-proc-name} \var{type}) 
+    \var{binding} \ldots} 
+  {}
 
-\noindent \var{includes} should be a list of include directives 
-that provide the necessary functions for the foreign code. 
-They should be literally entered, and not quoted, with strings, 
-unless they should be so wrapped in the C file.
+\noindent \var{shared-object-path} should be the path to the shared
+object file that contains the \var{get-proc-name} function.
+\var{get-proc-name} and \var{shared-object-path} must both be literal
+strings. \var{type} should be a valid foreign type. The set of
+\var{binding} names should be identifiers.
 
-\var{bindings} should be a list of the form 
-(\var{name} \var{scheme return} \var{c return} \var{body lines} \dots).
-\var{name} is the binding to which the result of the foreign procedure 
-will bound.
-\var{scheme return} is the return type of the foreign procedure 
-as used by [[foreign-procedure]].
-\var{c return} is a literal c return type.
-\var{body lines} are strings which represent the body of the 
-c procedure. Usually, these will be omitted for the simple cases.
+Each identifier is bound to the result of applying the get-proc-name to
+the string representation of the symbol. The shared object is loaded at
+compile time, and the getter function is only defined at compile-time,
+so it is not necessary to include the shared object with the compiled
+code object.
 
 <<Binding Constructs>>=
-(define-syntax %define-foreign-constants
+(define-syntax define-foreign-values
   (lambda (x)
     (syntax-case x ()
-      [(_ (name return) ...)
-       (with-syntax ([(c-name ...) 
-                      (map make-foreign-name 
-                        (map syntax->datum #'(name ...)))])
-         #'(begin
-             (define-constant name
-               (let ([get-val (foreign-procedure c-name () return)])
-                 (get-val)))
-             ...))])))
+      [(_ shared-object proc-name type bindings ...)
+       (and (string? (syntax->datum #'shared-object))
+            (string? (syntax->datum #'proc-name))
+            (for-all identifier? #'(type bindings ...)))
+       #'(begin
+           (meta define %get-ffi-value
+             (begin (load-shared-object shared-object)
+               (foreign-procedure proc-name (string) type)))
+           (define-syntax get-ffi-value
+             (lambda (x)
+               (syntax-case x ()
+                 [(k name)
+                  (identifier? #'name)
+                  #`'#,(datum->syntax #'k
+                         (%get-ffi-value 
+                           (symbol->string 
+                             (syntax->datum #'name))))])))
+           (define-bindings get-ffi-value bindings ...))])))
 
-(define-syntax define-foreign-constants
+(define-syntax define-bindings
   (syntax-rules ()
-    [(_ (include ...)
-        (name scm-ret c-type c-ret body ...)
-        (name2 scm-ret2 c-type2 c-ret2 body2 ...)
-        ...)
-     (begin
-       (compile-and-load (include ...)
-         (name c-type c-ret body ...) 
-         (name2 c-type2 c-ret2 body2 ...) ...)
-       (%define-foreign-constants
-          (name scm-ret) (name2 scm-ret2) ...))]))
+    [(_ get) (begin)]
+    [(_ get binding) (define binding (get binding))]
+    [(_ get binding rest ...)
+     (begin (define binding (get binding))
+       (define-bindings get rest ...))]))
 @
+                              
+\chapter{Files}{}%
 
-\chapter{Generating and Compiling the C File}
-
-We generate the C file using [[write-c-file]],
-which takes a filename, a list of include, 
-and a list of function data.
-
-<<Compiling>>=
-(meta define (write-c-file fname includes procs)
-  (with-output-to-file fname
-    (lambda ()
-      (printf "~{#include ~s~%~}~%" includes)
-      (for-each 
-        (lambda (x)
-          (printf "~a ~a() {~%~{~a~%~}~%return (~a);~%}~%~%"
-            (cadr x)
-            (make-foreign-name (car x))
-            (cdddr x)
-            (caddr x)))
-        procs))
-    'replace))
-
-@
-
-We call the above from a syntax [[compile-and-load]] 
-to do the writing, compiling, and loading all at expansion time.
-
-<<Compiling>>=
-(define-syntax compile-and-load
-  (lambda (x)
-    (syntax-case x ()
-      [(_ (include ...) (name ret body ...) ...)
-       (let ([fname (make-c-fname)]) 
-         (write-c-file fname
-           (syntax->datum #'(include ...))
-           (syntax->datum #'((name ret body ...) ...)))
-         (load-shared-object
-           ((ffi-compiler) fname))
-         #'(begin))])))
-@
-
-\chapter{Utilities and Miscellaneous Helpers}
-
-[[make-foreign-name]] turns a scheme identifier (symbol) into a valid C 
-procedure name.
-
-<<Utilities>>=
-(meta define (make-foreign-name id)
-  (string-append
-    (collect-string (for c (in-string (symbol->string id)))
-      (case c
-        [(#\- #\: #\/ #\? #\> #\% #\$ #\= #\&) #\_]
-        [else c]))
-    "_val"))
-
-@
-
-We also want to generate a C filename for compilation automatically. 
-
-<<Utilities>>=
-(meta define (make-c-fname)
-  (format "~a~a~a.c" (ffi-build-path) (directory-separator)
-    (gensym->unique-string (gensym))))
-@
-
-\chapter{Changing compiler options}
-
-<<Parameters>>=
-(define ffi-compiler
-  (make-parameter 
-    (lambda (fname)
-      (system
-        (format "cc -m64 -Wall -pedantic -O2 -fPIC -shared -o '~a.so' '~a'"
-          (path-root fname)
-          fname))
-      (string-append (path-root fname) ".so"))
-    (lambda (v)
-      (unless (procedure? v)
-        (error 'ffi-compiler "invalid compiler procedure" v))
-      v)))
-
-(define ffi-build-path
-  (make-parameter "."
-    (lambda (v)
-      (unless (string? v)
-        (error 'ffi-build-path "invalid path directory" v))
-      v)))
-@
-
-It will often be necessary to change the compiler 
-and the options to pass to the compiler.
-The paramters library can be used to control 
-the manner of the call. 
-The parameter should contain a unary procedure 
-which takes the file path of the c file to compile 
-and returns the path of the compiled object.
-
-\chapter{R6RS Forms}
-
-<<ffi-bind.sls>>=
+<<ffi-bind.ss>>=
 <<License>>
 
-(library (arcfide ffi-bind)
-  (export 
-    define-foreign-constants
-    define-foreign-type
-    define-foreign-struct-type)
-  (import 
-    (scheme)
-    (riastradh foof-loop)
-    (arcfide extended-definitions)
-    (arcfide ffi-bind parameters))
-
-<<Utilities>>
-
-<<Compiling>>
-
+(module arcfide/ffi-bind
+  (define-foreign-values)
+  (import (chezscheme))
+  
 <<Binding Constructs>>
 
 )
 @
 
-<<ffi-bind/parameters.sls>>=
+<<ffi-bind.sls>>=
 <<License>>
 
-(library (arcfide ffi-bind parameters)
-  (export ffi-build-path ffi-compiler)
-  (import (rnrs base)
-    (rnrs control)
-    (only (scheme) 
-      make-parameter
-      system
-      format
-      path-root))
+(library (arcfide ffi-bind)
+  (export define-foreign-values)
+  (import (chezscheme))
 
-<<Parameters>>
+<<Binding Constructs>>
 
 )
 @
@@ -417,7 +93,7 @@ and returns the path of the compiled object.
 <<License>>=
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Foreign Value Binding Constructs
-;;; Version 1.1
+;;; Version 2.0
 ;;; 
 ;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
 ;;; 
