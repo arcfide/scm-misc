@@ -85,7 +85,7 @@ socket-option? make-socket-option socket-option
   (fields level id foreign-size foreign-maker foreign-converter)
   (protocol 
     (lambda (p) 
-      (case-lambda 
+      (case-lambda ; When in the course of human events
         [(id size maker converter)  
          (p $sol-socket id size maker converter)] 
         [(id size maker converter level) 
@@ -93,14 +93,15 @@ socket-option? make-socket-option socket-option
 
 @
 
-\noindent The [[level]] field should be a number identifying the highlevel setting 
-group, and [[id]] should be a number identifying the setting itself, as 
-described in [[getsockopt(2)]]. 
+\noindent The [[level]] field should be a number identifying the
+highlevel setting  group, and [[id]] should be a number identifying the
+setting itself, as  described in [[getsockopt(2)]]. 
 
-[[valid?]] is a predicate that returns true for valid setting values, and false otherwise. 
+[[valid?]] is a predicate that returns true for valid setting values,
+and false otherwise. 
 
-[[make-socket-option]] called without a level will default to a socket api level option, 
-otherwise it expects a proper option level. 
+[[make-socket-option]] called without a level will default to a socket
+api level option,  otherwise it expects a proper option level. 
 
 \procsig{[[define-socket-option-type]]}{\var{name} \var{level}}{}
 
