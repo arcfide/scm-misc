@@ -85,7 +85,7 @@ socket-option? make-socket-option socket-option
   (fields level id foreign-size foreign-maker foreign-converter)
   (protocol 
     (lambda (p) 
-      (case-lambda ; When in the course of human events
+      (case-lambda
         [(id size maker converter)  
          (p $sol-socket id size maker converter)] 
         [(id size maker converter level) 
@@ -215,43 +215,6 @@ UNIX domain sockets have addresses that are just paths, which in turn are simply
 
 @
 
-\noindent We use [[define-foreign-struct-type]] to define a new type
-corresponding to the foreign equivalent of a [[unix-address]], which is
-type [[struct sockaddr_un]] in C.
-
-<<Datatypes>>=
-<<Define foreign-unix-path>>
-
-(define-foreign-integer-type 
-  (sa-family-type make-sa-family get-sa-family sa-family-set!)
-  unsigned
-  size-of/sa-family
-  (native-endianness))
-
-(define-foreign-struct-type foreign-unix-address 
-  size-of/sockaddr-un
-  (family sa-family-type)
-  (path foreign-unix-path))
-@
-
-\noindent A UNIX path is a character array with a maximum size of
-[[UNIX_PATH_MAX]]. 
-
-<<Define foreign-unix-path>>=
-(define (make-foreign-unix-path x)
-  (assert (< 0 (string-length x) unix-max-path))
-  (make-foreign-string x))
-
-(define get-foreign-unix-path get-foreign-string)
-
-(define (foreign-unix-path-set! x offset val)
-  (assert (< 0 (string-length val) unix-max-path))
-  (foreign-string-set! x offset val))
-
-(define-foreign-type foreign-unix-path unix-max-path
-  make-foreign-unix-path get-foreign-unix-path foreign-unix-path-set!)
-@
-
 The protocol uses [[unix-address->foreign]] as the converter 
 for a unix address. 
 It returns a bytevector that is the equivalent layout
@@ -259,7 +222,9 @@ of the sockaddr\_un structure.
 
 <<Datatypes>>=
 (define (unix-address->foreign addr) 
-  (make-foreign-unix-address af-unix (unix-address-path addr)))
+  (values 
+    (make-foreign-unix-address (unix-address-path addr))
+    size-of/sockaddr-un))
 @
 
 Converting the foreign address back to a UNIX address 
@@ -297,38 +262,16 @@ unsigned integer.
   (fields ip port))
 @
 
-\noindent The foreign equivalent looks like this:
-
-<<Datatypes>>=
-<<Define port and ip types>>
-
-(define-foreign-struct-type foreign-ipv4-address
-  size-of/sockaddr-in
-  (family sa-family-type)
-  (port port-type)
-  (ip ip-type))
-@
-
-\noindent Both of these values are supposed to be translated into
-network byte order before being stored in the final structure. 
-
-<<Define port and ip types>>=
-(define-foreign-integer-type (port-type make-port get-port port-set!)
-  unsigned size-of/port (endianness big))
-
-(define-foreign-integer-type (ip-type make-ip get-ip ip-set!)
-  unsigned size-of/ip (endianness big))
-@
-
 \noindent Converting the internet-address to a foreign value is done  by
 [[internet-address->foreign]].
 
 <<Datatypes>>=
 (define (internet-address->foreign addr)
-  (make-foreign-ipv4-address
-    af-inet
-    (internet-address-port addr)
-    (internet-address-ip addr)))
+  (values 
+    (make-foreign-ipv4-address
+      (internet-address-port addr)
+      (internet-address-ip addr))
+    size-of/sockaddr-in))
 @
 
 \noindent Converting back is pretty easy.
@@ -458,57 +401,7 @@ accepted when calling [[get-address-info]], even if one does not care
 about the canonical name. I am open to better approaches, but this does
 not seem to be too inconvenient in practice.
 
-The foreign equivalent, [[struct addrinfo]] can be expressed with
-[[define-foreign-struct-type]] and [[define-foreign-integer-type]]. 
-
-We first define a foreign integer type which corresponds to the C
-[[int]] type. 
-
-<<Datatypes>>=
-(define-foreign-integer-type 
-  (foreign-integer 
-   make-foreign-integer 
-   get-foreign-integer
-   foreign-integer-set!)
-  signed
-  size-of/integer
-  (native-endianness))
-@
-
-\noindent Next we need a [[size_t]] equivalent.
-
-<<Datatypes>>=
-(define-foreign-integer-type
-  (size-t make-size-t get-size-t size-t-set!)
-  unsigned size-of/size-t (native-endianness))
-@
-
-\noindent And finally, we need some sort of pointer type.
-
-<<Datatypes>>=
-(define-foreign-integer-type
-  (foreign-pointer 
-   make-foreign-pointer 
-   get-foreign-pointer
-   foreign-pointer-set!)
-  unsigned size-of/pointer (native-endianness))
-@
-
-\noindent Then we can define the address info foreign structure.
-
-<<Datatypes>>=
-(define-foreign-struct-type foreign-address-info size-of/addrinfo
-  (flags foreign-integer)
-  (domain foreign-integer)
-  (type foreign-integer)
-  (protocol foreign-integer)
-  (address-length size-t)
-  (address foreign-pointer)
-  (canonical-name foreign-pointer)
-  (next foreign-pointer))
-@
-
-\noindent [[get-address-info]] takes an optional set of hints, such as
+[[get-address-info]] takes an optional set of hints, such as
 the domain, type, protocol, or a set of flags that can be used to filter
 out the results obtained from the call. 
 
@@ -528,7 +421,7 @@ address foreign-integero a Scheme structure.
 <<Code>>=
 (define (%get-address-info node service domain type protocol flags)
   <<Check get-address-info argument types>>
-  (let ([addr-list-ptr (make-foreign-pointer 0)]
+  (let ([addr-list-ptr (make-foreign-pointer)]
         [hints (make-addrinfo-hints domain type protocol flags)]
         [service (or (and (string? service) service) 
                      (number->string service 10))])
@@ -536,12 +429,8 @@ address foreign-integero a Scheme structure.
       (if (zero? res)
           (values 
             (foreign->address-info-list addr-list-ptr)
-            ;#f)
-            (let ([canon-name 
-                    (foreign-address-info-canonical-name
-                      (get-foreign-pointer addr-list-ptr 0))])
-              (and (not (zero? canon-name))
-                   (get-foreign-string canon-name 0))))
+            (foreign-address-info-canonical-name
+              (foreign-pointer-value addr-list-ptr)))
           (error 'get-address-info
             "getaddrinfo() failed with code"
             `(code ,res)
@@ -613,7 +502,7 @@ This walks through the linked list, grabbing each element from it.
 
 <<Code>>=
 (define (foreign->address-info-list alp)
-  (do ([ptr (get-foreign-pointer alp 0) (foreign-address-info-next ptr)]
+  (do ([ptr (foreign-pointer-value alp) (foreign-address-info-next ptr)]
        [res '() (cons (get-address-info-entry ptr) res)])
     [(zero? ptr) (reverse res)]))
 
@@ -822,8 +711,9 @@ open-protocol-database
 close-protocol-database
 @
 
-Each of the general protocol retreival functions that utilize [[foreign->protocol-entry]] 
-will return false when they are at the end of the protocols database or if there was an error. 
+\noindent Each of the general protocol retreival functions that utilize
+[[foreign->protocol-entry]]  will return false when they are at the end
+of the protocols database or if there was an error. 
 
 <<Constants>>=
 (define (next-protocol-entry)
@@ -840,41 +730,14 @@ will return false when they are at the end of the protocols database or if there
 
 @
 
-The foreign protocol structure has the following definition:
-
-\medskip\verbatim
-struct protoent {
-  char *p_name;
-  char **p_aliases;
-  int p_proto;
-}
-|endverbatim
-\medskip
-
-\noindent Which we convert to the following foreign struct type.
-
-<<Constants>>=
-(define-foreign-struct-type foreign-protocol-entry size-of/protoent
-  (name foreign-pointer)
-  (aliases foreign-pointer)
-  (protocol foreign-integer))
-@
-
 \noindent [[foreign->protocol-entry]] converts the foreign value into
 the normal [[protocol-entry]]. 
 
 <<Constants>>=
 (define (foreign->protocol-entry x)
   (make-protocol-entry
-    (get-foreign-string (foreign-protocol-entry-name x) 0)
-    (do ([ptr (foreign-protocol-entry-aliases x) 
-              (+ ptr size-of/pointer)]
-         [res '() 
-           (cons (get-foreign-string 
-                   (get-foreign-pointer ptr 0) 
-                   0)
-                 res)])
-      [(zero? (get-foreign-pointer ptr 0)) (reverse res)])
+    (foreign-protocol-entry-name x)
+    (foreign-protocol-entry-aliases x)
     (foreign-protocol-entry-protocol x)))
 @
 
@@ -888,16 +751,14 @@ bind-socket
 
 <<Code>>=
 (define (bind-socket sock addr)
-  (let ([foreign-addr (socket-address->foreign addr)])
+  (let-values ([(foreign-addr foreign-size) 
+                (socket-address->foreign addr)])
     (call-with-errno
-      (lambda () 
-        ($bind (socket-fd sock) 
-               foreign-addr 
-               (bytevector-length foreign-addr)))
+      (lambda () ($bind (socket-fd sock) foreign-addr foreign-size))
       (lambda (ret err) 
+        (foreign-free foreign-addr)
         (when (= ret $socket-error)
           (socket-error 'bind-socket 'bind err))))))
-
 @
 
 \procsig{[[listen-socket]]}{\var{socket} \var{queue length}}{}
@@ -929,8 +790,8 @@ and the address as its return values.
 <<Code>>=
 (define (accept-socket sock)
   (let ([size (foreign-address-size (socket-domain sock))])
-    (let ([addr (make-bytevector size 0)]
-          [addr-len (make-foreign-integer size)])
+    (let ([addr (foreign-alloc size)]
+          [addr-len (make-foreign-size-buffer size)])
       (call-with-errno 
         (lambda () ($accept (socket-fd sock) addr addr-len))
         (lambda (ret err)
@@ -944,10 +805,13 @@ and the address as its return values.
                   (socket-domain sock)
                   (socket-type sock)
                   (socket-protocol sock))
-                (foreign->socket-address 
-                  (socket-domain sock) 
-                  addr 
-                  addr-len))))))))
+                (let ([res (foreign->socket-address 
+                             (socket-domain sock) 
+                             addr 
+                             addr-len)])
+                  (foreign-free addr) 
+                  (foreign-free addr-len)
+                  res))))))))
 
 @
 
@@ -959,11 +823,12 @@ connect-socket
 
 <<Code>>=
 (define (connect-socket sock addr)
-  (let ([fa (socket-address->foreign addr)])
+  (let-values ([(fa fa-len) (socket-address->foreign addr)])
     (call-with-errno 
       (lambda () 
-        ($connect (socket-fd sock) fa (bytevector-length fa)))
+        ($connect (socket-fd sock) fa fa-len))
       (lambda (ret err)
+        (foreign-free fa)
         (when (= ret $socket-error)
           (socket-raise/unless 'connect-socket 
                                'connect 
@@ -1034,8 +899,7 @@ Corresponds to the [[sendto(2)]] system call.
 <<Code>>=
 (define (send-to-socket sock buf addr . flags)
   (assert (for-all send-to-option? flags))
-  (let* ([fa (socket-address->foreign addr)]
-         [fa-len (bytevector-length fa)])
+  (let-values ([(fa fa-len) (socket-address->foreign addr)])
     (call-with-errno 
       (lambda () 
         ($sendto 
@@ -1048,6 +912,7 @@ Corresponds to the [[sendto(2)]] system call.
             flags)
           fa fa-len))
       (lambda (res err)
+        (foreign-free fa)
         (if (= res $socket-error)
             (socket-raise/unless 'send-to-socket 'sendto err
               $error-again $error-would-block)
@@ -1091,8 +956,8 @@ see this as a good thing.}
   (assert (for-all receive-from-option? flags))
   (let ([buf (make-bytevector c)]
         [addr-len (foreign-address-size (socket-domain sock))])
-    (let ([addr (make-bytevector addr-len)]
-          [addr-len-buf (make-foreign-integer addr-len)])
+    (let ([addr (foreign-alloc addr-len)]
+          [addr-len-buf (make-foreign-size-buffer addr-len)])
       (call-with-errno
         (lambda ()
           ($recvfrom 
@@ -1115,10 +980,13 @@ see this as a good thing.}
                     (bytevector-copy! buf 0 res 0 n)
                     res)
                   buf)
-                (foreign->socket-address 
-                  (socket-domain sock) 
-                  addr 
-                  addr-len-buf))))))))
+                (let ([res (foreign->socket-address 
+                             (socket-domain sock) 
+                             addr 
+                             addr-len-buf)])
+                  (foreign-free addr)
+                  (foreign-free addr-len-buf)
+                  res))))))))
 @
 
 \noindent A few flags are pre-defined.
@@ -1166,19 +1034,10 @@ get-socket-option
 See the above chapter on Socket Options for the format of socket options. 
 
 <<Code>>=
-(define-foreign-integer-type 
-  (socket-length-type 
-   make-socket-length 
-   get-socket-length
-   socket-length-set!)
-  unsigned
-  size-of/socklen-t
-  (native-endianness))
-
 (define (get-socket-option sock opt)
   (let ([len (socket-option-foreign-size opt)])
-    (let ([fbuf (make-bytevector len)] 
-          [flen (make-socket-length len)])
+    (let ([fbuf (foreign-alloc len)] 
+          [flen (make-foreign-size-buffer len)])
       (call-with-errno
         (lambda () 
           ($getsockopt (socket-fd sock) 
@@ -1187,10 +1046,14 @@ See the above chapter on Socket Options for the format of socket options.
             fbuf flen))
         (lambda (ret err)
           (if (= ret $socket-error)
-              (socket-error 'get-socket-option 'getsockopt err))
-              ((socket-option-foreign-converter opt)
-                fbuf
-                (get-socket-length flen 0)))))))
+              (begin (foreign-free fbuf) (foreign-free flen)
+                (socket-error 'get-socket-option 'getsockopt err))
+              (let ([res ((socket-option-foreign-converter opt)
+                          fbuf
+                          (foreign-size-buffer-value flen))])
+                (foreign-free fbuf)
+                (foreign-free flen)
+                res)))))))
 @
 
 \procsig{[[set-socket-option!]]}{\var{socket} \var{socket option} \var{value}}{}
@@ -1205,17 +1068,18 @@ approach is the same.
 
 <<Code>>=
 (define (set-socket-option! sock opt val)
-  (call-with-errno
-    (lambda ()
-      (let ([buf ((socket-option-foreign-maker opt) val)])
+  (let-values ([(buf buf-len) ((socket-option-foreign-maker opt) val)])
+    (call-with-errno
+      (lambda ()
         ($setsockopt
           (socket-fd sock)
           (socket-option-level opt)
           (socket-option-id opt)
-          buf (bytevector-length buf))))
-    (lambda (ret err)
-      (when (= ret $socket-error)
-        (socket-error 'set-socket-option! 'setsockopt err)))))
+          buf buf-len))
+      (lambda (ret err)
+        (foreign-free buf)
+        (when (= ret $socket-error)
+          (socket-error 'set-socket-option! 'setsockopt err))))))
 
 @
 
@@ -1315,8 +1179,6 @@ error. The following provides this functionality.
     (srfi :14)
     (srfi :39 parameters)
     (only (srfi :13) string-tokenize)
-    (arcfide ffi-bind)
-    (arcfide ffi-bind types)
     (arcfide sockets compat))
 
 <<Datatypes>>

@@ -5,6 +5,13 @@ The following bindings are those bindings necessary to the sockets
 library implementation, but which are likely to be unportable, and thus,
 warrant their own implementation outside of the main sockets code.
 
+\chapter{Windows Identification}{}%
+We need to know if we are on a Windows system.
+
+<<Meta Procedures>>=
+(meta define (windows?) (memq (machine-type) '(i3nt ti3nt)))
+@
+
 \chapter{Void}{}%
 For some reason, not enough people have void available. This needs to be
 available, but I just make sure that it is exported from the
@@ -15,9 +22,16 @@ void
 @
 
 \chapter{Constants}{}%
-We need these constants defined:
+We need these constants defined. We expect them to be visible in the
+shared object file [[socket-ffi-values.so]] using the 
+[[(arcfide ffi-bind)]] library.
 
-<<Exports>>=
+<<Foreign Constants>>=
+(define-foreign-values "./socket-ffi-values.so" "get_ffi_value" int
+  <<Foreign Bindings>>)
+@
+
+<<Foreign Bindings>>=
 $error-again $error-in-progress $error-would-block $file-get-flag
 $file-set-flag $ipproto-ip $ipproto-raw $ipproto-tcp $ipproto-udp
 $option-non-blocking $socket-error $sol-socket %ai/canonname
@@ -27,149 +41,15 @@ $option-non-blocking $socket-error $sol-socket %ai/canonname
 %socket-domain/internet-v6 %socket-domain/local %socket-domain/unix
 %socket-type/datagram %socket-type/random %socket-type/raw
 %socket-type/sequence-packet %socket-type/stream %somaxconn af-inet
-af-unix invalid-socket size-of/addr-in size-of/addr-un size-of/addrinfo
-size-of/integer size-of/ip size-of/pointer size-of/port size-of/protoent
-size-of/sa-family size-of/size-t size-of/sockaddr-in size-of/sockaddr-un
-size-of/socklen-t unix-max-path
+af-unix invalid-socket size-of/addr-in size-of/addr-un
+size-of/addrinfo size-of/integer size-of/ip size-of/pointer
+size-of/port size-of/protoent size-of/sa-family size-of/size-t
+size-of/sockaddr-in size-of/sockaddr-un size-of/socklen-t
+unix-max-path
 @
 
-\noindent While foreign constants are normally quite portable, it is
-unfortunate that Windows Sockets requires/recommends some different
-names.
-
-<<Constants>>=
-(meta define (windows?) (memq (machine-type) '(i3nt ti3nt)))
-
-(meta-cond
-  [(windows?)
-   <<Windows Constants Definition>>]
-  [else
-    <<BSD Constants Definition>>])
-@
-
-\noindent For starters, the BSD sockets has a different set of include
-files that are used than the Windows. Microsoft recommends recommends
-using just [[Winsock2.h]] instead of the others.
-
-<<BSD Constants Definition>>=
-(define-foreign-constants 
-  (<sys/types.h>
-	 <sys/socket.h>
-	 <sys/un.h>
-	 <netinet/in.h>
-	 <netdb.h>
-	 <errno.h>
-	 <sys/unistd.h>
-	 <sys/fcntl.h>)
-  <<Common Constants>>
-  <<BSD Constants>>)
-@
-
-<<Windows Constants Definition>>=
-(define-foreign-constants 
-  (<Winsock2.h>)
-  <<Common Constants>>
-  <<Windows Constants>>)
-@
-
-\noindent Fortunately, there are many constants that remain the same.
-
-<<Common Constants>>=
-($ipproto-ip int "int" "IPPROTO_IP")
-($ipproto-raw int "int" "IPPROTO_RAW")
-($ipproto-tcp int "int" "IPPROTO_TCP")
-($ipproto-udp int "int" "IPPROTO_UDP")
-($sol-socket int "int" "SOL_SOCKET")
-(%ai/canonname fixnum "int" "AI_CANONNAME")
-(%ai/numerichost fixnum "int" "AI_NUMERICHOST")
-(%ai/passive fixnum "int" "AI_PASSIVE")
-(%msg/dont-route fixnum "int" "MSG_DONTROUTE")
-(%msg/dont-wait fixnum "int" "MSG_DONTWAIT")
-(%msg/out-of-band fixnum "int" "MSG_OOB")
-(%msg/peek fixnum "int" "MSG_PEEK")
-(%msg/wait-all fixnum "int" "MSG_WAITALL")
-(%shutdown/read fixnum "int" "SHUT_WR")
-(%shutdown/read&write fixnum "int" "SHUT_RDWR")
-(%shutdown/write fixnum "int" "SHUT_RD")
-(%socket-domain/internet fixnum "int" "AF_INET")
-(%socket-domain/internet-v6 fixnum "int" "AF_INET6")
-(%socket-domain/local fixnum "int" "AF_LOCAL")
-(%socket-domain/unix fixnum "int" "AF_UNIX")
-(%socket-type/datagram fixnum "int" "SOCK_DGRAM")
-(%socket-type/random fixnum "int" "SOCK_RDM")
-(%socket-type/raw fixnum "int" "SOCK_RAW")
-(%socket-type/sequence-packet fixnum "int" "SOCK_SEQPACKET")
-(%socket-type/stream fixnum "int" "SOCK_STREAM")
-(%somaxconn fixnum "int" "SOMAXCONN")
-(af-inet fixnum "int" "AF_INET")
-(af-unix fixnum "int" "AF_UNIX")
-(size-of/addr-in fixnum "int" "sizeof(struct sockaddr_in)")
-(size-of/addr-un fixnum "int" "sizeof(struct sockaddr_un)")
-(size-of/addrinfo int "int" "sizeof(struct addrinfo)")
-(size-of/integer int "int" "sizeof(int)")
-(size-of/ip fixnum "int" "sizeof(struct in_addr)")
-(size-of/pointer int "int" "sizeof(void *)")
-(size-of/port fixnum "int" "sizeof(x.sin_port)" "struct sockaddr_in x;")
-(size-of/protoent int "int" "sizeof(struct protoent)")
-(size-of/sa-family int "int" "sizeof(sa_family_t)")
-(size-of/size-t int "int" "sizeof(size_t)")
-(size-of/sockaddr-in int "int" "sizeof(struct sockaddr_in)")
-(size-of/sockaddr-un int "int" "sizeof(struct sockaddr_un)")
-(size-of/socklen-t int "int" "sizeof(socklen_t)")
-(unix-max-path fixnum "int" "sizeof(x.sun_path)" "struct sockaddr_un x;")
-@
-
-\section{Non-blocking Sockets}{}%
-The values for blocking and non blocking are different in WIndows.
-
-<<BSD Constants>>=
-($file-get-flag fixnum "int" "F_GETFL")
-($file-set-flag fixnum "int" "F_SETFL")
-($option-non-blocking fixnum "int" "O_NONBLOCK")
-@
-
-<<Windows Constants>>=
-($file-set-flag unsigned "unsigned int" "FIONBIO")
-($socket-error int "int" "SOCKET_ERROR")
-@
-
-<<Constants>>=
-(meta-cond 
-  [(windows?) (define $option-non-blocking 1)]
-  [else (define $socket-error -1)])
-@
-
-\section{Error Codes}{}%
-Mainly, it seems, the error constants are different on UNIX than on
-Windows, where some of the values that are usually defined overlap with
-other things.
-
-<<BSD Constants>>=
-($error-again fixnum "int" "EAGAIN")
-($error-in-progress fixnum "int" "EINPROGRESS")
-($error-would-block fixnum "int" "EWOULDBLOCK")
-@
-
-<<Windows Constants>>=
-($error-again fixnum "int" "WSAEWOULDBLOCK")
-($error-in-progress fixnum "int" "WSAEINPROGRESS")
-($error-would-block fixnum "int" "WSAEWOULDBLOCK")
-@
-
-\section{Socket Data Types}{}%
-Socket Types in WIndows are unsigned integers that could be
-very large, whereas they are signed and usually very small on UNIX
-machines.
-
-<<Miscellaneous Bindings>>=
-(define invalid-socket
-  (meta-cond
-    [(windows?) $invalid-socket]
-    [else -1]))
-@
-
-<<Windows Constants>>=
-($invalid-socket unsigned "unsigned int" "INVALID-SOCKET")
+<<Exports>>=
+<<Foreign Bindings>>
 @
 
 \chapter{Handling Errors}{}%
@@ -208,7 +88,7 @@ $setsockopt $fcntl
 
 <<Foreign Procedures>>=
 (define $getaddrinfo
-  (foreign-procedure "getaddrinfo" (string string string string) int))
+  (foreign-procedure "getaddrinfo" (string string uptr uptr) int))
 (define $gai_strerror
   (foreign-procedure "gai_strerror" (int) string))
 (define $socket 
@@ -224,27 +104,27 @@ $setsockopt $fcntl
 (define $endprotoent
   (foreign-procedure "endprotoent" () void))
 (define $bind
-  (foreign-procedure "bind" (fixnum string fixnum) fixnum))
+  (foreign-procedure "bind" (fixnum uptr fixnum) fixnum))
 (define $listen
   (foreign-procedure "listen" (fixnum fixnum) fixnum))
 (define $accept
-  (foreign-procedure "accept" (fixnum string string) fixnum))
+  (foreign-procedure "accept" (fixnum uptr uptr) fixnum))
 (define $connect
-  (foreign-procedure "connect" (fixnum string fixnum) fixnum))
+  (foreign-procedure "connect" (fixnum uptr fixnum) fixnum))
 (define $shutdown
   (foreign-procedure "shutdown" (fixnum fixnum) fixnum))
 (define $sendto
   (foreign-procedure "sendto" 
-    (fixnum string fixnum fixnum string fixnum) 
+    (fixnum u8* fixnum fixnum uptr fixnum) 
     fixnum))
 (define $recvfrom
   (foreign-procedure "recvfrom" 
-    (fixnum string fixnum fixnum string string)
+    (fixnum u8* fixnum fixnum uptr uptr)
     fixnum))
 (define $getsockopt
-  (foreign-procedure "getsockopt" (int int int string string) int))
+  (foreign-procedure "getsockopt" (int int int uptr uptr) int))
 (define $setsockopt
-  (foreign-procedure "setsockopt" (int int int string int) int))
+  (foreign-procedure "setsockopt" (int int int uptr int) int))
 @
 
 \noindent Unfortunately, not everything is so simple with Windows.
@@ -263,14 +143,225 @@ $setsockopt $fcntl
       (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))])
 @
 
+\chapter{Foreign Free/alloc}{}%
+The sockets library must have some way to free allocated structurs. It
+must also be able to make space to store a structure.
+
+<<Exports>>=
+foreign-free foreign-alloc
+@
+
+\chapter{UNIX Address Structure}{}% 
+We define the following procedures to help in converting normal C
+[[sockaddr_un]] structures into Scheme [[unix-address]] records and
+back.
+
+<<Exports>>=
+make-foreign-unix-address foreign-unix-address-path
+@
+
+<<Foreign Structures>>=
+(define make-foreign-unix-address 
+  (let ([$strcpy (foreign-procedure "strcpy" (uptr string) void)])
+    (lambda (path)
+      (let ([res (foreign-alloc size-of/sockaddr-un)]
+            [path-len (string-length path)])
+        (assert (< path-len unix-max-path))
+        (foreign-set! 'unsigned-short res 0 af-unix)
+        ($strcpy (+ res size-of/sa-family) path)
+        res))))
+    
+(define foreign-unix-address-path
+  (let ([$strncpy (foreign-procedure "strncpy" (u8* uptr fixnum) string)])
+    (lambda (addr)
+      ($strncpy (make-bytevector unix-max-path 0) 
+                (+ addr size-of/sa-family)
+                unix-max-path))))
+@
+
+\chapter{INET4 Socekt Address Structures}{}%
+The sockets library requires the following procedures for converting to
+and from Scheme [[internet-address]]es and C [[sockaddr_in]] structures.
+
+<<Exports>>=
+make-foreign-ipv4-address foreign-ipv4-address-ip
+foreign-ipv4-address-port
+@
+
+<<Foreign Structures>>=
+(define (make-foreign-ipv4-address port ip)
+  (let ([res (foreign-alloc size-of/sockaddr-in)])
+    (foreign-set! 'unsigned-short res 0 af-inet)
+    (foreign-set! 'unsigned-16 
+                  res 
+                  (foreign-sizeof 'unsigned-short)
+                  (host->network/u16 port))
+    (foreign-set! 'unsigned-32
+                  res
+                  (+ (foreign-sizeof 'unsigned-short)
+                     (foreign-sizeof 'unsigned-16))
+                  (host->network/u32 ip))
+    res))
+    
+(define (foreign-ipv4-address-ip addr)
+  (network->host/u32
+    (foreign-ref 'unsigned-32 
+                 addr
+                 (+ (foreign-sizeof 'unsigned-short) 
+                    (foreign-sizeof 'unsigned-16)))))
+
+(define (foreign-ipv4-address-port addr)
+  (network->host/u16
+    (foreign-ref 'unsigned-16
+                 addr
+                 (foreign-sizeof 'unsigned-short))))
+
+(define host->network/u16
+  (if (eq? (native-endianness) (endianness big))
+      (lambda (x) x)
+      (lambda (x)
+        (let ([buf (make-bytevector 2)])
+          (bytevector-u16-set! buf 0 x (endianness big))
+          (bytevector-u16-ref buf 0 (native-endianness))))))
+
+(define host->network/u32
+  (if (eq? (native-endianness) (endianness big))
+      (lambda (x) x)
+      (lambda (x)
+        (let ([buf (make-bytevector 4)])
+          (bytevector-u32-set! buf 0 x (endianness big))
+          (bytevector-u32-ref buf 0 (native-endianness))))))
+          
+(define network->host/u32 host->network/u32)
+(define network->host/u16 host->network/u16)
+@
+
+\chapter{Getaddrinfo Structures}{}%
+The address info procedures in the sockets library require the following
+procedures.
+
+<<Exports>>=
+make-foreign-pointer foreign-address-info-canonical-name
+foreign-pointer-value make-foreign-address-info
+foreign-address-info-next foreign-address-info-domain
+foreign-address-info-type foreign-address-info-protocol
+foreign-address-info-address foreign-address-info-address-length
+@
+
+<<Foreign Structures>>=
+(define (make-foreign-pointer)
+  (foreign-alloc (foreign-sizeof 'void*)))
+
+(define (foreign-pointer-value x)
+  (foreign-ref 'void* x 0))
+  
+(define family-offset (foreign-sizeof 'int))
+(define type-offset (+ family-offset (foreign-sizeof 'int)))
+(define proto-offset (+ type-offset (foreign-sizeof 'int)))
+(define addrlen-offset (+ proto-offset (foreign-sizeof 'int)))
+(define addr-offset (+ addrlen-offset (foreign-sizeof 'unsigned-long)))
+(define name-offset (+ addr-offset (foreign-sizeof 'void*)))
+(define next-offset (+ name-offset (foreign-sizeof 'void*)))
+  
+(define (make-foreign-address-info 
+          flags family type proto addrlen addr name next)
+  (let ([res (foreign-alloc size-of/addrinfo)])
+    (foreign-set! 'int res 0 flags)
+    (foreign-set! 'int res family-offset family)
+    (foreign-set! 'int res type-offset type)
+    (foreign-set! 'int res proto-offset proto)
+    (foreign-set! 'unsigned-long res addrlen-offset addrlen)
+    (foreign-set! 'void* res addr-offset addr)
+    (foreign-set! 'void* res name-offset name)
+    (foreign-set! 'void* res next-offset next)
+    res))
+
+(define (foreign-address-info-canonical-name addrinfo)
+  (let ([ptr (foreign-ref 'void* addrinfo name-offset)])
+    (if (zero? ptr) #f (get-foreign-string ptr))))
+
+(define (foreign-address-info-domain addrinfo)
+  (foreign-ref 'int addrinfo family-offset))
+(define (foreign-address-info-type addrinfo)
+  (foreign-ref 'int addrinfo type-offset))
+(define (foreign-address-info-protocol addrinfo)
+  (foreign-ref 'int addrinfo proto-offset))
+(define (foreign-address-info-address addrinfo)
+  (foreign-ref 'void* addrinfo addr-offset))
+(define (foreign-address-info-address-length addrinfo)
+  (foreign-ref 'unsigned-long addrinfo addrlen-offset))
+(define (foreign-address-info-next addrinfo)
+  (foreign-ref 'void* addrinfo next-offset))
+@
+
+\chapter{Protocol Database Structures}{}%
+The sockets relies on these procedures to handle foreign protocol entry
+data structures.
+
+<<Exports>>=
+foreign-protocol-entry-name
+foreign-protocol-entry-aliases
+foreign-protocol-entry-protocol
+@
+
+<<Foreign Structures>>=
+(define (foreign-protocol-entry-name x)
+  (get-foreign-string (foreign-pointer-value x)))
+
+(define (foreign-protocol-entry-aliases x)
+  (do ([ptr (foreign-ref 'void* x (foreign-sizeof 'void*))
+            (+ ptr (foreign-sizeof 'void*))]
+       [res '()  (cons (get-foreign-string (foreign-pointer-value ptr))
+                       res)])
+      [(zero? (foreign-pointer-value ptr)) (reverse res)]))
+
+(define (foreign-protocol-entry-protocol x)
+  (foreign-ref 'int x (* 2 (foreign-sizeof 'void*))))
+@
+
+\chapter{Foreign Strings}{}%
+The following procedure makes it easy to get a C string.
+
+<<Miscellaneous>>=
+(define get-foreign-string
+  (let ([$strlen (foreign-procedure "strlen" (uptr) fixnum)]
+        [$strcpy (foreign-procedure "strcpy" (u8* uptr) string)])
+    (lambda (x)
+      (let* ([len ($strlen x)]
+             [buf (make-bytevector (1+ len))])
+        ($strcpy buf x)))))
+@
+
+\chapter{Foreign Size Buffers}{}%
+Sockets some times need to pass in value-result parameters that should
+be initialized to something. This is a convenience for doing this with
+size-buffers.
+
+<<Exports>>=
+make-foreign-size-buffer foreign-size-buffer-value
+@
+
+<<Miscellaneous>>=
+(define (make-foreign-size-buffer size)
+  (let ([res (foreign-alloc (foreign-sizeof 'unsigned-long))])
+    (foreign-set! 'unsigned-long res 0 size)
+    res))
+
+(define (foreign-size-buffer-value buf)
+  (foreign-ref 'unsigned-long buf 0))
+@
+
 \chapter{Files}{}%
 
 <<compat.chezscheme.scm>>=
 <<License>>
 
-<<Constants>>
+<<Meta Procedures>>
+<<Foreign Constants>>
 <<Error Handling>>
-<<Miscellaneous Bindings>>
+<<Foreign Procedures>>
+<<Foreign Structures>>
+<<Miscellaneous>>
 @
 
 <<compat.chezscheme.sls>>=
@@ -280,11 +371,13 @@ $setsockopt $fcntl
   (export
     <<Exports>>)
   (import (chezscheme) (arcfide ffi-bind))
-  
-<<Constants>>
+
+<<Meta Procedures>>
+<<Foreign Constants>>
 <<Error Handling>>
 <<Foreign Procedures>>
-<<Miscellaneous Bindings>>
+<<Foreign Structures>>
+<<Miscellaneous>>
 
 )
 @
@@ -294,7 +387,7 @@ $setsockopt $fcntl
 <<License>>=
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Compatibility file for Portable Sockets
-;;; Version: 1.0
+;;; Version: 2.0
 ;;; 
 ;;; Copyright (c) 2009 Aaron W. Hsu <arcfide@sacrideo.us>
 ;;; 
