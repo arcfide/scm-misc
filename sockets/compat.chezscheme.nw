@@ -27,8 +27,13 @@ shared object file [[socket-ffi-values.so]] using the
 [[(arcfide ffi-bind)]] library.
 
 <<Foreign Constants>>=
-(define-foreign-values "./socket-ffi-values.so" "get_ffi_value" int
-  <<Foreign Bindings>>)
+(meta-cond
+  [(windows?)
+   (define-foreign-values "./socket-ffi-values.dll" "_get_ffi_value" int
+     <<Foreign Bindings>>)]
+  [else
+    (define-foreign-values "./socket-ffi-values.so" "get_ffi_value" int
+      <<Foreign Bindings>>)])
 @
 
 <<Foreign Bindings>>=
