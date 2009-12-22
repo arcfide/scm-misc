@@ -32,7 +32,7 @@ shared object file [[socket-ffi-values.so]] using the
 @
 
 <<Foreign Bindings>>=
-$error-again $error-in-progress $error-would-block $file-get-flag
+$error-again $error-in-progress $error-would-block #;$file-get-flag
 $file-set-flag $ipproto-ip $ipproto-raw $ipproto-tcp $ipproto-udp
 $option-non-blocking $socket-error $sol-socket %ai/canonname
 %ai/numerichost %ai/passive %msg/dont-route %msg/dont-wait
@@ -64,7 +64,7 @@ On WIndows, when sockets return errors, you are not supposed to use the
    (define (call-with-errno thunk receiver)
      (call-with-values
        (lambda () 
-         (critical-section 
+         (with-interrupts-disabled 
            (let ([v (thunk)]) (values v (errno)))))
        receiver))]
   [else (import (arcfide errno))])
