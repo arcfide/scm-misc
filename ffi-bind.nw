@@ -34,6 +34,26 @@ code object.
 (define-syntax define-foreign-values
   (lambda (x)
     (syntax-case x ()
+      [(_ shared-object (conv proc-name) type bindings ...)
+       (and (identifier? #'conv)
+            (memq (syntax->datum #'conv) '(__cdecl __stdcall __com))
+            (string? (syntax->datum #'shared-object))
+            (string? (syntax->datum #'proc-name))
+            (for-all identifier? #'(type bindings ...)))
+       #'(begin
+           (meta define %get-ffi-value
+             (begin (load-shared-object shared-object)
+               (foreign-procedure conv proc-name (string) type)))
+           (define-syntax get-ffi-value
+             (lambda (x)
+               (syntax-case x ()
+                 [(k name)
+                  (identifier? #'name)
+                  #`'#,(datum->syntax #'k
+                         (%get-ffi-value 
+                           (symbol->string 
+                             (syntax->datum #'name))))])))
+           (define-bindings get-ffi-value bindings ...))]
       [(_ shared-object proc-name type bindings ...)
        (and (string? (syntax->datum #'shared-object))
             (string? (syntax->datum #'proc-name))
