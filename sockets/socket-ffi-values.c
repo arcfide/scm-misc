@@ -95,6 +95,10 @@ EXPORTED get_ffi_value(const char *val) {
   if (!strcmp(val, "$error-in-progress")) return WSAEINPROGRESS;
   if (!strcmp(val, "$error-would-block")) return WSAEWOULDBLOCK;
   if (!strcmp(val, "$socket-error")) return SOCKET_ERROR;
+  if (!strcmp(val, "$format-message-allocate-buffer")) 
+    return FORMAT_MESSAGE_ALLOCATE_BUFFER;
+  if (!strcmp(val, "$format-message-from-system"))
+    return FORMAT_MESSAGE_FROM_SYSTEM;
 #else
   if (!strcmp(val, "size-of/sa-family")) return sizeof(sa_family_t);
   if (!strcmp(val, "%shutdown/read")) return SHUT_RD;

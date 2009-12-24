@@ -39,7 +39,22 @@ and possible improvements.
 \li Better handling of paths in UNIX sockets
 \endorderedlist
 
-\chapter{Socket Datatypes}
+\chapter{Unsupported Features}{}%
+Even though this library is mostly general, there are some exceptions
+where I have included some features by default that aren't really
+possible to access throughout the entire gambit of what machines and
+systems on which we expect this library to run. Most notably, Microsoft
+Windows does not support UNIX sockets. 
+
+To handle these situtations, the following procedure is run whenever
+there is a feature that is unsupported on a particular system.
+
+<<Unsupported Features>>=
+(define (unsupported-feature feature)
+  (error feature "this feature is not supported on this platform"))
+@
+
+\chapter{Socket Datatypes}{}%
 
 \section{Sockets}
 
@@ -222,6 +237,7 @@ of the sockaddr\_un structure.
 
 <<Datatypes>>=
 (define (unix-address->foreign addr) 
+  (when (windows?) (unsupported-feature 'unix-sockets))
   (values 
     (make-foreign-unix-address (unix-address-path addr))
     size-of/sockaddr-un))
@@ -233,6 +249,7 @@ the start of the path to the first null.
 
 <<Datatypes>>=
 (define (foreign->unix-address addr addr-len)
+  (when (windows?) (unsupported-feature 'unix-sockets))
   (make-unix-address (foreign-unix-address-path addr)))
 @
 
@@ -717,6 +734,7 @@ of the protocols database or if there was an error.
 
 <<Constants>>=
 (define (next-protocol-entry)
+  (when (windows?) (unsupported-feature 'next-protocol-entry))
   (foreign->protocol-entry ($getprotoent)))
 (define (get-protocol-by-name name)
   (foreign->protocol-entry ($getprotobyname name)))
@@ -724,8 +742,10 @@ of the protocols database or if there was an error.
   (foreign->protocol-entry 
     ($getprotobynumber (socket-constant-value proto))))
 (define (open-protocol-database keep-alive?)
+  (when (windows?) (unsupported-feature 'open-protocol-database))
   ($setprotoent keep-alive?))
 (define (close-protocol-database)
+  (when (windows?) (unsupported-feature 'close-protocol-database))
   ($endprotoent))
 
 @
@@ -1180,6 +1200,8 @@ error. The following provides this functionality.
     (srfi :39 parameters)
     (only (srfi :13) string-tokenize)
     (arcfide sockets compat))
+    
+<<Unsupported Features>>
 
 <<Datatypes>>
 
@@ -1198,6 +1220,8 @@ error. The following provides this functionality.
 
 <<sockets.scm>>=
 <<License>>
+
+<<Unsupported Features>>
 
 <<Datatypes>>
 

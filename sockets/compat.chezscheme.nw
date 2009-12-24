@@ -8,7 +8,12 @@ warrant their own implementation outside of the main sockets code.
 \chapter{Windows Identification}{}%
 We need to know if we are on a Windows system.
 
+<<Exports>>=
+(rename (runtime-windows? windows?))
+@
+
 <<Meta Procedures>>=
+(define (runtime-windows?) (memq (machine-type) '(i3nt it3nt)))
 (meta define (windows?) (memq (machine-type) '(i3nt ti3nt)))
 @
 
@@ -29,7 +34,9 @@ shared object file [[socket-ffi-values.so]] using the
 <<Foreign Constants>>=
 (meta-cond
   [(windows?)
-   (define-foreign-values "./socket-ffi-values.dll" "_get_ffi_value" int
+   (define-foreign-values "./socket-ffi-values.dll" 
+     (__cdecl "_get_ffi_value")
+      int
      <<Foreign Bindings>>)]
   [else
     (define-foreign-values "./socket-ffi-values.so" "get_ffi_value" int
@@ -38,19 +45,19 @@ shared object file [[socket-ffi-values.so]] using the
 
 <<Foreign Bindings>>=
 $error-again $error-in-progress $error-would-block #;$file-get-flag
-$file-set-flag $ipproto-ip $ipproto-raw $ipproto-tcp $ipproto-udp
-$option-non-blocking $socket-error $sol-socket %ai/canonname
-%ai/numerichost %ai/passive %msg/dont-route %msg/dont-wait
+$file-set-flag $format-message-allocate-buffer
+$format-message-from-system $ipproto-ip $ipproto-raw $ipproto-tcp
+$ipproto-udp $option-non-blocking $socket-error $sol-socket
+%ai/canonname %ai/numerichost %ai/passive %msg/dont-route %msg/dont-wait
 %msg/out-of-band %msg/peek %msg/wait-all %shutdown/read
 %shutdown/read&write %shutdown/write %socket-domain/internet
 %socket-domain/internet-v6 %socket-domain/local %socket-domain/unix
 %socket-type/datagram %socket-type/random %socket-type/raw
 %socket-type/sequence-packet %socket-type/stream %somaxconn af-inet
-af-unix invalid-socket size-of/addr-in size-of/addr-un
-size-of/addrinfo size-of/integer size-of/ip size-of/pointer
-size-of/port size-of/protoent size-of/sa-family size-of/size-t
-size-of/sockaddr-in size-of/sockaddr-un size-of/socklen-t
-unix-max-path
+af-unix invalid-socket size-of/addr-in size-of/addr-un size-of/addrinfo
+size-of/integer size-of/ip size-of/pointer size-of/port size-of/protoent
+size-of/sa-family size-of/size-t size-of/sockaddr-in size-of/sockaddr-un
+size-of/socklen-t unix-max-path
 @
 
 <<Exports>>=
@@ -66,6 +73,26 @@ On WIndows, when sockets return errors, you are not supposed to use the
 (meta-cond
   [(windows?)
    (define errno (foreign-procedure "WSAGetLastError" () int))
+   (define errno-message
+     (let ([$format-message (foreign-procedure __stdcall "FormatMessageA"
+                              (unsigned-32 uptr unsigned-32 unsigned-32
+                               uptr unsigned-32 uptr)
+                              unsigned-32)]
+           [$local-free 
+             (foreign-procedure __stdcall "LocalFree" (uptr) void)])
+       (lambda (num)
+         (let* ([ptr (make-foreign-pointer)]
+                [ret-res ($format-message 
+                           (bitwise-xor 
+                             $format-message-allocate-buffer
+                             $format-message-from-system)
+                           0 num 0 ptr 0 0)]
+                [res (and (not (zero? ret-res))
+                          (get-foreign-string 
+                            (foreign-pointer-value ptr)))])
+           ($local-free (foreign-pointer-value ptr))
+           (foreign-free ptr)
+           res))))
    (define (call-with-errno thunk receiver)
      (call-with-values
        (lambda () 
@@ -94,20 +121,12 @@ $setsockopt $fcntl
 <<Foreign Procedures>>=
 (define $getaddrinfo
   (foreign-procedure "getaddrinfo" (string string uptr uptr) int))
-(define $gai_strerror
-  (foreign-procedure "gai_strerror" (int) string))
 (define $socket 
   (foreign-procedure "socket" (fixnum fixnum fixnum) fixnum))
-(define $getprotoent 
-  (foreign-procedure "getprotoent" () uptr))
 (define $getprotobyname 
   (foreign-procedure "getprotobyname" (string) uptr))
 (define $getprotobynumber
   (foreign-procedure "getprotobynumber" (fixnum) uptr))
-(define $setprotoent
-  (foreign-procedure "setprotoent" (boolean) void))
-(define $endprotoent
-  (foreign-procedure "endprotoent" () void))
 (define $bind
   (foreign-procedure "bind" (fixnum uptr fixnum) fixnum))
 (define $listen
@@ -135,13 +154,31 @@ $setsockopt $fcntl
 \noindent Unfortunately, not everything is so simple with Windows.
 
 <<Foreign Procedures>>=
+(define (unsupported-feature feature)
+  (error feature "this feature is not supported on this platform"))
+
 (meta-cond 
   [(windows?)
+   (define ($getprotoent)
+     (unsupported-feature '$getprotoent))
+   (define ($setprotoent)
+     (unsupported-feature '$setprotoent))
+   (define ($endprotoent)
+     (unsupported-feature '$endprotoent))
+   (define $gai_strerror errno-message)
    (define $close
      (foreign-procedure "closesocket" (unsigned) int))
    (define $fcntl
      (foreign-procedure "ioctlsocket" (unsigned unsigned unsigned) int))]
   [else
+    (define $getprotoent 
+      (foreign-procedure "getprotoent" () uptr))
+    (define $setprotoent
+      (foreign-procedure "setprotoent" (boolean) void))
+    (define $endprotoent
+      (foreign-procedure "endprotoent" () void))
+    (define $gai_strerror
+      (foreign-procedure "gai_strerror" (int) string))
     (define $close
       (foreign-procedure "close" (fixnum) fixnum))
     (define $fcntl
