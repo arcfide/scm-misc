@@ -1119,8 +1119,8 @@ socket-nonblocking?
   (call-with-errno 
     (lambda () 
       (if val 
-          ($fcntl (socket-fd sock) $file-set-flag $option-non-blocking) 
-          ($fcntl (socket-fd sock) $file-set-flag 0)))
+          (%set-blocking (socket-fd sock) #f)
+          (%set-blocking (socket-fd sock) #t)))
     (lambda (ret err)
       (when (= ret $socket-error)
         (socket-error 'set-socket-nonblocking! 'fcntl err))

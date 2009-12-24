@@ -99,6 +99,7 @@ EXPORTED get_ffi_value(const char *val) {
     return FORMAT_MESSAGE_ALLOCATE_BUFFER;
   if (!strcmp(val, "$format-message-from-system"))
     return FORMAT_MESSAGE_FROM_SYSTEM;
+  if (!strcmp(val, "size-of/wsa-data")) return sizeof(WSADATA);
 #else
   if (!strcmp(val, "size-of/sa-family")) return sizeof(sa_family_t);
   if (!strcmp(val, "%shutdown/read")) return SHUT_RD;

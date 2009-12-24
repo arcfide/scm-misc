@@ -57,7 +57,7 @@ $ipproto-udp $option-non-blocking $socket-error $sol-socket
 af-unix invalid-socket size-of/addr-in size-of/addr-un size-of/addrinfo
 size-of/integer size-of/ip size-of/pointer size-of/port size-of/protoent
 size-of/sa-family size-of/size-t size-of/sockaddr-in size-of/sockaddr-un
-size-of/socklen-t unix-max-path
+size-of/socklen-t size-of/wsa-data unix-max-path
 @
 
 <<Exports>>=
@@ -118,39 +118,6 @@ $accept $connect $close $shutdown $sendto $recvfrom $getsockopt
 $setsockopt $fcntl
 @
 
-<<Foreign Procedures>>=
-(define $getaddrinfo
-  (foreign-procedure "getaddrinfo" (string string uptr uptr) int))
-(define $socket 
-  (foreign-procedure "socket" (fixnum fixnum fixnum) fixnum))
-(define $getprotobyname 
-  (foreign-procedure "getprotobyname" (string) uptr))
-(define $getprotobynumber
-  (foreign-procedure "getprotobynumber" (fixnum) uptr))
-(define $bind
-  (foreign-procedure "bind" (fixnum uptr fixnum) fixnum))
-(define $listen
-  (foreign-procedure "listen" (fixnum fixnum) fixnum))
-(define $accept
-  (foreign-procedure "accept" (fixnum uptr uptr) fixnum))
-(define $connect
-  (foreign-procedure "connect" (fixnum uptr fixnum) fixnum))
-(define $shutdown
-  (foreign-procedure "shutdown" (fixnum fixnum) fixnum))
-(define $sendto
-  (foreign-procedure "sendto" 
-    (fixnum u8* fixnum fixnum uptr fixnum) 
-    fixnum))
-(define $recvfrom
-  (foreign-procedure "recvfrom" 
-    (fixnum u8* fixnum fixnum uptr uptr)
-    fixnum))
-(define $getsockopt
-  (foreign-procedure "getsockopt" (int int int uptr uptr) int))
-(define $setsockopt
-  (foreign-procedure "setsockopt" (int int int uptr int) int))
-@
-
 \noindent Unfortunately, not everything is so simple with Windows.
 
 <<Foreign Procedures>>=
@@ -159,7 +126,37 @@ $setsockopt $fcntl
 
 (meta-cond 
   [(windows?)
-   (define ($getprotoent)
+   (define $socket 
+     (foreign-procedure __stdcall "socket" (fixnum fixnum fixnum) fixnum))
+   (define $getaddrinfo
+     (foreign-procedure __stdcall "getaddrinfo" (string string uptr uptr) int))
+   (define $getprotobyname 
+     (foreign-procedure __stdcall "getprotobyname" (string) uptr))
+   (define $getprotobynumber
+     (foreign-procedure __stdcall "getprotobynumber" (fixnum) uptr))
+   (define $bind
+     (foreign-procedure __stdcall "bind" (fixnum uptr fixnum) fixnum))
+   (define $listen
+     (foreign-procedure __stdcall "listen" (fixnum fixnum) fixnum))
+   (define $accept
+     (foreign-procedure __stdcall "accept" (fixnum uptr uptr) fixnum))
+   (define $connect
+     (foreign-procedure __stdcall "connect" (fixnum uptr fixnum) fixnum))
+   (define $shutdown
+     (foreign-procedure __stdcall "shutdown" (fixnum fixnum) fixnum))
+   (define $sendto
+     (foreign-procedure __stdcall "sendto" 
+       (fixnum u8* fixnum fixnum uptr fixnum) 
+       fixnum))
+   (define $recvfrom
+     (foreign-procedure __stdcall "recvfrom" 
+       (fixnum u8* fixnum fixnum uptr uptr)
+       fixnum))
+   (define $getsockopt
+     (foreign-procedure __stdcall "getsockopt" (int int int uptr uptr) int))
+   (define $setsockopt
+     (foreign-procedure __stdcall "setsockopt" (int int int uptr int) int))
+      (define ($getprotoent)
      (unsupported-feature '$getprotoent))
    (define ($setprotoent)
      (unsupported-feature '$setprotoent))
@@ -167,10 +164,40 @@ $setsockopt $fcntl
      (unsupported-feature '$endprotoent))
    (define $gai_strerror errno-message)
    (define $close
-     (foreign-procedure "closesocket" (unsigned) int))
+     (foreign-procedure __stdcall "closesocket" (unsigned) int))
    (define $fcntl
-     (foreign-procedure "ioctlsocket" (unsigned unsigned unsigned) int))]
+     (foreign-procedure __stdcall "ioctlsocket" (unsigned unsigned unsigned) int))]
   [else
+    (define $socket 
+      (foreign-procedure "socket" (fixnum fixnum fixnum) fixnum))
+    (define $getaddrinfo
+      (foreign-procedure "getaddrinfo" (string string uptr uptr) int))
+    (define $getprotobyname 
+      (foreign-procedure "getprotobyname" (string) uptr))
+    (define $getprotobynumber
+      (foreign-procedure "getprotobynumber" (fixnum) uptr))
+    (define $bind
+      (foreign-procedure "bind" (fixnum uptr fixnum) fixnum))
+    (define $listen
+      (foreign-procedure "listen" (fixnum fixnum) fixnum))
+    (define $accept
+      (foreign-procedure "accept" (fixnum uptr uptr) fixnum))
+    (define $connect
+      (foreign-procedure "connect" (fixnum uptr fixnum) fixnum))
+    (define $shutdown
+      (foreign-procedure "shutdown" (fixnum fixnum) fixnum))
+    (define $sendto
+      (foreign-procedure "sendto" 
+        (fixnum u8* fixnum fixnum uptr fixnum) 
+        fixnum))
+    (define $recvfrom
+      (foreign-procedure "recvfrom" 
+        (fixnum u8* fixnum fixnum uptr uptr)
+        fixnum))
+    (define $getsockopt
+      (foreign-procedure "getsockopt" (int int int uptr uptr) int))
+    (define $setsockopt
+      (foreign-procedure "setsockopt" (int int int uptr int) int))
     (define $getprotoent 
       (foreign-procedure "getprotoent" () uptr))
     (define $setprotoent
@@ -393,6 +420,42 @@ make-foreign-size-buffer foreign-size-buffer-value
   (foreign-ref 'unsigned-long buf 0))
 @
 
+\chapter{Blocking Sockets}{}%
+We need the following helper to support blocking and non-blocking.
+
+<<Exports>>=
+%set-blocking
+@
+
+<<Miscellaneous>>=
+(meta-cond
+  [(windows?)
+   (define (%set-blocking fd yes?)
+     (let ([buf (make-foreign-size-buffer (if yes? 0 1))])
+       ($fcntl fd $file-set-flag buf)))]
+  [else
+    (define (%set-blocking fd yes?)
+      ($fcntl fd $file-set-flag (if yes? 0 $option-non-blocking)))])
+@
+
+\chapter{Initialization}{}%
+On Windows you have to initialze your application before any calls to
+the Windows Sockets code will work.
+
+<<Initialization>>=
+(meta-cond
+  [(windows?)
+   (define $wsa-startup
+     (foreign-procedure __stdcall "WSAStartup"
+       (unsigned-16 uptr)
+       int))
+   (define winsock-version (+ (bitwise-arithmetic-shift 2 8) 2))
+   (let ([buf (foreign-alloc size-of/wsa-data)])
+     ($wsa-startup winsock-version buf)
+     (foreign-free buf))]
+  [else (void)])
+@
+
 \chapter{Files}{}%
 
 <<compat.chezscheme.scm>>=
@@ -404,6 +467,7 @@ make-foreign-size-buffer foreign-size-buffer-value
 <<Foreign Procedures>>
 <<Foreign Structures>>
 <<Miscellaneous>>
+<<Initialization>>
 @
 
 <<compat.chezscheme.sls>>=
@@ -420,6 +484,7 @@ make-foreign-size-buffer foreign-size-buffer-value
 <<Foreign Procedures>>
 <<Foreign Structures>>
 <<Miscellaneous>>
+<<Initialization>>
 
 )
 @
