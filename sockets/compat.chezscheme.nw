@@ -473,6 +473,7 @@ the Windows Sockets code will work.
 <<compat.chezscheme.sls>>=
 <<License>>
 
+#!chezscheme
 (library (arcfide sockets compat)
   (export
     <<Exports>>)
