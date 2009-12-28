@@ -989,12 +989,12 @@ see this as a good thing.}
               0 
               flags)
             addr 
-            addr-len))
+            addr-len-buf))
         (lambda (n err)
           (if (= n $socket-error)
               (socket-raise/unless 'receive-from-socket 'recvfrom err
                 $error-again $error-would-block)
-              (values 
+              (values
                 (if (< n c)
                   (let ([res (make-bytevector n)])
                     (bytevector-copy! buf 0 res 0 n)
