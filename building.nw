@@ -1,62 +1,50 @@
 \title{Building applications}
 
 \chapter{Introduction}%
-This [[build-program]] procedure takes a set of library specifications and file paths
-and builds them in the order that they are listed. It builds them into a single directory.
-It then concatenates them into the final output program.
+This [[resolve-library-path]] procedure takes an R6RS Library
+specification and returns a string path to the library's path.
 
 \chapter{Implementation}%
 The output file should include the desired extension. 
 
 <<Code>>=
-(define (build-program outfile dir inputs)
-	(define (tmp-outfile in)
-		(cond 
-			[(pair? in) (string-append (apply path->string (cons dir in)) ".so")]
-			[(string? in) (path->string dir (string-append (path-root in) ".so"))]
-			[else (error 'build-program "unknown input type" in)]))
-	(define (build-file in)
-		(let* (
-				[file (resolve in)] 
-				[out (tmp-outfile in)])
-			(let loop ([path (path-parent out)])
-				(unless (file-exists? path)
-					(loop (path-parent path))
-					(mkdir path)))
-			(compile-file file out)
-			out))
-	(let* (
-			[outs (collect-list (for in (in-list inputs)) (build-file in))]
-			[cmd (format "cat ~{'~a' ~}> '~a'" outs outfile)])
-		(printf "~a~%" cmd)
-		(system cmd)))
+(define (make-resolver get)
+  (lambda (lib-spec)
+    (let ([lib-path (spec->path lib-spec)]
+          [dirs (map get (library-directories))]
+          [exts (map get (library-extensions))])
+      (let loop ([dirs dirs])
+        (cond
+          [(not (pair? dirs)) #f]
+          [(resolve-ext (car dirs) lib-path exts)]
+          [else (loop (cdr dirs))])))))
 
-@
+(define resolve-library-path (make-resolver car))
+(trace-define resolve-library-path/objects (make-resolver cdr))
 
-\noindent We resolve the input paths using the standard library searching mechanism.
-
-<<Code>>=
-(define (resolve spec)
-	(cond
-		[(pair? spec) (resolve (apply path->string spec))]
-		[(string? spec) (find-file spec)]
-		[else (error 'resolve "Unknown input type" spec)]))
-
-(define (find-file spec)
-	(let path-loop ([paths (library-directories)])
-		(if (pair? paths)
-			(let ext-loop ([exts (cons "" (library-extensions))])
-				(if (pair? exts)
-					(let ([test-path (path->string (car paths) (string-append spec (car exts)))])
-						(if (and (file-exists? test-path) (file-regular? test-path))
-							test-path
-							(ext-loop (cdr exts))))
-					(path-loop (cdr paths))))
-			(error 'find-file "failed to find spec" spec))))						
-
-(define (path->string . path)
-	(format (string-append "~{~a~^" (string (directory-separator)) "~}") path))
-
+(define (resolve-ext dir lib-path exts)
+  (let loop ([exts exts])
+    (cond
+      [(not (pair? exts)) #f]
+      [(let ([total-path (compose dir lib-path (car exts))])
+         (and (file-exists? total-path) total-path))]
+      [else (loop (cdr exts))])))
+      
+(define (spec->path spec)
+  (cond
+    [(string? spec) spec]
+    [(symbol? spec) (symbol->string spec)]
+    [(pair? spec) (lib-spec->path spec)]
+    [else (errorf 'spec->path "unrecognized spec ~s" spec)]))
+      
+(define (lib-spec->path spec)
+  (let* ([dir-string (string (directory-separator))]
+         [fmt-string (string-append "~{~a~^" dir-string "~}")])
+    (format fmt-string spec)))
+      
+(define (compose dir lib-path ext)
+  (let ([dir-string (string (directory-separator))])
+    (string-append dir dir-string lib-path ext)))
 @
 
 \chapter{R6RS Library Form}
@@ -65,7 +53,8 @@ The output file should include the desired extension.
 <<License>>
 
 (library (arcfide building)
-	(export build-program)
+	(export resolve-library-path
+                resolve-library-path/objects)
 	(import (chezscheme) (riastradh foof-loop))
 
 <<Code>>
