@@ -34,12 +34,12 @@ shared object file [[socket-ffi-values.so]] using the
 <<Foreign Constants>>=
 (meta-cond
   [(windows?)
-   (define-foreign-values "./socket-ffi-values.dll" 
+   (define-foreign-values "socket-ffi-values.dll" 
      (__cdecl "_get_ffi_value")
       int
      <<Foreign Bindings>>)]
   [else
-    (define-foreign-values "./socket-ffi-values.so" "get_ffi_value" int
+    (define-foreign-values "socket-ffi-values.so" "get_ffi_value" int
       <<Foreign Bindings>>)])
 @
 

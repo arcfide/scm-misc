@@ -31,6 +31,18 @@ so it is not necessary to include the shared object with the compiled
 code object.
 
 <<Binding Constructs>>=
+(meta define (resolve name)
+  (let loop ([dirs (source-directories)])
+    (cond
+      [(not (pair? dirs))
+       name]
+      [(let ([path (format "~a~a~a" 
+                           (car dirs) 
+                           (directory-separator)
+                           name)])
+         (and (file-exists? path) path))]
+      [else (loop (cdr dirs))])))
+
 (define-syntax define-foreign-values
   (lambda (x)
     (syntax-case x ()
@@ -42,7 +54,7 @@ code object.
             (for-all identifier? #'(type bindings ...)))
        #'(begin
            (meta define %get-ffi-value
-             (begin (load-shared-object shared-object)
+             (begin (load-shared-object (resolve shared-object))
                (foreign-procedure conv proc-name (string) type)))
            (define-syntax get-ffi-value
              (lambda (x)
@@ -60,7 +72,7 @@ code object.
             (for-all identifier? #'(type bindings ...)))
        #'(begin
            (meta define %get-ffi-value
-             (begin (load-shared-object shared-object)
+             (begin (load-shared-object (resolve shared-object))
                (foreign-procedure proc-name (string) type)))
            (define-syntax get-ffi-value
              (lambda (x)
