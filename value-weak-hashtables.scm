@@ -66,13 +66,14 @@
         [guard (datum-weak-hashtable-guardian table)])
     (define (updater val)
       (with-interrupts-disabled
-        (let ([data (if (or (eq? my-false val) (bwp-object? (car val)))
-                        (weak-cons (proc default) key)
-                        (weak-cons (proc (car val)) key))])
-          (let ([cleaner (make-cleaner db data)])
-            (guard cleaner)
-            (eq-hashtable-set! trail (car data) cleaner)
-            data))))
+        (let* ([res (if (or (eq? my-false val) (bwp-object? (car val)))
+                        default
+                        (car val))]
+               [data (weak-cons (proc res) key)]
+               [cleaner (make-cleaner db data)])
+          (guard cleaner)
+          (eq-hashtable-set! trail (car data) cleaner)
+          data)))
     (eq-hashtable-update! db key updater my-false)))
     
 (define (datum-weak-hashtable-delete! table key)
@@ -102,4 +103,4 @@
         (when (and res (eq? res data))
           (eq-hashtable-delete! db key))))))
 
-(define my-false (gensym "datum-weak/false"))
+(define my-false (cons #f #f))
