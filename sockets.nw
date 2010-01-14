@@ -813,7 +813,11 @@ and the address as its return values.
     (let ([addr (foreign-alloc size)]
           [addr-len (make-foreign-size-buffer size)])
       (call-with-errno 
-        (lambda () ($accept (socket-fd sock) addr addr-len))
+        (lambda () 
+          ((if (socket-nonblocking? sock) 
+               $accept
+               $accept-blocking)
+           (socket-fd sock) addr addr-len))
         (lambda (ret err)
           (if (= ret invalid-socket) 
               (values 
@@ -846,7 +850,10 @@ connect-socket
   (let-values ([(fa fa-len) (socket-address->foreign addr)])
     (call-with-errno 
       (lambda () 
-        ($connect (socket-fd sock) fa fa-len))
+        ((if (socket-nonblocking? sock) 
+             $connect 
+             $connect-blocking)
+         (socket-fd sock) fa fa-len))
       (lambda (ret err)
         (foreign-free fa)
         (when (= ret $socket-error)
@@ -922,7 +929,9 @@ Corresponds to the [[sendto(2)]] system call.
   (let-values ([(fa fa-len) (socket-address->foreign addr)])
     (call-with-errno 
       (lambda () 
-        ($sendto 
+        ((if (socket-nonblocking? sock) 
+             $sendto 
+             $sendto-blocking)
           (socket-fd sock) 
           buf 
           (bytevector-length buf)
@@ -980,7 +989,9 @@ see this as a good thing.}
           [addr-len-buf (make-foreign-size-buffer addr-len)])
       (call-with-errno
         (lambda ()
-          ($recvfrom 
+          ((if (socket-nonblocking? sock)
+               $recvfrom 
+               $recvfrom-blocking)
             (socket-fd sock) 
             buf 
             c 

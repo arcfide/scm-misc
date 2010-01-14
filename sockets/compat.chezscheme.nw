@@ -212,6 +212,30 @@ $setsockopt $fcntl
       (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))])
 @
 
+\chapter{Foreign Blocking Stubs}{}%
+Unfortunately, we can't handle the proper block deactivation and such
+without a stub file. 
+
+<<Exports>>=
+$accept-blocking $connect-blocking 
+$recvfrom-blocking $sendto-blocking
+@
+
+<<Foreign Procedures>>=
+(define $accept-blocking
+  (foreign-procedure "accept_block" (fixnum uptr uptr) fixnum))
+(define $connect-blocking
+  (foreign-procedure "connect_block" (fixnum uptr fixnum) fixnum))
+(define $sendto-blocking
+  (foreign-procedure "sendto_block" 
+    (fixnum u8* fixnum fixnum uptr fixnum) 
+    fixnum))
+(define $recvfrom-blocking
+  (foreign-procedure "recvfrom_block" 
+    (fixnum u8* fixnum fixnum uptr uptr)
+    fixnum))
+@
+
 \chapter{Foreign Free/alloc}{}%
 The sockets library must have some way to free allocated structurs. It
 must also be able to make space to store a structure.
