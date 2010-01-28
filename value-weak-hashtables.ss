@@ -18,16 +18,16 @@
 ;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 ;;; PERFORMANCE OF THIS SOFTWARE.
 
-(module arcfide/datum-weak-hashtables
-  (make-datum-weak-hashtable
-   datum-weak-hashtable-set!
-   datum-weak-hashtable-ref
-   datum-weak-hashtable-contains?
-   datum-weak-hashtable-update!
-   datum-weak-hashtable-delete!
-   datum-weak-hashtable-size)
+(module arcfide/value-weak-hashtables
+  (make-value-weak-hashtable
+   value-weak-hashtable-set!
+   value-weak-hashtable-ref
+   value-weak-hashtable-contains?
+   value-weak-hashtable-update!
+   value-weak-hashtable-delete!
+   value-weak-hashtable-size)
   (import (chezscheme))
   
-(include "datum-weak-hashtables.scm")
+(include "value-weak-hashtables.scm")
 
 )

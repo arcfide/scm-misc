@@ -18,89 +18,78 @@
 ;;; TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 ;;; PERFORMANCE OF THIS SOFTWARE.
 
-(define-record-type datum-weak-hashtable
+(define-record-type value-weak-hashtable
   (fields db trail guardian)
   (protocol
     (lambda (n)
       (case-lambda
-        [()
+        [(hash equiv?)
          (let ([g (make-guardian)])
-           (collect-request-handler
-             (make-handler cg g (collect-request-handler)))
-           (n (make-eq-hashtable) (make-weak-eq-hashtable) g))]
-        [(size)
+           (n (make-hashtable hash equiv?) 
+              (make-weak-eq-hashtable) 
+              g))]
+        [(hash equiv? size)
          (let ([g (make-guardian)])
-           (collect-request-handler
-             (make-handler g (collect-request-handler)))
-           (n (make-eq-hashtable size) 
+           (n (make-hashtable hash equiv? size) 
               (make-weak-eq-hashtable size)
               g))]))))
 
-(define (datum-weak-hashtable-set! table key value)
-  (let ([db (datum-weak-hashtable-db table)]
-        [trail (datum-weak-hashtable-trail table)]
-        [guard (datum-weak-hashtable-guardian table)]
+(define (value-weak-hashtable-set! table key value)
+  (let ([db (value-weak-hashtable-db table)]
+        [trail (value-weak-hashtable-trail table)]
+        [guard (value-weak-hashtable-guardian table)]
         [data (weak-cons value key)])
+    (clean-value-weak-hashtable! guard)
     (let ([cleaner (make-cleaner db data)])
-      (with-interrupts-disabled
-        (eq-hashtable-set! db key data)
-        (eq-hashtable-set! trail value cleaner)
-        (guard cleaner)))))
+      (hashtable-set! db key data)
+      (eq-hashtable-set! trail value cleaner)
+      (guard cleaner))))
         
-(define (datum-weak-hashtable-ref table key default)
-  (let ([db (datum-weak-hashtable-db table)])
-    (let ([res (eq-hashtable-ref db key my-false)])
+(define (value-weak-hashtable-ref table key default)
+  (clean-value-weak-hashtable! (value-weak-hashtable-guardian table))
+  (let ([db (value-weak-hashtable-db table)])
+    (let ([res (hashtable-ref db key my-false)])
       (if (or (eq? res my-false) (bwp-object? (car res)))
           default
           (car res)))))
 
-(define (datum-weak-hashtable-contains? table key)
-  (let ([db (datum-weak-hashtable-db table)])
-    (with-interrupts-disabled
-      (and (eq-hashtable-contains? db key)
-           (not (bwp-object? (car (eq-hashtable-ref db key #f))))))))
+(define (value-weak-hashtable-contains? table key)
+  (clean-value-weak-hashtable! (value-weak-hashtable-guardian table))
+  (hashtable-contains? (value-weak-hashtable-db table) key))
 
-(define (datum-weak-hashtable-update! table key proc default)
-  (let ([db (datum-weak-hashtable-db table)]
-        [trail (datum-weak-hashtable-trail table)]
-        [guard (datum-weak-hashtable-guardian table)])
+(define (value-weak-hashtable-update! table key proc default)
+  (let ([db (value-weak-hashtable-db table)]
+        [trail (value-weak-hashtable-trail table)]
+        [guard (value-weak-hashtable-guardian table)])
     (define (updater val)
-      (with-interrupts-disabled
-        (let* ([res (if (or (eq? my-false val) (bwp-object? (car val)))
-                        default
-                        (car val))]
-               [data (weak-cons (proc res) key)]
-               [cleaner (make-cleaner db data)])
-          (guard cleaner)
-          (eq-hashtable-set! trail (car data) cleaner)
-          data)))
-    (eq-hashtable-update! db key updater my-false)))
+      (let* ([res (if (or (eq? my-false val) (bwp-object? (car val)))
+                      default
+                      (car val))]
+             [data (weak-cons (proc res) key)]
+             [cleaner (make-cleaner db data)])
+        (guard cleaner)
+        (eq-hashtable-set! trail (car data) cleaner)
+        data))
+    (clean-value-weak-hashtable! guard)
+    (hashtable-update! db key updater my-false)))
     
-(define (datum-weak-hashtable-delete! table key)
-  (let ([db (datum-weak-hashtable-db table)]
-        [trail (datum-weak-hashtable-trail table)])
-    (let ([res (datum-weak-hashtable-ref table key my-false)])
-      (unless (eq? my-false res)
-        (eq-hashtable-delete! trail res))
-      (eq-hashtable-delete! db key))))
+(define (value-weak-hashtable-delete! table key)
+  (clean-value-weak-hashtable! (value-weak-hashtable-guardian table))
+  (let ([db (value-weak-hashtable-db table)]
+        [trail (value-weak-hashtable-trail table)])
+    (let ([val (hashtable-ref db key my-false)])
+      (unless (eq? my-false val) (eq-hashtable-delete! trail val)))
+    (hashtable-delete! db key)))
 
-(define (datum-weak-hashtable-size table)
-  (hashtable-size (datum-weak-hashtable-db table)))
+(define (value-weak-hashtable-size table)
+  (hashtable-size (value-weak-hashtable-db table)))
   
-(define (make-handler guard old-handler)
-  (lambda ()
-    (let loop ()
-      (let ([cleaner (guard)])
-        (when cleaner
-          (cleaner)
-          (loop))))
-    (old-handler)))
-
+(define (clean-value-weak-hashtable! guardian)
+  (let loop ()
+    (let ([cleaner (guardian)])
+      (when cleaner (cleaner) (loop)))))
+  
 (define (make-cleaner db data)
-  (lambda ()
-    (let ([key (cdr data)])
-      (let ([res (eq-hashtable-ref db key #f)])
-        (when (and res (eq? res data))
-          (eq-hashtable-delete! db key))))))
+  (lambda () (let ([key (cdr data)]) (hashtable-delete! db key))))
 
 (define my-false (cons #f #f))
