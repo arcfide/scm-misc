@@ -90,6 +90,10 @@
       (when cleaner (cleaner) (loop)))))
   
 (define (make-cleaner db data)
-  (lambda () (let ([key (cdr data)]) (hashtable-delete! db key))))
+  (lambda () 
+    (let ([key (cdr data)])
+      (let ([val (hashtable-ref db key #f)])
+        (when (and val (eq? val data))
+          (hashtable-delete! db key))))))
 
 (define my-false (cons #f #f))
