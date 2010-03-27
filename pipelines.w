@@ -86,7 +86,11 @@ expression should not be such a binding expression."
 (@ "The purpose of |with-enqueued| is to enqueue a particular 
 expression in preparation to obtain its value. The bound |id| is
 bound to a syntax that expands into code that waits to receive the
-resulting value."
+resulting value. We can look at this as a consumer/producer problem
+where there is one producer and one consumer. If this is the case,
+then we set up the necessary mutexes, conditions, and flags, and then
+enqueue our producer to be run by the pipeline manager. The consumer
+is activated when someone uses the |id| that was created."
 
 (@c
 (define-syntax with-enqueued
@@ -96,47 +100,69 @@ resulting value."
            [done? #f]
            [c (make-condition)] 
            [m (make-mutex)])
-       (@< |Define thread thunk| result exp m c done?)
-       (@< |Define id| id m done? result c)
-       (define thread-object (enqueue thread-thunk))
+       (@< |Define syntactic value consumer| id m done? result c)
+       (enqueue
+         (@< |Construct value thread producer| result exp m c done?))
        b1 b2 ...)]))))
 
-(@ "The thread thunk should |set!| |result| to the result of evaluating
-|exp|, and then it should grab the mutex and indicate that it is 
-finished. We grab the mutex to make sure that we have exclusive access
-to |done?|, since otherwise we could encounter some race conditions.
-We also use |broadcast| instead of |signal| in the rare case where
-a condition may be used multiple times. I don't think this should be
-possible here, but this is a just in case measure."
+(@ "Each time we launch or enqueue an object, we want to make sure that
+we record that launching or forking in a counter so that the thread
+manager does not launch more than we want. For this, we define a
+set of bindings to manage the thread counter concurrently. Generally,
+a thread that is active should call |start-thread| at the beginning
+of its code, and should call |end-thread| at the end. If somewhere
+in the middle the thread will be deactivating itself and waiting
+for something that won't consume CPU resources, then it must
+|end-thread| until it begins consuming CPU resources again, at which
+point it should call |start-thread| again."
 
-(@> |Define thread thunk| () (thread-thunk) (result exp m c done?)
-(define (thread-thunk)
+(@c
+(define active-thread-count 0)
+(define active-thread-count-condition (make-condition))
+(define active-thread-count-mutex (make-mutex))
+(define (start-thread)
+  (with-mutex active-thread-count-mutex
+    (set! active-thread-count (1+ active-thread-count))))
+(define (end-thread)
+  (with-mutex active-thread-count-mutex
+    (set! active-thread-count (-1+ active-thread-count))
+    (condition-signal active-thread-count-condition)))))
+
+(@ "The value thread producer should, when run, after having been
+queued, activate itself, compute its value and store it, signalling
+the consumer to receive it if the consumer has already run, and
+finally end."
+
+(@> |Construct value thread producer| () () (result exp m c done?)
+(lambda ()
+  (start-thread)
   (set! result exp)
   (with-mutex m
     (set! done? #t)
     (condition-broadcast c))
-  (with-mutex queue-mutex
-    (queue-dec)
-    (condition-signal queue-condition)))))
+  (end-thread))))
 
-(@ "The actual |id| is an identifier syntax that also acquires the
-exclusive access to |done?| whereupon it checks to see if the thread
-has completed before us, and if not, it waits for the thread to complete
-and tell us about it."
+(@ "The value thread consumer is a classic consumer. The identifier
+syntax will give us the result if it is already computed, and otherwise
+wait for the result to be given to us. Note that these are designed to
+be called within other threads, and do not themselves represent a 
+separate thread of computation. This means that the thread should
+already be active or started when it calls in here. We should take
+care to end the thread and start it back up again at the appropriate
+points."
 
-(@> |Define id| () (id) (id m done? result c)
+(@> |Define syntactic value consumer| () (id) (id m done? result c)
 (define-syntax id
   (identifier-syntax
     (with-mutex m
-      (if done?
-          result
-          (begin 
-            (with-mutex queue-mutex
-              (queue-dec)
-              (condition-signal queue-condition))
-            (condition-wait c m)
-            (with-mutex queue-mutex (queue-inc))
-            result)))))))
+      (let try-again ()
+        (if done?
+            result
+            (begin
+              (end-thread)
+              (condition-wait c m)
+              (start-thread)
+              (try-again)))))))))
 
 (@* "The Thread Queue"
 "To accomplish the parameterized control over how many threads 
@@ -157,75 +183,76 @@ that takes a positive exact integer."
       (assert (positive? x))
       x)))))
 
-(@ "We can only add new threads to the queue, and this is done with
-|enqueue|. It takes a thread thunk has an unspecified return value."
+(@ "The queue is composed of a head and tail, as well as a mutex for
+controlling access, and a condition for signalling new entries. This
+model is a simplified version of the bounded queue, because we do not
+have to worry about the bounding here; we allow as many queued
+jobs as we want."
+
+(@c
+(define queue '())
+(define queue-tail #f)
+(define queue-mutex (make-mutex))
+(define queue-condition (make-condition))))
+
+(@ "Enqueueing is, essentially, our producer in this problem. It
+will always be able to add a new element in though, so we only need
+to ensure that we have the mutex before changing the queue to ensure
+our thread safety."
 
 (@c
 (define (enqueue thunk)
   (with-mutex queue-mutex
-    (queue-add! thunk)
+    (if queue-tail
+        (set-cdr! queue-tail (cons thunk (cdr queue-tail)))
+        (begin
+          (set! queue (cons thunk queue))
+          (set! queue-tail queue)))
     (condition-signal queue-condition)))))
 
-(@ "The thread manager is actually just a loop that checks the
-queue, and starts a thread if it can."
+(@ "Our thread manager is our consumer of the thread. It follows the
+usual consumer model, with the exception that it does not spawn a new
+thread if there are too many spawned threads already."
 
-(@c
-(define (start-pipeline-manager)
-  (fork-thread
-    (lambda ()
-      (define (launch-next)
-        (fork-thread (queue-next))
-        (queue-inc))
-      (let loop ()
-        (with-mutex queue-mutex
-          (if (and (< queue-running (pipeline-size))
-                   (not (queue-empty?)))
-              (launch-next)
-              (condition-wait queue-condition queue-mutex)))
-        (loop)))))))
+(@> |Pipeline Manager| () () ()
+(fork-thread
+  (lambda ()
+    (with-mutex active-thread-count-mutex
+      (let continue ()
+        (if (< active-thread-count (pipeline-size))
+            (begin
+              (mutex-release active-thread-count-mutex)
+              (fork-thread (@< |Get next thread|))
+              (mutex-acquire active-thread-count-mutex))
+            (condition-wait 
+              active-thread-count-condition
+              active-thread-count-mutex))
+        (continue)))))))
 
-(@ "The queue itself is basically implemented as a condition, a mutex,
-a queue list, and the procedures |queue-add!|, |queue-next|, and
-|queue-empty?|. Queue-running is a global variable that keeps
-track of how many threads are currently running.
+(@ "While the thread manager is our high-level consumer, the actual
+consumer in the traditional sense of conurrency problems occurs when 
+we try to get the next thread, which is where we really alter the
+shared queue resource. In the above, our shared resource is really
+the active thread counter, until we know that it is safe to dequeue
+some particular thread. Once we know that it is safe, though, we can
+safely start the actual consumer process below."
 
-Let's start with the trivial definitions."
+(@> |Get next thread| () () ()
+(with-mutex queue-mutex
+  (let try-again ()
+    (if (null? queue)
+        (begin
+          (condition-wait queue-condition queue-mutex)
+          (try-again))
+        (let ([res (car queue)])
+          (when (eq? queue queue-tail)
+            (set! queue-tail #f))
+          (set! queue (cdr queue))
+          res))))))
 
-(@c
-(define queue-running 0)
-(define (queue-inc) (set! queue-running (1+ queue-running)))
-(define (queue-dec) (set! queue-running (-1+ queue-running)))
-(define queue-mutex (make-mutex))
-(define queue-condition (make-condition))
-(define queue '())
-(define queue-tail #f)
-(define (queue-empty?) (null? queue))))
+(@ "At the end of all of our definitions, we want to start the 
+pipeline manager."
 
-(@ "Now, grabbing the next element from the queue just means grabbing
-the |car|, and keeping track of the tail."
-
-(@c
-(define (queue-next)
-  (let ([res (car queue)])
-    (set! queue (cdr queue))
-    (when (queue-empty?) (set! queue-tail #f))
-    res))))
-
-(@ "Adding means that we have to update the tail only, unless we are
-adding an initial element."
-
-(@c
-(define (queue-add! x)
-  (if (queue-empty?)
-      (begin
-        (set! queue (cons x queue))
-        (set! queue-tail queue))
-      (set-cdr! queue-tail (cons x (cdr queue-tail)))))))
-
-(@ "Whenever the library is imported, it's pretty important to get the
-pipeline manager started right away."
-
-(@c
-(start-pipeline-manager)))
+(@c (@< |Pipeline Manager|)))
 
 )
