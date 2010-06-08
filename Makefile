@@ -7,3 +7,4 @@ DOC_DIR=doc/
 all: ${FILES}
 
 include noweb_make.mk
+include chezweb_make.mk
