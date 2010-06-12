@@ -133,7 +133,7 @@ queued, activate itself, compute its value and store it, signalling
 the consumer to receive it if the consumer has already run, and
 finally end."
 
-(@> |Construct value thread producer| () () (result exp m c done?)
+(@> |Construct value thread producer| (capture result exp m c done?)
 (lambda ()
   (start-thread)
   (set! result exp)
@@ -151,7 +151,9 @@ already be active or started when it calls in here. We should take
 care to end the thread and start it back up again at the appropriate
 points."
 
-(@> |Define syntactic value consumer| () (id) (id m done? result c)
+(@> |Define syntactic value consumer| 
+    (export id) 
+    (capture id m done? result c)
 (define-syntax id
   (identifier-syntax
     (with-mutex m
@@ -214,7 +216,7 @@ our thread safety."
 usual consumer model, with the exception that it does not spawn a new
 thread if there are too many spawned threads already."
 
-(@> |Pipeline Manager| () () ()
+(@> |Pipeline Manager|
 (fork-thread
   (lambda ()
     (with-mutex active-thread-count-mutex
@@ -237,7 +239,7 @@ the active thread counter, until we know that it is safe to dequeue
 some particular thread. Once we know that it is safe, though, we can
 safely start the actual consumer process below."
 
-(@> |Get next thread| () () ()
+(@> |Get next thread| 
 (with-mutex queue-mutex
   (let try-again ()
     (if (null? queue)

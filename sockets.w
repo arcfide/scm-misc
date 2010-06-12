@@ -171,38 +171,39 @@ there is a feature that is unsupported on a particular system."
 (@* "Socket Datatypes"
 "The next few sections define the various socket datatypes."
   
-(@> |Define socket datatypes| ()
-(make-socket socket? socket-fd socket-domain socket-type socket-protocol
- socket-option? make-socket-option socket-option
- define-socket-option-type
- make-tcp-option make-udp-option make-raw-option make-ip-option
- tcp-option? udp-option? raw-option? ip-option? 
- socket-address? socket-address
- socket-address->foreign foreign->socket-address
- unix-address? make-unix-address unix-address-path
- unix-address->foreign foreign->unix-address
- internet-address?
- make-internet-address
- internet-address-ip
- internet-address-port
- string->internet-address
- internet-address->string
- internet-address->foreign
- foreign->internet-address
- string->ipv4 socket-nonblocking? socket-nonblocking?-set!
- socket-address-converter  
- socket-option-foreign-size socket-option-foreign-maker
- socket-option-foreign-converter socket-option-id socket-option-level)
-(socket-domain-extractor)
+(@> |Define socket datatypes|
+(export 
+  make-socket socket? socket-fd socket-domain socket-type socket-protocol
+  socket-option? make-socket-option socket-option
+  define-socket-option-type
+  make-tcp-option make-udp-option make-raw-option make-ip-option
+  tcp-option? udp-option? raw-option? ip-option? 
+  socket-address? socket-address
+  socket-address->foreign foreign->socket-address
+  unix-address? make-unix-address unix-address-path
+  unix-address->foreign foreign->unix-address
+  internet-address?
+  make-internet-address
+  internet-address-ip
+  internet-address-port
+  string->internet-address
+  internet-address->string
+  internet-address->foreign
+  foreign->internet-address
+  string->ipv4 socket-nonblocking? socket-nonblocking?-set!
+  socket-address-converter  
+  socket-option-foreign-size socket-option-foreign-maker
+  socket-option-foreign-converter socket-option-id socket-option-level)
+(capture socket-domain-extractor)
 
-(@<< |Define socket record| socket?)
-(@<< |Define socket address record| socket-address)
-(@<< |Define socket options record| socket-option)
-(@<< |Define socket option types| socket? socket-option)
-(@<< |Define socket-address conversions| socket? 
+(@<< |Define socket record|)
+(@<< |Define socket address record|)
+(@<< |Define socket options record|)
+(@<< |Define socket option types| socket-option)
+(@<< |Define socket-address conversions| 
      socket-address-converter socket-domain-extractor)
-(@<< |Define UNIX socket addresses| socket? socket-address)
-(@<< |Define IPV4 internet socket addresses| socket? socket-address)
+(@<< |Define UNIX socket addresses| socket-address)
+(@<< |Define IPV4 internet socket addresses| socket-address)
 ))
 
 (@* "Sockets"
@@ -217,11 +218,10 @@ return true for
 This functionality could be introspected from the field descriptor, but it 
 is more convenient to store this information directly."
 
-(@> |Define socket record| ()
-    (make-socket socket? socket socket-nonblocking?
-     socket-nonblocking?-set!
-     socket-fd socket-domain socket-type socket-protocol)
-    ()
+(@> |Define socket record| 
+    (export make-socket socket? socket socket-nonblocking?
+            socket-nonblocking?-set!
+            socket-fd socket-domain socket-type socket-protocol)
 (define-record-type socket 
   (fields fd domain type protocol (mutable nonblocking?))
   (protocol
@@ -244,11 +244,10 @@ and false otherwise.
 |make-socket-option| called without a level will default to a socket
 api level option,  otherwise it expects a proper option level."
 
-(@> |Define socket options record| ()
-(socket-option? make-socket-option socket-option
- socket-option-foreign-size socket-option-foreign-maker
- socket-option-foreign-converter socket-option-id socket-option-level)
-()
+(@> |Define socket options record|
+(export socket-option? make-socket-option socket-option
+        socket-option-foreign-size socket-option-foreign-maker
+        socket-option-foreign-converter socket-option-id socket-option-level)
 (define-record-type socket-option
   (fields level id foreign-size foreign-maker foreign-converter)
   (protocol 
@@ -270,9 +269,9 @@ api level option,  otherwise it expects a proper option level."
 \\noindent Where |<level>| is an integer as detailed in |setsockopt(2)|.
 This will bind |name|, |make-name|, and |name?|."
 
-(@> |Define define-socket-option-type| () 
-    ((define-socket-option-type)) 
-    (socket-option)
+(@> |Define define-socket-option-type|
+    (export (define-socket-option-type)) 
+    (capture socket-option)
 (define-syntax define-socket-option-type
   (syntax-rules ()
     [(_ name level)
@@ -287,14 +286,14 @@ This will bind |name|, |make-name|, and |name?|."
 |udp(7)|, and |raw(7)|.  I have added the ip option as well because ip
 options are often applicable to  the above."
 
-(@> |Define socket option types| () 
-(make-tcp-option make-udp-option make-raw-option make-ip-option
- tcp-option? udp-option? raw-option? ip-option?
- define-socket-option-type
- tcp-option udp-option raw-option ip-option)
-(socket-option)
+(@> |Define socket option types|
+(export make-tcp-option make-udp-option make-raw-option make-ip-option
+        tcp-option? udp-option? raw-option? ip-option?
+        define-socket-option-type
+        tcp-option udp-option raw-option ip-option)
+(capture socket-option)
 (@<< |Define define-socket-option-type| 
-     define-socket-option-type socket-option)
+     socket-option)
 (define-socket-option-type tcp-option $ipproto-tcp)
 (define-socket-option-type udp-option $ipproto-udp)
 (define-socket-option-type raw-option $ipproto-raw)
@@ -308,9 +307,8 @@ origins of transmissions.
 
 All socket address data types are subtypes of |socket-address|es."
 
-(@> |Define socket address record| () 
-    (socket-address? socket-address socket-address-converter)
-    ()
+(@> |Define socket address record|
+    (export socket-address? socket-address socket-address-converter)
 (define-record-type socket-address (fields converter))
 ))
 
@@ -339,9 +337,9 @@ creating it. This is defined as |foreign-address-size|,
 but it is defined as part of the record definition for 
 socket domains below."
 
-(@> |Define socket-address conversions| ()
-    (socket-address->foreign foreign->socket-address)
-    (socket-address-converter socket-domain-extractor)
+(@> |Define socket-address conversions|
+    (export socket-address->foreign foreign->socket-address)
+    (capture socket-address-converter socket-domain-extractor)
 
 (define (socket-address->foreign sock-addr)
   ((socket-address-converter sock-addr) sock-addr))
@@ -353,18 +351,18 @@ socket domains below."
 "UNIX domain sockets have addresses that are just paths, which in turn
 are simply strings."
 
-(@> |Define UNIX socket addresses| () 
-    (unix-address? make-unix-address unix-address-path
-     unix-address->foreign foreign->unix-address unix-address)
-    (socket-address)
+(@> |Define UNIX socket addresses|
+    (export unix-address? make-unix-address unix-address-path
+            unix-address->foreign foreign->unix-address unix-address)
+    (capture socket-address)
 (define-record-type unix-address
   (parent socket-address)
   (protocol
     (lambda (n) (lambda (path) ((n unix-address->foreign) path))))
   (fields path))
-(@<< |Define unix-address2foreign| unix-address->foreign
+(@<< |Define unix-address2foreign|
     make-foreign-unix-address unix-address-path)
-(@<< |Define foreign2unix-address| foreign->unix-address
+(@<< |Define foreign2unix-address|
     make-unix-address)
 ))
 
@@ -373,8 +371,9 @@ for a unix address.
 It returns a bytevector that is the equivalent layout
 of the sockaddr\\_un structure."
   
-(@> |Define unix-address2foreign| () (unix-address->foreign)
-    (make-foreign-unix-address unix-address-path)
+(@> |Define unix-address2foreign|
+    (export unix-address->foreign)
+    (capture make-foreign-unix-address unix-address-path)
 
 (define (unix-address->foreign addr) 
   (when (windows?) (unsupported-feature 'unix-sockets))
@@ -387,8 +386,9 @@ of the sockaddr\\_un structure."
 can be done by grabbing the vector elements of the range from 
 the start of the path to the first null."
 
-(@> |Define foreign2unix-address| () (foreign->unix-address)
-    (make-unix-address)
+(@> |Define foreign2unix-address| 
+    (export foreign->unix-address)
+    (capture make-unix-address)
 
 (define (foreign->unix-address addr addr-len)
   (when (windows?) (unsupported-feature 'unix-sockets))
@@ -401,36 +401,36 @@ number. The highest eight bits of the ip address should be the first
 octet of the ip address, and so forth. The port value is a 16-bit
 unsigned integer."
 
-(@> |Define IPV4 internet socket addresses| ()
-    (internet-address internet-address?
-     make-internet-address
-     internet-address-ip
-     internet-address-port
-     string->internet-address
-     internet-address->string
-     internet-address->foreign
-     foreign->internet-address
-     string->ipv4)
-    (socket-address)
-
+(@> |Define IPV4 internet socket addresses|
+    (export internet-address internet-address?
+            make-internet-address
+            internet-address-ip
+            internet-address-port
+            string->internet-address
+            internet-address->string
+            internet-address->foreign
+            foreign->internet-address
+            string->ipv4)
+    (capture socket-address)
 (define-record-type internet-address 
   (parent socket-address)
   (protocol 
     (lambda (n) 
       (lambda (i p) ((n internet-address->foreign) i p))))
   (fields ip port))
-(@<< |Define internet-address2foreign| internet-address->foreign
+(@<< |Define internet-address2foreign|
     internet-address-port internet-address-ip)
-(@<< |Define foreign2internet-address| foreign->internet-address)
-(@<< |Define IP String handlers| string->ipv4
+(@<< |Define foreign2internet-address|)
+(@<< |Define IP String handlers|
     make-internet-address internet-address-ip internet-address-port)
 ))
 
 (@ "Converting the internet-address to a foreign value is done  by
 |internet-address->foreign|."
 
-(@> |Define internet-address2foreign| () (internet-address->foreign)
-    (internet-address-port internet-address-ip)
+(@> |Define internet-address2foreign|
+    (export internet-address->foreign)
+    (capture internet-address-port internet-address-ip)
   
 (define (internet-address->foreign addr)
   (values 
@@ -442,7 +442,8 @@ unsigned integer."
 
 (@ "Converting back is pretty easy."
 
-(@> |Define foreign2internet-address| () (foreign->internet-address) ()
+(@> |Define foreign2internet-address|
+    (export foreign->internet-address)
 (define (foreign->internet-address addr addr-len)
   (make-internet-address
     (foreign-ipv4-address-ip addr)
@@ -452,23 +453,24 @@ unsigned integer."
 (@ "IP addresses often come in the form of strings. So, let's define a
 few procedures for handling strings as IPs."
 
-(@> |Define IP String handlers| () 
-    (string->internet-address internet-address->string string->ipv4)
-    (make-internet-address internet-address-ip internet-address-port)
+(@> |Define IP String handlers|
+    (export string->internet-address internet-address->string string->ipv4)
+    (capture make-internet-address internet-address-ip internet-address-port)
 
-(@<< |Define string2internet-address| string->internet-address
+(@<< |Define string2internet-address|
      make-internet-address)
-(@<< |Define internet-address2string| internet-address->string
+(@<< |Define internet-address2string|
      internet-address-ip internet-address-port)
-(@<< |Define string2ipv4| string->ipv4)
+(@<< |Define string2ipv4|)
 ))
 
 (@ "Usually internet addresses are given as a colon delimited ip 
 address string and a port number. |string->internet-address| converts 
 this to a proper internet address structure."
 
-(@> |Define string2internet-address| () (string->internet-address)
-    (make-internet-address)
+(@> |Define string2internet-address|
+    (export string->internet-address)
+    (capture make-internet-address)
 (define (string->internet-address s)
   (let-values ([(ip-string port-string) (@< |Split IPV4 address| s)])
     (let ([ip (and ip-string (string->ipv4 ip-string))]
@@ -480,7 +482,8 @@ this to a proper internet address structure."
 
 (@ "I define a helper to split the address into ip and port."
 
-(@> |Split IPV4 address| () () (s)
+(@> |Split IPV4 address| 
+    (capture s)
 (let ([val (string-tokenize s (char-set-complement (char-set #\:)))])
   (if (pair? val)
       (values
@@ -492,7 +495,8 @@ this to a proper internet address structure."
 (@ "Another helper splits the ip address and converts it to a bytevector 
 in big endian or network byte order."
 
-(@> |Define string2ipv4| () (string->ipv4) ()
+(@> |Define string2ipv4| 
+    (export string->ipv4)
 (define (string->ipv4 s)
   (let ([bytes (map string->number 
                  (string-tokenize s 
@@ -509,8 +513,9 @@ in big endian or network byte order."
 (@ "The reverse procedure |internet-address->string| is more 
 straightforward."
 
-(@> |Define internet-address2string| () (internet-address->string)
-    (internet-address-ip internet-address-port)
+(@> |Define internet-address2string| 
+    (export internet-address->string)
+    (capture internet-address-ip internet-address-port)
 (define (internet-address->string addr)
   (let (
       [ip (or (internet-address-ip addr) 0)]
@@ -552,23 +557,23 @@ address with a given domain, type, and protocol, which is enough to
 create a socket and connect to that address using the right types."
 
 
-(@> |Define Address Information Interface| ()
-    (make-address-info
-     address-info?
-     address-info-domain
-     address-info-type
-     address-info-protocol
-     address-info-address
-     get-address-info
-     address-info/canonical-name
-     address-info/numeric-host
-     address-info/passive
-     address-info address-info-option?)
-    (socket-domain? socket-type? socket-protocol?)
+(@> |Define Address Information Interface|
+    (export make-address-info
+            address-info?
+            address-info-domain
+            address-info-type
+            address-info-protocol
+            address-info-address
+            get-address-info
+            address-info/canonical-name
+            address-info/numeric-host
+            address-info/passive
+            address-info address-info-option?)
+    (capture socket-domain? socket-type? socket-protocol?)
 
 (define-record-type address-info (fields domain type protocol address))
-(@<< |Define Address Information Constants| address-info)
-(@<< |Define get-address-info| get-address-info
+(@<< |Define Address Information Constants|)
+(@<< |Define get-address-info|
      socket-domain? socket-type? socket-protocol?
      address-info-option?)
 ))
@@ -591,9 +596,10 @@ not seem to be too inconvenient in practice.
 the domain, type, protocol, or a set of flags that can be used to filter
 out the results obtained from the call."
 
-(@> |Define get-address-info| () (get-address-info) 
-    (socket-domain? socket-type? socket-protocol?
-     address-info-option?)
+(@> |Define get-address-info| 
+    (export get-address-info) 
+    (capture socket-domain? socket-type? socket-protocol?
+             address-info-option?)
 (define get-address-info
   (case-lambda
     [(node service)
@@ -608,9 +614,10 @@ out the results obtained from the call."
 |$getaddrinfo|,  check for errors, and then convert the foreign
 address foreign-integer to a Scheme structure."
 
-(@> |Define %get-address-info| () (%get-address-info) 
-    (socket-domain? socket-type? socket-protocol?
-     address-info-option?)
+(@> |Define %get-address-info| 
+    (export %get-address-info) 
+    (capture socket-domain? socket-type? socket-protocol?
+             address-info-option?)
 (define (%get-address-info node service domain type protocol flags)
   (@< |Check get-address-info argument types|
       node service domain type protocol flags
@@ -644,10 +651,10 @@ work in the same way, but they must all be values for which
 a service name string, integer number string identifying a valid port, 
 or a positive integer representing a valid port."
 
-(@> |Check get-address-info argument types| () () 
-    (node service domain type protocol flags
-     socket-domain? socket-type? socket-protocol?
-     address-info-option?)
+(@> |Check get-address-info argument types|
+    (capture node service domain type protocol flags
+             socket-domain? socket-type? socket-protocol?
+             address-info-option?)
 (assert (or (not domain) (socket-domain? domain)))
 (assert (or (not type) (socket-type? type)))
 (assert (or (not protocol) (socket-protocol? protocol)))
@@ -664,13 +671,11 @@ or a positive integer representing a valid port."
 
 (@ "There are a few built in address info options."
 
-(@> |Define Address Information Constants| ()
-    (make-address-info-option address-info-option address-info-option?
+(@> |Define Address Information Constants|
+    (export make-address-info-option address-info-option address-info-option?
      address-info/canonical-name
      address-info/numeric-host
      address-info/passive)
-    ()
-
 (define-record-type address-info-option (parent socket-constant))
 
 (define address-info/canonical-name
@@ -684,7 +689,8 @@ or a positive integer representing a valid port."
 (@ "We need to conver the hints given to use in Scheme terms and convert
 them to foreign hints, which is its own structure."
 
-(@> |Build address information hints| () () (domain type protocol flags)
+(@> |Build address information hints|
+    (capture domain type protocol flags)
 (make-foreign-address-info
   (fold-left
     (lambda (s v)
@@ -704,7 +710,8 @@ them to foreign hints, which is its own structure."
 records. To convert these to real lists of |address-info| records, I use
 the foreign accessors and loop over the linked list."
 
-(@> |Convert foreign address information list| () () (alp)
+(@> |Convert foreign address information list|
+    (capture alp)
 (define (get-address-info-entry alp)
   (let ([dom (lookup-domain (foreign-address-info-domain alp))])
     (make-address-info
@@ -767,70 +774,70 @@ Scheme procedure defined in this library.
 \\endgroup
 "
 
-(@> |Define Socket procedures| ()
-    (create-socket
-     socket-domain? socket-type? 
-     make-socket-domain
-     make-socket-type
-     socket-domain/unix socket-domain/local 
-     socket-domain/internet
-     socket-type/stream socket-type/datagram
-     socket-type/sequence-packet socket-type/raw
-     socket-type/random 
-     register-socket-domain!
-     make-socket-protocol socket-protocol?
-     protocol-entry-name protocol-entry-aliases protocol-entry-value
-     socket-protocol/auto
-     next-protocol-entry
-     get-protocol-by-name
-     get-protocol-by-constant
-     open-protocol-database
-     close-protocol-database
-     bind-socket
-     listen-socket
-     accept-socket
-     connect-socket
-     close-socket
-     shutdown-socket
-     shutdown-method?
-     make-shutdown-method
-     shutdown-method/read shutdown-method/write shutdown-method/read&write
-     send-to-socket
-     send-to/dont-route send-to/out-of-band
-     make-send-to-option
-     receive-from-socket
-     receive-from/out-of-band receive-from/peek 
-     receive-from/wait-all receive-from/dont-wait
-     make-receive-from-option
-     socket-maximum-connections
-     get-socket-option
-     set-socket-option!
-     set-socket-nonblocking! socket-domain-db
-     lookup-domain foreign-address-size
-     socket-domain-extractor)
-    (make-socket)
+(@> |Define Socket procedures|
+    (export create-socket
+            socket-domain? socket-type? 
+            make-socket-domain
+            make-socket-type
+            socket-domain/unix socket-domain/local 
+            socket-domain/internet
+            socket-type/stream socket-type/datagram
+            socket-type/sequence-packet socket-type/raw
+            socket-type/random 
+            register-socket-domain!
+            make-socket-protocol socket-protocol?
+            protocol-entry-name protocol-entry-aliases protocol-entry-value
+            socket-protocol/auto
+            next-protocol-entry
+            get-protocol-by-name
+            get-protocol-by-constant
+            open-protocol-database
+            close-protocol-database
+            bind-socket
+            listen-socket
+            accept-socket
+            connect-socket
+            close-socket
+            shutdown-socket
+            shutdown-method?
+            make-shutdown-method
+            shutdown-method/read shutdown-method/write shutdown-method/read&write
+            send-to-socket
+            send-to/dont-route send-to/out-of-band
+            make-send-to-option
+            receive-from-socket
+            receive-from/out-of-band receive-from/peek 
+            receive-from/wait-all receive-from/dont-wait
+            make-receive-from-option
+            socket-maximum-connections
+            get-socket-option
+            set-socket-option!
+            set-socket-nonblocking! socket-domain-db
+            lookup-domain foreign-address-size
+            socket-domain-extractor)
+    (capture make-socket)
   
-(@<< |Define create-socket and constants| lookup-domain
+(@<< |Define create-socket and constants|
     make-socket set-socket-nonblocking!)
-(@<< |Define domain registration| lookup-domain socket-domain?)
-(@<< |Define domain lookup| lookup-domain socket-domain-db)
-(@<< |Define protocol database accessors| lookup-domain)
-(@<< |Define bind-socket| lookup-domain socket-address->foreign socket-fd)
-(@<< |Define listen-socket| lookup-domain socket-fd)
-(@<< |Define accept-socket| lookup-domain
+(@<< |Define domain registration| socket-domain?)
+(@<< |Define domain lookup| socket-domain-db)
+(@<< |Define protocol database accessors|)
+(@<< |Define bind-socket| socket-address->foreign socket-fd)
+(@<< |Define listen-socket| socket-fd)
+(@<< |Define accept-socket|
     socket-domain socket-nonblocking? socket-fd make-socket
     socket-type socket-protocol foreign->socket-address
     foreign-address-size)
-(@<< |Define connect-socket| lookup-domain 
+(@<< |Define connect-socket| 
     socket-address->foreign socket-nonblocking? socket-fd)
-(@<< |Define close-socket| lookup-domain socket-fd)
-(@<< |Define shutdown procedures and constants| lookup-domain socket-fd)
-(@<< |Define sending procedures and structures| lookup-domain
+(@<< |Define close-socket| socket-fd)
+(@<< |Define shutdown procedures and constants| socket-fd)
+(@<< |Define sending procedures and structures|
      socket-address->foreign socket-nonblocking? socket-fd)
-(@<< |Define receiving procedures and structures| lookup-domain
+(@<< |Define receiving procedures and structures|
      socket-domain socket-nonblocking? socket-fd foreign->socket-address)
-(@<< |Define maximum socket connections| socket-maximum-connections)
-(@<< |Define socket option handlers| set-socket-nonblocking!
+(@<< |Define maximum socket connections|)
+(@<< |Define socket option handlers|
     socket-fd socket-option-level socket-option-id
     socket-nonblocking? socket-nonblocking?-set!)
 ))
@@ -844,22 +851,22 @@ datatypes for its arguments are described further down.
 |endverbatim
 \\medskip"
 
-(@> |Define create-socket and constants| () 
-    (create-socket
-     socket-domain? socket-type?
-     make-socket-domain
-     make-socket-type foreign-address-size
-     socket-domain/unix socket-domain/local 
-     socket-domain/internet
-     socket-type/stream socket-type/datagram
-     socket-type/sequence-packet socket-type/raw
-     socket-type/random
-     make-socket-protocol socket-protocol?
-     socket-protocol/auto socket-domain-extractor)
-    (make-socket set-socket-nonblocking!)
-(@<< |Define socket domains| create-socket)
-(@<< |Define socket types| create-socket)
-(@<< |Define socket protocols| create-socket)
+(@> |Define create-socket and constants| 
+    (export create-socket
+            socket-domain? socket-type?
+            make-socket-domain
+            make-socket-type foreign-address-size
+            socket-domain/unix socket-domain/local 
+            socket-domain/internet
+            socket-type/stream socket-type/datagram
+            socket-type/sequence-packet socket-type/raw
+            socket-type/random
+            make-socket-protocol socket-protocol?
+            socket-protocol/auto socket-domain-extractor)
+    (capture make-socket set-socket-nonblocking!)
+(@<< |Define socket domains|)
+(@<< |Define socket types|)
+(@<< |Define socket protocols|)
 (define (create-socket domain type protocol)
   (@< |Check create-socket arguments| 
       domain type protocol
@@ -879,8 +886,8 @@ its a bad socket, but otherwise, we need to build the appropriate
 struture and set any options. In this case, we default to nonblocking
 sockets, while most BSD sockets systems start in blocking mode."
 
-(@> |Process $socket return| () () 
-    (make-socket set-socket-nonblocking! domain type protocol)
+(@> |Process $socket return|
+    (capture make-socket set-socket-nonblocking! domain type protocol)
 (lambda (ret err)
   (if (= ret invalid-socket)
     (socket-error 'create-socket 'socket err)
@@ -893,8 +900,8 @@ sockets, while most BSD sockets systems start in blocking mode."
 arguments. I use separate |assert| calls to give more precise error
 messages."
 
-(@> |Check create-socket arguments| () () 
-    (domain type protocol socket-domain? socket-type? socket-protocol?)
+(@> |Check create-socket arguments|
+    (capture domain type protocol socket-domain? socket-type? socket-protocol?)
 (assert (socket-domain? domain))
 (assert (socket-type? type))
 (assert (socket-protocol? protocol))
@@ -909,25 +916,24 @@ They also must embed an extracter and a size value so that
 converting to and from foreign values can be done without 
 explicitly knowing the type of the domain beforehand."
 
-(@> |Define socket domains| ()
-    (make-socket-domain socket-domain-extractor foreign-address-size
-     socket-domain/unix socket-domain/local socket-domain/internet
-     socket-domain?)
-    ()
+(@> |Define socket domains|
+    (export make-socket-domain socket-domain-extractor foreign-address-size
+            socket-domain/unix socket-domain/local socket-domain/internet
+            socket-domain?)
 (define-record-type (%socket-domain make-socket-domain socket-domain?)
   (parent socket-constant)
   (fields 
     (immutable extractor socket-domain-extractor)
     (immutable addr-size foreign-address-size)))
-(@<< |Define socket domain constants| socket-domain?
+(@<< |Define socket domain constants|
      make-socket-domain foreign->unix-address foreign->internet-address)
 ))
 
 (@ "We predefine UNIX/Local and Internet IPV4 domain types."
 
-(@> |Define socket domain constants| ()
-    (socket-domain/unix socket-domain/local socket-domain/internet)
-    (make-socket-domain foreign->unix-address foreign->internet-address)
+(@> |Define socket domain constants|
+    (export socket-domain/unix socket-domain/local socket-domain/internet)
+    (capture make-socket-domain foreign->unix-address foreign->internet-address)
 (define socket-domain/unix
   (make-socket-domain %socket-domain/unix
     foreign->unix-address
@@ -948,9 +954,9 @@ internal value.
 We set up a database to hold the registered domains and 
 allow for additional domains to be registered."
 
-(@> |Define domain registration| () 
-    (register-socket-domain! socket-domain-db)
-    (socket-domain?)
+(@> |Define domain registration|
+    (export register-socket-domain! socket-domain-db)
+    (capture socket-domain?)
 (define socket-domain-db
   (make-parameter '()))
 
@@ -967,14 +973,16 @@ allow for additional domains to be registered."
 
 (@ "We register only the two necessary ones right now."
 
-(@> |Register pre-defined socket domains| () () ()
+(@> |Register pre-defined socket domains|
 (register-socket-domain! socket-domain/unix)
 (register-socket-domain! socket-domain/internet)
 ))
 
 (@ "We'll want to be able to look these domains up by number."
 
-(@> |Define domain lookup| () (lookup-domain) (socket-domain-db)
+(@> |Define domain lookup|
+    (export lookup-domain) 
+    (capture socket-domain-db)
 (define (lookup-domain val)
   (let ([res (assv val (socket-domain-db))])
     (and res (cdr res))))
@@ -985,12 +993,11 @@ allow for additional domains to be registered."
 transmits over the socket. See the |socket(2)| man page for 
 more details."
 
-(@> |Define socket types| () 
-    (make-socket-type socket-type?
-     socket-type/stream socket-type/datagram
-     socket-type/sequence-packet socket-type/raw
-     socket-type/random)
-    ()
+(@> |Define socket types|
+    (export make-socket-type socket-type?
+            socket-type/stream socket-type/datagram
+            socket-type/sequence-packet socket-type/raw
+            socket-type/random)
 (define-record-type (%socket-type make-socket-type socket-type?)
   (parent socket-constant))
 
@@ -1015,9 +1022,8 @@ number, so the user will not usually need to use the more complicated
 database searching tools in the next sections. Instead, we define a
 default protocol here for automatic protocol selection."
 
-(@> |Define socket protocols| () 
-    (make-socket-protocol socket-protocol? socket-protocol/auto)
-    ()
+(@> |Define socket protocols|
+    (export make-socket-protocol socket-protocol? socket-protocol/auto)
 (define-record-type 
   (%socket-protocol make-socket-protocol socket-protocol?)
   (parent socket-constant))
@@ -1033,16 +1039,14 @@ Each of the general protocol retreival functions that utilize
 |foreign->protocol-entry|  will return false when they are at the end
 of the protocols database or if there was an error."
 
-(@> |Define protocol database accessors| ()
-    (protocol-entry-name protocol-entry-aliases protocol-entry-value
-     next-protocol-entry
-     get-protocol-by-name
-     get-protocol-by-constant
-     open-protocol-database
-     close-protocol-database
-     protocol-entry make-protocol-entry)
-    ()
-
+(@> |Define protocol database accessors|
+    (export protocol-entry-name protocol-entry-aliases protocol-entry-value
+            next-protocol-entry
+            get-protocol-by-name
+            get-protocol-by-constant
+            open-protocol-database
+            close-protocol-database
+            protocol-entry make-protocol-entry)
 (define-record-type protocol-entry (fields name aliases value))
 (@< |Define foreign protocol entry converter| make-protocol-entry)
 (define (next-protocol-entry)
@@ -1065,9 +1069,9 @@ of the protocols database or if there was an error."
 the normal |protocol-entry|. This is used in all of the protocol
 accessor functions that need to return some protocol."
 
-(@> |Define foreign protocol entry converter| ()
-    (foreign->protocol-entry)
-    (make-protocol-entry)
+(@> |Define foreign protocol entry converter|
+    (export foreign->protocol-entry)
+    (capture make-protocol-entry)
 (define (foreign->protocol-entry x)
   (make-protocol-entry
     (foreign-protocol-entry-name x)
@@ -1088,8 +1092,9 @@ socket to a given address. 'Nuff said.
 \\noindent Unless there has been some tragic error, the return value of
 this function is unspecified."
 
-(@> |Define bind-socket| () (bind-socket)
-    (socket-address->foreign socket-fd)
+(@> |Define bind-socket|
+    (export bind-socket)
+    (capture socket-address->foreign socket-fd)
 (define (bind-socket sock addr)
   (let-values ([(foreign-addr foreign-size) 
                 (socket-address->foreign addr)])
@@ -1113,8 +1118,9 @@ integer not greater than the maximum number of allowed connections.
 
 \\noindent |listen-socket| does not return a value."
 
-(@> |Define listen-socket| () (listen-socket)
-    (socket-fd)
+(@> |Define listen-socket|
+    (export listen-socket)
+    (capture socket-fd)
 (define (listen-socket sock queue-length)
   (call-with-errno (lambda () ($listen (socket-fd sock) queue-length))
     (lambda (ret err)
@@ -1150,10 +1156,11 @@ information about how to proceed, but not much. It will not return a
 condition if the condition would be a true error condition. In this
 case, it will raise the error and not return."
 
-(@> |Define accept-socket| () (accept-socket)
-    (socket-domain socket-nonblocking? socket-fd make-socket
-     socket-type socket-protocol foreign->socket-address
-     foreign-address-size)
+(@> |Define accept-socket|
+    (export accept-socket)
+    (capture socket-domain socket-nonblocking? socket-fd make-socket
+             socket-type socket-protocol foreign->socket-address
+             foreign-address-size)
 (define (accept-socket sock)
   (let ([size (foreign-address-size (socket-domain sock))])
     (let ([addr (foreign-alloc size)]
@@ -1177,8 +1184,8 @@ need to do that overhead if we are dealing with purely nonblocking
 sockets. So, before going to the foreign side, check and call the
 appropriate function accordingly."
 
-(@> |Call $accept if nonblocking, $accept-blocking otherwise| ()
-    () (sock addr addr-len socket-nonblocking? socket-fd)
+(@> |Call $accept if nonblocking, $accept-blocking otherwise|
+    (capture sock addr addr-len socket-nonblocking? socket-fd)
 ((if (socket-nonblocking? sock) 
      $accept
      $accept-blocking)
@@ -1192,7 +1199,8 @@ a Scheme interface, so instead, we'll catch the situations where the
 errors are mundane and return these through the normal return channels,
 and only raise a real error for real errors."
 
-(@> |Return intelligently from non-blocking errors| () () (err)
+(@> |Return intelligently from non-blocking errors|
+    (capture err)
 (values 
   #f 
   (socket-raise/unless 'accept-socket 'accept err
@@ -1202,9 +1210,9 @@ and only raise a real error for real errors."
 (@ "In the normal cases, we just need to translate the socket and
 extract out the address information."
 
-(@> |Build socket and address, then return| () ()
-    (sock addr addr-len ret 
-     make-socket socket-domain socket-type socket-protocol)
+(@> |Build socket and address, then return|
+    (capture sock addr addr-len ret 
+             make-socket socket-domain socket-type socket-protocol)
 (values 
   (make-socket ret
     (socket-domain sock)
@@ -1240,8 +1248,9 @@ disables the foreign thread before calling |connect(2)|.
 
 This function corresponds to the |connect(2)| system call."
 
-(@> |Define connect-socket| () (connect-socket)
-    (socket-address->foreign socket-nonblocking? socket-fd)
+(@> |Define connect-socket|
+    (export connect-socket)
+    (capture socket-address->foreign socket-nonblocking? socket-fd)
 (define (connect-socket sock addr)
   (let-values ([(fa fa-len) (socket-address->foreign addr)])
     (call-with-errno 
@@ -1271,7 +1280,9 @@ this system call.
 
 \\noindent |close-socket| does not return a value."
 
-(@> |Define close-socket| () (close-socket) (socket-fd)
+(@> |Define close-socket|
+    (export close-socket) 
+    (capture socket-fd)
 (define (close-socket sock)
   (call-with-errno (lambda () ($close (socket-fd sock)))
     (lambda (ret err)
@@ -1293,12 +1304,12 @@ capabilities while leaving others around.
 correspond closely to the existing |shutdown(2)| system call, the
 procedure isn't very complicated."
 
-(@> |Define shutdown procedures and constants| () 
-    (shutdown-socket shutdown-method? make-shutdown-method
-     shutdown-method/read shutdown-method/write
-     shutdown-method/read&write) 
-    (socket-fd)
-(@<< |Define built-in shutdown methods| shutdown-socket)
+(@> |Define shutdown procedures and constants|
+    (export shutdown-socket shutdown-method? make-shutdown-method
+            shutdown-method/read shutdown-method/write
+            shutdown-method/read&write) 
+    (capture socket-fd)
+(@<< |Define built-in shutdown methods|)
 (define (shutdown-socket sock how)
   (assert (shutdown-method? how))
   (call-with-errno 
@@ -1313,11 +1324,10 @@ procedure isn't very complicated."
 well as shutdown methods for reading, writing, and reading/writing
 combined."
 
-(@> |Define built-in shutdown methods| ()
-    (shutdown-method? make-shutdown-method
-     shutdown-method/read shutdown-method/write
-     shutdown-method/read&write shutdown-method)
-    ()
+(@> |Define built-in shutdown methods|
+    (export shutdown-method? make-shutdown-method
+            shutdown-method/read shutdown-method/write
+            shutdown-method/read&write shutdown-method)
 (define-record-type shutdown-method (parent socket-constant))
 
 (define shutdown-method/read 
@@ -1344,11 +1354,11 @@ structures defined in this library. Any flags that you pass in should be
 |send-to-option| flags (they answer true to the predicate
 |send-to-option?|). "
 
-(@> |Define sending procedures and structures| () 
-    (send-to-socket send-to/dont-route send-to/out-of-band
-     make-send-to-option send-to-option?)
-    (socket-address->foreign socket-nonblocking? socket-fd)
-(@<< |Define sending flags| send-to-option?)
+(@> |Define sending procedures and structures|
+    (export send-to-socket send-to/dont-route send-to/out-of-band
+            make-send-to-option send-to-option?)
+    (capture socket-address->foreign socket-nonblocking? socket-fd)
+(@<< |Define sending flags|)
 (define (send-to-socket sock buf addr . flags)
   (assert (for-all send-to-option? flags))
   (let-values ([(fa fa-len) (socket-address->foreign addr)])
@@ -1369,8 +1379,8 @@ technique as with |accept-socket| to choose whether to go with a
 blocking optimized version or the straight |sendto(2)| call. Otherwise
 the basic mapping of the datatypes is fairly standard."
 
-(@> |Convert datatypes and jump to the right foreign function| () ()
-    (sock buf flags fa fa-len socket-fd)
+(@> |Convert datatypes and jump to the right foreign function|
+    (capture sock buf flags fa fa-len socket-fd)
 ((if (socket-nonblocking? sock) 
      $sendto 
      $sendto-blocking)
@@ -1389,10 +1399,9 @@ the basic mapping of the datatypes is fairly standard."
 that can be passed to |send-to-socket|,
 but only those reasonably portable ones are defined here."
 
-(@> |Define sending flags| () 
-    (make-send-to-option send-to-option? send-to-option
-     send-to/dont-route send-to/out-of-band)
-    ()
+(@> |Define sending flags|
+    (export make-send-to-option send-to-option? send-to-option
+            send-to/dont-route send-to/out-of-band)
 (define-record-type send-to-option (parent socket-constant))
 
 (define send-to/dont-route
@@ -1432,12 +1441,13 @@ multiple bytevector copies; it would be much better to reduce the number
 of copies that are performed. I have done no formal performance testing
 of the effects of these copies, however."
 
-(@> |Define receiving procedures and structures| ()
-    (receive-from-socket make-receive-from-option receive-from-option?
-     receive-from/out-of-band receive-from/peek 
-     receive-from/wait-all receive-from/dont-wait)
-    (socket-domain socket-nonblocking? socket-fd foreign->socket-address)
-(@<< |Define receive-from options| receive-from/peek)
+(@> |Define receiving procedures and structures|
+    (export receive-from-socket make-receive-from-option receive-from-option?
+            receive-from/out-of-band receive-from/peek 
+            receive-from/wait-all receive-from/dont-wait)
+    (capture socket-domain socket-nonblocking? socket-fd
+             foreign->socket-address)
+(@<< |Define receive-from options|)
 (define (receive-from-socket sock c . flags)
   (assert (for-all receive-from-option? flags))
   (let ([buf (make-bytevector c)]
@@ -1459,8 +1469,8 @@ use the same technique as in |accept-socket|, and branch based on the
 blocking flag of the socket to either the straight |recvfrom(2)| system
 call or the specially wrapped blocking version."
 
-(@> |Call $recvfrom[-blocking]| () ()
-    (sock socket-fd buf addr addr-len-buf flags c)
+(@> |Call $recvfrom[-blocking]|
+    (capture sock socket-fd buf addr addr-len-buf flags c)
 ((if (socket-nonblocking? sock)
      $recvfrom 
      $recvfrom-blocking)
@@ -1485,9 +1495,9 @@ just a normal EWOULDBLOCK sort of return, so we handle that separately,
 but we do raise the error if it is a true error, and not something like
 EAGAIN or EWOULDBLOCK."
   
-(@> |Convert recvfrom returns to scheme versions| () ()
-    (n err c buf sock addr addr-len-buf 
-     foreign->socket-address socket-domain)
+(@> |Convert recvfrom returns to scheme versions|
+    (capture n err c buf sock addr addr-len-buf 
+             foreign->socket-address socket-domain)
 (if (= n $socket-error)
     (values 
       #f
@@ -1509,12 +1519,11 @@ EAGAIN or EWOULDBLOCK."
 
 (@ "By default the following |receive-from-option| flags are defined."
 
-(@> |Define receive-from options| () 
-    (receive-from-option? make-receive-from-option
-     receive-from/out-of-band receive-from/peek 
-     receive-from/wait-all receive-from/dont-wait
-     receive-from-option)
-    ()
+(@> |Define receive-from options| 
+    (export receive-from-option? make-receive-from-option
+            receive-from/out-of-band receive-from/peek 
+            receive-from/wait-all receive-from/dont-wait
+            receive-from-option)
 (define-record-type receive-from-option (parent socket-constant))
 
 (define receive-from/out-of-band
@@ -1540,8 +1549,8 @@ moment. We do a simple wrapping around this and expose it to the user.
 \\noindent The integer returned is the value of the |SOMAXCONN|
 constant."
 
-(@> |Define maximum socket connections| () (socket-maximum-connections)
-    ()
+(@> |Define maximum socket connections|
+    (export socket-maximum-connections)
 (define (socket-maximum-connections)
   %somaxconn)
 ))
@@ -1551,15 +1560,15 @@ constant."
 getter and setter that work on sockets. We also define some special
 functions to deal specifically with nonblocking and blocking sockets."
 
-(@> |Define socket option handlers| () 
-    (get-socket-option set-socket-option! set-socket-nonblocking!)
-    (socket-fd socket-option-level socket-option-id
-     socket-nonblocking? socket-nonblocking?-set!)
-(@<< |Define get-socket-option| get-socket-option
+(@> |Define socket option handlers|
+    (export get-socket-option set-socket-option! set-socket-nonblocking!)
+    (capture socket-fd socket-option-level socket-option-id
+             socket-nonblocking? socket-nonblocking?-set!)
+(@<< |Define get-socket-option|
     socket-fd socket-option-level socket-option-id)
-(@<< |Define set-socket-option!| get-socket-option
+(@<< |Define set-socket-option!|
     socket-fd socket-option-level socket-option-id)
-(@<< |Define blocking setter and predicate| get-socket-option
+(@<< |Define blocking setter and predicate|
     socket-fd socket-nonblocking?-set!)
 ))
 
@@ -1574,8 +1583,9 @@ and returns the value of that option for that socket.
 \\noindent The socket option should be a proper |socket-option| object.
 This function correlates to the |getsockopt(2)| system call."
 
-(@> |Define get-socket-option| () (get-socket-option)
-    (socket-fd socket-option-level socket-option-id)
+(@> |Define get-socket-option|
+    (export get-socket-option)
+    (capture socket-fd socket-option-level socket-option-id)
 (define (get-socket-option sock opt)
   (let ([len (socket-option-foreign-size opt)])
     (let ([fbuf (foreign-alloc len)] 
@@ -1610,8 +1620,9 @@ it works the same way and uses it internally.
 
 \\noindent The |set-socket-option!| procedure does not return a value."
 
-(@> |Define set-socket-option!| () (set-socket-option!)
-    (socket-fd socket-option-level socket-option-id)
+(@> |Define set-socket-option!|
+    (export set-socket-option!)
+    (capture socket-fd socket-option-level socket-option-id)
 (define (set-socket-option! sock opt val)
   (let-values ([(buf buf-len) ((socket-option-foreign-maker opt) val)])
     (call-with-errno
@@ -1633,9 +1644,9 @@ non-blocking and  set the nonblocking state of the socket. Use of these
 options is not recommended or  encouraged. They exist here for
 implementing some low-level behavior for higher  level abstractions."
 
-(@> |Define blocking setter and predicate| () 
-    (set-socket-nonblocking!)
-    (socket-fd socket-nonblocking?-set!)
+(@> |Define blocking setter and predicate|
+    (export set-socket-nonblocking!)
+    (capture socket-fd socket-nonblocking?-set!)
 (define (set-socket-nonblocking! sock val)
   (call-with-errno 
     (lambda () 

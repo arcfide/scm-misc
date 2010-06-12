@@ -75,8 +75,8 @@ representation of the |<binding>|.")
 (@ "Let's first get the verifier for the syntax forms out of the way.
 We use this to verify our syntax later."
 
-(@> |Verify DFV syntax| () () (conv shared-object proc-name type
-                               bindings)
+(@> |Verify DFV syntax| 
+    (capture conv shared-object proc-name type bindings)
 (and (identifier? conv)
      (memq (syntax->datum conv) '(__cdecl __stdcall __com))
      (string? (syntax->datum shared-object))
@@ -114,7 +114,8 @@ we simply call it on each of the bindings. Since the |foreign-procedure|
 code is different depending on whether we have a convention or not,
 we'll define that helper here."
 
-(@> |Define define-foreign-values| () (define-foreign-values) ()
+(@> |Define define-foreign-values|
+    (export define-foreign-values)
 (...
 (define-syntax define-foreign-values
   (syntax-rules ()
@@ -144,7 +145,9 @@ we'll define that helper here."
 the incoming binding into a string and pass it through to the getter. It
 then needs to bind the resulting value to the original name provided."
 
-(@> |Define get-ffi-value| () (get-ffi-value) (get)
+(@> |Define get-ffi-value| 
+    (export get-ffi-value) 
+    (capture get)
 (define-syntax (get-ffi-value x)
   (syntax-case x ()
     [(k name) (identifier? #'name)
