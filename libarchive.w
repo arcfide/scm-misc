@@ -34,6 +34,13 @@ is visible and loaded."
 (load-shared-object "libarchive.so")
 ))
 
+(@* "Important TODOs"
+"\\numberedlist
+\\li Improve the way that errors are handled. Right now they are just
+single non-continuable conditions that are raised. this should change to
+reflect the situation as actually present in the libarchive functions.
+\\endnumberedlist")
+
 (@l "This library wraps the functionality of the libarchive library.
 Libarchive provides a convenient API for reading and writing of
 stream-oriented archive formats.
@@ -54,7 +61,9 @@ work before it can be considered a complete library."
 structs and archive entry structs. In the archive record, we have a
 special field for objects that we lock in the process of working with
 the archive. When the archive is no longer needed, we can unlock these
-objects."
+objects.
+
+The archive entry structure is defined in its own section."
 
 (@c
 (define-record-type archive (fields (mutable ptr) (mutable locked))
@@ -63,7 +72,6 @@ objects."
       (lambda (ptr)
         (assert (and (integer? ptr) (exact? ptr) (positive? ptr)))
         (n ptr '())))))
-(define-record-type archive-entry (fields (mutable ptr)))
 ))
 
 (@* "Reading Archives"
@@ -123,10 +131,10 @@ when appropriate."
                   (archive-read-guardian res)
                   res))))))))
 (define (archive-read-collect)
-  (let loop ([arc (archive-guardian)])
+  (let loop ([arc (archive-read-guardian)])
     (when arc 
       (archive-read-finish arc) 
-      (loop (archive-guardian)))))
+      (loop (archive-read-guardian)))))
 ))
 
 (@* 2 "Options for compression and format support"
@@ -652,10 +660,367 @@ affect the storage manager."
 ))
 
 (@* "Working with archive entries"
-"XXX TODO")
+"Archive entries work like stat structures on steriods. They have a
+number of getters and setters. The basic structure that we use
+encapsulates this opaque object so that we can remove it automatically
+with our own cleaner.
+
+The foreign constructor for archive entries has the following signature:
+
+\\medskip\\verbatim
+struct archive_entry *archive_entry_new(void)
+|endverbatim
+\\medskip
+
+\\noindent And our resulting wrapping has the following signature:
+
+\\medskip\\verbatim
+(make-archive-entry) => archive-entry
+|endverbatim
+\\medskip
+
+\\noindent We also register the entry with a guardian before returning
+it so that we can enable automatic collection as seen in the next
+section.
+
+While we might use protocols for this, we don't, because we also want to
+have a constructor that will wrap an archive entry around a pointer that
+was obtained using other procedures, such as |archive_entry_clone()|.
+Instead, we use protocols to ensure that the object is registered with
+the guardian before it is returned."
+
+(@c
+(define archive-entry-guardian (make-guardian))
+(define-record-type (archive-entry %make-archive-entry archive-entry?)
+  (fields (mutable ptr))
+  (protocol
+    (lambda (n)
+      (lambda (ptr)
+        (let ([res (n ptr)])
+          (archive-entry-guardian res)
+          res)))))
+(define make-archive-entry
+  (let ([make (foreign-procedure "archive_entry_new" () uptr)])
+    (lambda ()
+      (let ([ptr (make)])
+        (if (zero? ptr)
+            (error 'make-archive-entry 
+              "failed to allocate archive entry")
+            (%make-archive-entry ptr))))))
+))
+
+(@ "We want to enable the automatic collection of these structures once
+they no longer need to exist. To do this, we have a nullary collector
+that reads through the guardian defined above and frees the objects that
+it can."
+
+(@c
+(define (archive-entry-collect)
+  (let loop ([entry (archive-entry-guardian)])
+    (when entry
+      (archive-entry-free entry)
+      (loop (archive-entry-guardian)))))
+))
+
+(@ "To free an archive entry, we want to make sure that the entry
+structure is also invalidated. To do this, we remove the pointer that
+was stored as soon as it is freed, and change the associated slot in the
+archive entry structure to false. The foreign free function looks like
+this:
+
+\\medskip\\verbatim
+void archive_entry_free(struct archive_entry *)
+|endverbatim
+\\medskip
+
+\\noindent We wrap this up in a simple equivalent:
+
+\\medskip\\verbatim
+(archive-entry-free archive-entry)
+|endverbatim
+\\medskip
+
+\\noindent An interesting note is that we don't have any indication
+whether the free operation succeeded or not. To that end, we might want
+to be careful here, but I have no way of telling whether the function
+has succeeded or not, so I'm not going to have any error handling here."
+
+(@c
+(define archive-entry-free
+  (let ([free (foreign-procedure "archive_entry_free" (uptr) void)])
+    (lambda (entry)
+      (assert (archive-entry? entry))
+      (let ([ptr (archive-entry-ptr entry)])
+        (if ptr
+            (begin (free ptr) (archive-entry-ptr-set! entry #f))
+            (error 'archive-entry-free 
+              "archive entry already freed"))))))
+))
+
+(@* 2 "Cloning and Clearing Archive Entries"
+"Interestingly, there are some side-effectful operations provided by the
+libarchive functions designed specifically to reduce allocation
+expenses. These have the following signatures:
+
+\\medskip\\verbatim
+struct archive_entry *archive_entry_clear(struct archive_entry *)
+struct archive_entry *archive_entry_clone(struct archive_entry *)
+|endverbatim
+\\medskip
+
+\\noindent The |archive_entry_clear()| procedure doesn't do any
+allocation, but rather, just resets the given archive entry so that you
+can reuse it without ``thrashing the heap'' as the manual page says.
+The |archive_entry_clone()| procedure does a deep copy of all the fields
+of the entry to create a copy that is returned. Our wrappings have the
+following signatures:
+
+\\medskip\\verbatim
+(archive-entry-clear! archive-entry)
+(archive-entry-clone archive-entry) => new-archive-entry
+|endverbatim
+\\medskip
+
+\\noindent Notice that the |archive-entry-clear!| procedure doesn't
+return anything."
+
+(@c
+(define archive-entry-clear!
+  (let ([clear (foreign-procedure "archive_entry_clear" (uptr) uptr)])
+    (lambda (entry)
+      (assert (archive-entry? entry))
+      (let ([ptr (archive-entry-ptr entry)])
+        (if ptr
+            (let ([res (clear ptr)])
+              (when (zero? res) 
+                (error 'archive-entry-clear! 
+                  "failed to clear archive entry"))
+              (void))
+            (error 'archive-entry-clear!
+              "archive entry has been freed."))))))
+))
+
+(@ "To implement |archive-entry-clone| we have to wrap an archive-entry
+structure around the pointer that we obtain. We have to use the internal
+|%make-archive-entry| procedure for this instead of the nullary
+|make-archive-entry| that allocates a fresh archive entry pointer. We
+don't have to do anything with guardians here because every archive
+entry that is created through |%make-archive-entry| is automatically
+registered with the appropriate guardian."
+
+(@c
+(define archive-entry-clone
+  (let ([clone (foreign-procedure "archive_entry_clone" (uptr) uptr)])
+    (lambda (entry)
+      (assert (archive-entry? entry))
+      (let ([ptr (archive-entry-ptr entry)])
+        (if ptr
+            (let ([res (clone ptr)])
+              (when (zero? res)
+                (error 'archive-entry-clone 
+                  "failed to clone archive entry"))
+              (%make-archive-entry res))
+            (error 'archive-entry-clone
+              "archive entry has been freed"))))))
+))
+
+(@* 2 "Archive entry getters, setters, and copiers"
+"The following fields can be extracted and set from an archive entry:
+
+\\unorderedlist
+\\li atime
+\\li atime\\_nsec
+\\li dev
+\\li devmajor
+\\li devminor
+\\li filetype
+\\li fflags
+\\li fflags\\_text
+\\li gname
+\\li hardlink
+\\li ino
+\\li mode
+\\li mtime
+\\li mtime\\_nsec
+\\li nlink
+\\li pathname
+\\li pathname\\_w
+\\li rdev
+\\li rdevmajor
+\\li rdevminor
+\\li size
+\\li sourcepath
+\\li stat
+\\li symlink
+\\li uname
+\\endunorderedlist
+
+\\noindent Each of the above have a corresponding setter and getter. To
+make life easier, I define three syntaxes, one for defining setters, one
+for defining getters, and the other for defining copiers.")
+
+(@ "Getters are the easiest, so let's start there. When defining one of
+these getters, they follow this basic pattern:
+
+\\medskip\\verbatim
+(define <getter>
+  (let ([get (foreign-procedure <getter-foreign> (uptr) <field-type>)])
+    (lambda (entry)
+      (assert (archive-entry? entry))
+      (let ([ptr (archive-entry-ptr entry)])
+        (if ptr
+            (let ([res (get ptr)])
+              <error-handling>
+              <conversion-and-return>)
+            (error '<getter> "archive entry has been freed"))))))
+|endverbatim
+\\medskip
+
+\\noindent This leads us to the following syntax:
+
+\\medskip\\verbatim
+(define-archive-entry-getter <getter> <getter-foreign> <field-type>
+  <error-handling>
+  <conversion-and-return>)
+|endverbatim
+\\medskip
+
+\\noindent The error handling and conversion code will have the |entry|,
+|ptr|, and |res| variables visible to them."
+
+(@c
+(define-syntax (define-archive-entry-getter x)
+  (syntax-case x ()
+    [(k getter getter-foreign field-type error-handling conversion)
+     (with-implicit (k res ptr entry)
+       #'(define getter
+           (let ([get (foreign-procedure getter-foreign (uptr)
+                        field-type)])
+             (lambda (entry)
+               (assert (archive-entry? entry))
+               (let ([ptr (archive-entry-ptr entry)])
+                 (if ptr
+                     (let ([res (get ptr)])
+                       error-handling
+                       conversion)
+                     (error 'getter 
+                       "archive entry has been freed")))))))]))
+))
+
+(@ "And now we can define the getters."
+  
+(@c
+(define-archive-entry-getter archive-entry-atime
+  "archive_entry_atime" long
+  (void)
+  res)
+(define-archive-entry-getter archive-entry-pathname
+  "archive_entry_pathname" string
+  (void)
+  res)
+))
+
+(@ "When dealing with immediate values it's okay to use the setter
+procedures provided by libarchive, because we don't have to worry about
+retaining values. However, when dealing with objects that should not be
+retained, which is basically all of the string oriented values, we need
+to make sure that we use the copiers. The copiers don't retain the
+reference to the allocated object they were given, but rather, copy the
+result and store that.
+
+Let's first deal with the setters for immediate values.
+
+XXX TODO Deal with the setters for immediate values")
+
+(@ "Dealing with the copiers is much the same as dealing with the
+setters. The following template suffices to handle the copiers.
+
+\\medskip\\verbatim
+(define <copier>
+  (let ([copy (foreign-procedure <copier-foreign> (uptr string) void)])
+    (lambda (entry str)
+      (assert (archive-entry? entry))
+      (assert (string? str))
+      (let ([ptr (archive-entry-ptr entry)])
+        (if ptr
+            (copy ptr str)
+            (error '<copier> "archive entry has been freed"))))))
+|endverbatim
+\\medskip
+
+\\noindent Some care needs to be taken when dealing with the wide
+character varients of some of the functions, but I am not sure how to
+handle this, so I am just using the single character varients for the
+moment.
+
+XXX TODO Improve the |wchar_t| handling."
+
+(@c
+(define-syntax define-archive-entry-copier
+  (syntax-rules ()
+    [(_ copier foreign)
+     (define copier
+       (let ([copy (foreign-procedure foreign (uptr string) void)])
+         (lambda (entry str)
+           (assert (archive-entry? entry))
+           (assert (string? str))
+           (let ([ptr (archive-entry-ptr entry)])
+             (if ptr
+                 (copy ptr str)
+                 (error 'copier
+                   "archive entry has been freed"))))))]))
+))
+
+(@ "And now we can define a number of our copying functions."
+  
+(@c
+(define-archive-entry-copier archive-entry-gname-set! 
+  "archive_entry_copy_gname")
+(define-archive-entry-copier archive-entry-hardlink-set!
+  "archive_entry_copy_hardlink")
+(define-archive-entry-copier archive-entry-sourcepath-set!
+  "archive_entry_copy_sourcepath")
+(define-archive-entry-copier archive-entry-pathname-set!
+  "archive_entry_copy_pathname")
+(define-archive-entry-copier archive-entry-stat-set!
+  "archive_entry_copy_stat")
+(define-archive-entry-copier archive-entry-symlink-set!
+  "archive_entry_copy_symlink")
+(define-archive-entry-copier archive-entry-uname-set!
+  "archive_entry_copy_uname")
+))
 
 (@* "Archive Errors"
-"XXX TODO")
+"Most of the libarchive functions follow a similar error convention,
+where they return a non-zero status for error, which indicates roughly
+the type of error, and then they set the errno for their type and
+provide a string equivalent of that error number. To map this over to
+Scheme, currently I am taking a bit of a shortcut and just using the
+following function:
+
+\\medskip\\verbatim
+(archive-error 'proc-name archive)
+|endverbatim
+\\medskip
+
+\\noindent The above will raise a non-continuable error situation. It
+will first grab the error number and the error string from the |archive|
+object, and place these in the error message."
+
+(@c
+(define archive-error
+  (let ([errno (foreign-procedure "archive_errno" (uptr) int)]
+        [errstr (foreign-procedure "archive_error_string" 
+                  (uptr) string)])
+    (lambda (name arc)
+      (assert (archive? arc))
+      (let ([ptr (archive-ptr arc)])
+        (if ptr
+            (errorf name "foreign archive error ~a: ~a"
+              (errno ptr)
+              (errstr ptr))
+            (error 'archive-error "archive already finalized" arc))))))
+))
 
 (@* "Registering the collection handlers"
 "If the client wants to do the collection of the archives automatically,
@@ -668,6 +1033,7 @@ handlers. The following procedure is provided to make this easier."
     (collect-request-handler
       (lambda ()
         (archive-read-collect)
+        (archive-entry-collect)
         (current-handler)))))
 ))
 )
