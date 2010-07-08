@@ -53,7 +53,52 @@ duplicate the information found there.
 work before it can be considered a complete library."
 
 (arcfide libarchive)
-(export make-archive-read archive-read-close archive-read-finish)
+(export make-archive-read
+  archive-read-support-format-all
+  archive-read-support-format-ar
+  archive-read-support-format-cpio
+  archive-read-support-format-empty
+  archive-read-support-format-iso9660
+  archive-read-support-format-mtree
+  archive-read-support-format-raw
+  archive-read-support-format-tar
+  archive-read-support-format-zip
+  archive-read-support-compression-all
+  archive-read-support-compression-bzip2
+  archive-read-support-compression-compress
+  archive-read-support-compression-gzip
+  archive-read-support-compression-none
+  archive-read-support-compression-lzma
+  archive-read-support-compression-xz
+  archive-read-filter-options-set!
+  archive-read-format-options-set!
+  archive-read-options-set!
+  archive-read-open-filename
+  archive-read-open-bytevector
+  archive-read-next-header
+  archive-read-data-block
+  archive-read-data-skip
+  archive-read-data-port
+  archive-read-close
+  archive-read-finish
+  make-archive-entry
+  archive-entry-collect
+  archive-read-collect
+  archive-entry-free
+  archive-entry-clear!
+  archive-entry-clone
+  archive-entry-atime
+  archive-entry-pathname
+  archive-entry-gname-set!
+  archive-entry-hardlink-set!
+  archive-entry-sourcepath-set!
+  archive-entry-pathname-set!
+  archive-entry-stat-set!
+  archive-entry-symlink-set!
+  archive-entry-uname-set!
+  archive-error
+  register-archive-collection-handlers
+  remove-archive-collection-handlers)
 (import (chezscheme))
 
 (@* 2 "Generic archive structures"
@@ -214,9 +259,10 @@ return value."
            (assert (archive-read? arc))
            (let ([ptr (archive-ptr arc)])
              (unless ptr (error 'name "archive is already finished" arc))
-             (let ([res (ff ptr)])
-               (unless (zero? res)
-                 (archive-error 'name arc)))))))]))
+             (case (status (ff ptr))
+               [(okay) (void)]
+               [(warn) (archive-warning 'name arc)]
+               [else (archive-error 'name arc)])))))]))
 ))
 
 (@ "And now we'll define the support setting format support."
@@ -286,14 +332,15 @@ Otherwise, these are simple wrappers."
            (assert (string? s))
            (unless (archive-ptr a)
              (error 'name "archive already finished" a))
-           (let ([res (set! (archive-ptr a) s)])
-             (unless (zero? res)
-               (archive-error 'name a))))))]))
+           (case (status (set! (archive-ptr a) s))
+             [(okay) (void)]
+             [(warn) (archive-warning 'name a)]
+             [else (archive-error 'name a)]))))]))
 (define-archive-read-option-setter
   archive-read-filter-options-set! "archive_read_set_filter_options")
-(define-archive-read-option-settter
+(define-archive-read-option-setter
   archive-read-format-options-set! "archive_read_set_format_options")
-(define-archive-read-options-setter
+(define-archive-read-option-setter
   archive-read-options-set! "archive_read_set_options")
 ))
 
@@ -319,17 +366,20 @@ block size."
 (@c
 (define archive-read-open-filename
   (let ([open (foreign-procedure "archive_read_open_filename" 
-                (uptr string unsigned-long) int)])
+                (uptr string long) int)])
     (lambda (a p bs)
       (assert (archive-read? a))
       (assert (string? p))
       (assert (and (integer? bs) (exact? bs) (not (negative? bs))))
       (let ([ptr (archive-ptr a)])
         (if ptr
-            (let ([res (open ptr p bs)])
-              (unless (zero? res)
-                (archive-error 'archive-read-open-filename a)))
-            (error 'archive-read-open-file
+            (case (status (open ptr p bs))
+              [(okay) (void)]
+              [(warn) (archive-warning 'archive-read-open-filename a)]
+              [(eof) (error 'archive-read-open-filename 
+                       "eof unexpected")]
+              [else (archive-error 'archive-read-open-filename a)])
+            (error 'archive-read-open-filename
               "archive already finished" a))))))
 ))
 
@@ -361,9 +411,12 @@ associated locked objects."
             "archive already finished" a))
         (lock-object buf)
         (archive-locked-set! a (cons buf (archive-locked a)))
-        (let ([res (open ptr buf (bytevector-length buf))])
-          (unless (zero? res)
-            (archive-error 'archive-read-open-bytevector a)))))))
+        (case (status (open ptr buf (bytevector-length buf)))
+          [(okay) (void)]
+          [(warn) (archive-warning 'archive-read-open-bytevector a)]
+          [(eof) (error 'archive-read-open-bytevector
+                   "eof unexpected")]
+          [else (archive-error 'archive-read-open-bytevector a)])))))
 ))
 
 (@ "XXX TODO: Write a binding for the |archive_read_open()| and
@@ -397,7 +450,10 @@ like this:
 \\noindent Obviously we don't want these headers to suddenly change.
 This makes the only reasonable interface one where we control and
 allocate a new archive entry every time we call the function. For this
-reason we will ignore the first function."
+reason we will ignore the first function.
+
+If we have reached the end of an archive, then we return the end of file
+object."
 
 (@c
 (define archive-read-next-header 
@@ -411,10 +467,15 @@ reason we will ignore the first function."
             "archive already finished" arc))
         (let* ([entry (make-archive-entry)]
                [entry-ptr (archive-entry-ptr entry)])
-          (let ([res (next ptr entry-ptr)])
-            (if (zero? res)
-                entry
-                (archive-error 'archive-read-next-header arc))))))))
+          (case (status (next ptr entry-ptr))
+            [(okay) entry]
+            [(warn) 
+             (archive-warning 'archive-read-next-header arc)
+             entry]
+            [(eof) 
+             (eof-object)]
+            [else
+              (archive-error 'archive-read-next-header arc)]))))))
 ))
 
 (@* 2 "Reading data out of archive entries"
@@ -463,10 +524,7 @@ bytevector containing the data of the entry starting at the given
 offset. Repeated calls to this procedure will give us the next blocks
 each time. The same guarantees as |archive_read_data_block()| apply, in
 that each block will not overlap with the last, and that each offset
-will increase.
-
-XXX TODO: I need some information about when and how I can tell when
-I've read the last block."
+will increase."
 
 (@> |Define archive-read-data-block| (export archive-read-data-block)
 (define archive-read-data-block
@@ -482,11 +540,18 @@ I've read the last block."
           (let ([buf* (foreign-alloc uptr/size)]
                 [len* (foreign-alloc uptr/size)]
                 [off* (foreign-alloc uptr/size)])
-            (let ([res (read-block ptr buf* len* off*)])
-              (if (zero? res)
-                  (@< |Return buffer and offset| buf* len* off*)
-                  (@< |Free foreign blocks and raise error| 
-                      arc buf* len* off*)))))))))
+            (case (status (read-block ptr buf* len* off*))
+              [(okay)
+               (@< |Return buffer and offset| buf* len* off*)]
+              [(warn)
+               (archive-warning 'archive-read-data-block arc)
+               (@< |Return buffer and offset| buf* len* off*)]
+              [(eof)
+               (@< |Free foreign blocks| buf* len* off*)
+               (eof-object)]
+              [else
+                (@< |Free foreign blocks| buf* len* off*)
+                (archive-error 'archive-read-data-block arc)])))))))
 ))
 
 (@ "If we have a successful call to the |archive_read_data_block()|
@@ -504,9 +569,7 @@ bytevector and convert the offset."
     (do ([i 0 (+ i 1)])
         [(>= i len)]
       (bytevector-u8-set! buf i (foreign-ref 'unsigned-8 buf i)))
-    (foreign-free buf*)
-    (foreign-free len*)
-    (foreign-free off*)
+    (@< |Free foreign blocks| buf* len* off*)
     (values buf offset)))
 ))
 
@@ -514,11 +577,10 @@ bytevector and convert the offset."
 allocated blocks of memory that we should free whenever we encounter
 such an error case to avoid creating leaks."
 
-(@> |Free foreign blocks and raise error| (capture arc buf* len* off*)
+(@> |Free foreign blocks| (capture buf* len* off*)
 (foreign-free buf*)
 (foreign-free len*)
 (foreign-free off*)
-(archive-error 'archive-read-data-block arc)
 ))
 
 (@ "We'll put the |archive-read-data-block| procedure into the library
@@ -548,9 +610,11 @@ procedure."
         (unless ptr
           (error 'archive-read-data-skip
             "archive already finished" arc))
-        (let ([res (skip ptr)])
-          (unless (zero? res)
-            (archive-error 'archive-read-data-skip arc)))))))
+        (case (status (skip ptr))
+          [(okay) (void)]
+          [(warn) (archive-warning 'archive-read-data-skip arc)]
+          [(eof) (warning 'archive-read-data-skip "eof encountered")]
+          [else (archive-error 'archive-read-data-skip arc)])))))
 ))
 
 (@ "It's also nice to be able to send everything to an output port.
@@ -572,7 +636,7 @@ unsure of how to tell when we're at the end of the block."
 (define (archive-read-data-port arc op)
   (assert (archive-read? arc))
   (assert (and (output-port? op) (binary-port? op)))
-  (assert (port-hash-set-port-position!? op))
+  (assert (port-has-set-port-position!? op))
   (let ([ptr (archive-ptr arc)])
     (unless ptr
       (error 'archive-read-data-port 
@@ -612,9 +676,10 @@ non-success exit status."
       (assert (archive-read? arc))
       (let ([ptr (archive-ptr arc)])
         (when ptr
-          (let ([res (close ptr)])
-            (unless (zero? res)
-              (archive-error 'archive-read-close arc))))))))
+          (case (status (close ptr))
+            [(okay) (void)]
+            [(warn) (archive-warning 'archive-read-close arc)]
+            [else (archive-error 'archive-read-close arc)]))))))
 ))
 
 (@* 2 "Finishing read archives"
@@ -653,10 +718,12 @@ affect the storage manager."
         (when ptr
           (map unlock-object (archive-locked arc))
           (archive-locked-set! arc '())
-          (let ([res (finish ptr)])
-            (if (zero? res)
-                (archive-ptr-set! arc #f)
-                (archive-error 'archive-read-finish arc))))))))
+          (case (status (finish ptr))
+            [(okay) (archive-ptr-set! arc #f)]
+            [(warn)
+             (archive-warning 'archive-read-finish arc)
+             (archive-ptr-set! arc #f)]
+            [else (archive-error 'archive-read-finish arc)]))))))
 ))
 
 (@* "Working with archive entries"
@@ -872,7 +939,7 @@ these getters, they follow this basic pattern:
             (let ([res (get ptr)])
               <error-handling>
               <conversion-and-return>)
-            (error '<getter> "archive entry has been freed"))))))
+            (error '<getter> \"archive entry has been freed\"))))))
 |endverbatim
 \\medskip
 
@@ -944,7 +1011,7 @@ setters. The following template suffices to handle the copiers.
       (let ([ptr (archive-entry-ptr entry)])
         (if ptr
             (copy ptr str)
-            (error '<copier> "archive entry has been freed"))))))
+            (error '<copier> \"archive entry has been freed\"))))))
 |endverbatim
 \\medskip
 
@@ -1008,18 +1075,70 @@ will first grab the error number and the error string from the |archive|
 object, and place these in the error message."
 
 (@c
-(define archive-error
-  (let ([errno (foreign-procedure "archive_errno" (uptr) int)]
-        [errstr (foreign-procedure "archive_error_string" 
-                  (uptr) string)])
-    (lambda (name arc)
-      (assert (archive? arc))
-      (let ([ptr (archive-ptr arc)])
-        (if ptr
-            (errorf name "foreign archive error ~a: ~a"
-              (errno ptr)
-              (errstr ptr))
-            (error 'archive-error "archive already finalized" arc))))))
+(define errno (foreign-procedure "archive_errno" (uptr) int))
+(define errstr (foreign-procedure "archive_error_string" (uptr) string))
+(define (archive-error name arc)
+  (assert (archive? arc))
+  (let ([ptr (archive-ptr arc)])
+    (if ptr
+        (errorf name "foreign archive error ~a: ~a"
+          (errno ptr)
+          (errstr ptr))
+        (error 'archive-error "archive already finalized" arc))))
+))
+
+(@ "In addition to an error version, it would also be nice to have a
+warning version."
+
+(@c
+(define (archive-warning name arc)
+  (assert (archive? arc))
+  (let ([ptr (archive-ptr arc)])
+    (if ptr
+        (errorf name "foreign archive error ~a: ~a"
+          (errno ptr)
+          (errstr ptr))
+        (error 'archive-error "archive already finalized" arc))))
+))
+
+(@ "Most libarchive procedures actually return an erro class that tells
+you what type of error you're dealing with. Generally there are a few
+different types:
+
+\\numberedlist
+\\li Okay
+\\li Warning
+\\li End of File
+\\li Retriable
+\\li Fatal
+\\endnumberedlist
+
+\\noindent To deal with these possibilities, I use the following error
+code lookup function:
+
+\\medskip\\verbatim
+(status error-code) => error-status
+|endverbatim
+\\medskip
+
+\\noindent The above procedure translates a numeric error-code into an
+error-status symbol, which is one of: |okay|, |warn|, |eof|, |retry|,
+|fail|, or |fatal|.
+
+{\\it Implementor's Note:} I have done this by actually looking into the
+|archive.h| header file and grabbing out the magic numbers. This is a
+lazy way of doing it. It would be better to use |(arcfide ffi-bind)|."
+
+(@c
+(define (status code)
+  (case code
+    [(0) 'okay]
+    [(1) 'eof]
+    [(-10) 'retry]
+    [(-20) 'warn]
+    [(-25) 'fail]
+    [(-30) 'fatal]
+    [else 'unknown]))
 ))
 
 (@* "Registering the collection handlers"
@@ -1028,12 +1147,16 @@ the collection procedures must be registered as part of the collection
 handlers. The following procedure is provided to make this easier."
 
 (@c
+(define old-handler #f)
 (define (register-archive-collection-handlers)
   (let ([current-handler (collect-request-handler)])
+    (set! old-handler current-handler)
     (collect-request-handler
       (lambda ()
         (archive-read-collect)
         (archive-entry-collect)
         (current-handler)))))
+(define (remove-archive-collection-handlers)
+  (when old-handler (collect-request-handler old-handler)))
 ))
 )
