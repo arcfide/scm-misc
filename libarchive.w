@@ -73,6 +73,7 @@ work before it can be considered a complete library."
   archive-read-filter-options-set!
   archive-read-format-options-set!
   archive-read-options-set!
+  archive-read-open
   archive-read-open-filename
   archive-read-open-bytevector
   archive-read-next-header
@@ -419,8 +420,203 @@ associated locked objects."
           [else (archive-error 'archive-read-open-bytevector a)])))))
 ))
 
-(@ "XXX TODO: Write a binding for the |archive_read_open()| and
-|archive_read_open2()| procedures.")
+(@ "The |archive_read_open2()| procedure actually allows you to control
+the way that an archive reads in bytes from whatever source it is
+reading. It does this by allowing the archive to have four individual
+procedures that it calls to open, read, skip and close on the data. The
+actual prototype looks like this:
+
+\\medskip\\verbatim
+int archive_read_open2(struct archive *, void *client_data,
+    archive_open_callback *, archive_read_callback *,
+    archive_skip_callback *, archive_close_callback *);
+typedef ssize_t archive_read_callback(struct archive *,
+    void *client_data, const void **buffer);
+typedef int archive_skip_callback(struct archive *, void *client_data,
+    size_t request);
+typedef int archive_open_callback(struct archive *, void *client_data);
+typedef int archive_close_callback(struct archive *, void *client_data);
+|endverbatim
+\\medskip
+
+\\noindent This isn't very Schemely, however, so the interface I'd like
+to provide goes something more like this:
+
+\\medskip\\verbatim
+(archive-read-open archive open-callback read-callback skip-callback 
+  close-callback)
+(open-callback)
+(close-callback)
+(read-callback) => bytevector
+(skip-callback count) => actual-skipped-bytes
+|endverbatim
+\\medskip
+
+\\noindent This assumes that the procedures will make use of some
+closures and whatnot, and that they will use the normal Schemely means
+of error reporting and the like. I don't know whether this will cause
+instability in the program, but it should work okay.
+
+Specifically, the read and skip callbacks are the most interesting. The
+read callback should continue to return a bytevector at a time worth of
+the bytes that are being read in. The skip callback should receive the
+number of bytes to skip and should try to skip over them, returning the
+number of bytes that were actually skipped."
+  
+(@> |Define archive-read-open| (export archive-read-open)
+(define archive-read-open
+  (let ([$open (foreign-procedure "archive_read_open2"
+                 (uptr uptr uptr uptr uptr uptr) int)])
+    (lambda (arc open read skip close)
+      (@< |Define foreign callbacks| arc open read skip close)
+      (assert (archive-read? arc))
+      (let ([ptr (archive-ptr arc)])
+        (unless ptr
+          (error 'archive-read-open
+            "archive already finished" arc))
+        (@< |Lock and register foreign callbacks| arc 
+            ffi-read-co ffi-skip-co ffi-open-co ffi-close-co)
+        (case (status 
+                ($open ptr 0 
+                  ffi-open-ptr ffi-read-ptr ffi-skip-ptr ffi-close-ptr))
+          [(okay) (void)]
+          [(warn) (archive-warning 'archive-read-open arc)]
+          [(eof) (error 'archive-read-open "eof unexpected" arc)]
+          [else (archive-error 'archive-read-open arc)])))))
+))
+
+(@ "The foreign code objects that are created from the foreign callbacks
+must be locked so that they don't change position or disappear while
+they live in the foreign archive code. To ensure that they will
+eventually be unlocked at some future point when the archive is no
+longer needed, we also register them in the |locked| field of the
+archive object itself."
+
+(@> |Lock and register foreign callbacks|
+(capture arc ffi-read-co ffi-skip-co ffi-open-co ffi-close-co)
+(lock-object ffi-read-co)
+(lock-object ffi-skip-co)
+(lock-object ffi-open-co)
+(lock-object ffi-close-co)
+(archive-locked-set! arc 
+  (append 
+    (list ffi-read-co ffi-skip-co ffi-open-co ffi-close-co)
+    (archive-locked arc)))
+))
+
+(@ "The callbacks that we generate make use of the given read, skip,
+open, and close callbacks, but they need to have different signatures to
+work with the foreign |archive_read_open2()| procedure. Additionally,
+they will have to close over a variable |buffer| that indicates where in
+the reading process they are. This |buffer| is a foreign allocated
+object that will let the foreign code read data from it. We will fill
+this buffer from the bytevector that we receive from the read callback."
+
+(@> |Define foreign callbacks| 
+(capture arc open read skip close)
+(export ffi-read-ptr ffi-read-co ffi-open-ptr ffi-open-co
+        ffi-skip-ptr ffi-skip-co ffi-close-ptr ffi-close-co)
+(define buffer #f)
+(@< |Define close callback| close buffer ffi-close-co ffi-close-ptr)
+(@< |Define read callback| read buffer ffi-read-co ffi-read-ptr)
+(@< |Define skip callback| skip ffi-skip-co ffi-skip-ptr)
+(@< |Define open callback| open ffi-open-co ffi-open-ptr)
+))
+
+(@ "The read callback is in charge of keeping the buffer updated and
+filled. It does this by grabbing bytes from the |read| callback, which,
+when called with zero arguments, returns the next set of bytes or
+|#!eof|. Remeber that the read callback is only called with the previous
+buffer has been consumed or when there was no previous buffer to begin
+with. 
+
+We only want to initialize the buffer when we either don't
+have one, or the bytevector we have received is actually larger than the
+buffer we have allocated. In the latter case, we will free up the
+existing buffer and allocate a buffer that is as big as the bytevector.
+
+We return the number of bytes that are available in the buffer. We also
+want to make sure that we set the buf pointer correctly every time, as
+we are not sure whether the buffer pointer will remain the same.
+
+{\\it XXX Implementor's Note:} We are doing a copy here, which is a bit
+extra than I would like. I don't know of a better way to do this right
+now, and I don't know how much it will affect speed, so I'm going to
+leave it for now."
+
+(@> |Define read callback| (capture read buffer ffi-read-co ffi-read-ptr)
+(export ffi-read-co ffi-read-ptr)
+(define buffer-length #f)
+(define (ffi-read arc* cd* buf**)
+  (let* ([bv (read)]
+         [bvl (and (not (eof-object? bv)) (bytevector-length bv))])
+    (if (eof-object? bv)
+        0
+        (begin
+          (when (and buffer-length (< buffer-length bvl))
+            (foreign-free buffer) 
+            (set! buffer #f))
+          (unless buffer
+            (set! buffer (foreign-alloc bvl))
+            (set! buffer-length bvl))
+          (foreign-set! 'uptr buf** 0 buffer)
+          (do ([i 0 (fx1+ i)])
+              [(= i bvl) bvl]
+            (foreign-set! 'unsigned-8 buffer i 
+              (bytevector-u8-ref bv i)))))))
+(define ffi-read-co
+  (foreign-callable ffi-read (uptr uptr uptr) long))
+(define ffi-read-ptr (foreign-callable-entry-point ffi-read-co))
+))
+
+(@ "The skip callback is in charge of skipping over various pieces. We
+don't actually have much to do here, because we are assuming that the
+given skip callback that we define will already skip over the correct
+amount and return to use the right value. In this sense, we're just a
+mostly needless wrapper."
+
+(@> |Define skip callback| (capture skip ffi-skip-co ffi-skip-ptr)
+(export ffi-skip-co ffi-skip-ptr)
+(define (ffi-skip arc* cd* request)
+  (skip request))
+(define ffi-skip-co
+  (foreign-callable ffi-skip (uptr uptr unsigned-long) int))
+(define ffi-skip-ptr (foreign-callable-entry-point ffi-skip-co))
+))
+
+(@ "I also don't know of anything that has to happen explicitly for
+opening. We just have to make sure to return |ARCHIVE_OK| if everything
+executes successfully."
+
+(@> |Define open callback| (capture open ffi-open-co ffi-open-ptr)
+(export ffi-open-co ffi-open-ptr)
+(define (ffi-open arc* cd*)
+  (open)
+  0)
+(define ffi-open-co
+  (foreign-callable ffi-open (uptr uptr) int))
+(define ffi-open-ptr (foreign-callable-entry-point ffi-open-co))
+))
+
+(@ "For closing, we do need to make sure that we free up the buffer that
+we allocated."
+
+(@> |Define close callback| 
+(capture close buffer ffi-close-co ffi-close-ptr)
+(export ffi-close-co ffi-close-ptr)
+(define (ffi-close arc* cd*)
+  (close)
+  (foreign-free buffer)
+  0)
+(define ffi-close-co
+  (foreign-callable ffi-close (uptr uptr) int))
+(define ffi-close-ptr (foreign-callable-entry-point ffi-close-co))
+))
+
+(@ "Let's put this all into the library now."
+(@c
+(@< |Define archive-read-open|)
+))
 
 (@* 2 "Iterating over headers"
 "Generally, when dealing with a stream, you will iterate over the
@@ -507,10 +703,7 @@ given entry. I haven't figured out why it is important, actually.
 
 The |archive_read_data_into_fd()| procedure is basically a way to write
 and entire archive entry into a file descriptor, which corresponds
-nicely to the Scheme idea of writing to an output port. We'll want to
-make sure that this works mostly the same way, but we'll need to
-implement it natively in Scheme because we have no way to convert output
-ports into file descriptors.
+nicely to the Scheme idea of writing to an output port.
 
 Anyways, on to the main and primarily useful function.
 
@@ -529,29 +722,29 @@ will increase."
 (@> |Define archive-read-data-block| (export archive-read-data-block)
 (define archive-read-data-block
   (let ([read-block (foreign-procedure "archive_read_data_block"
-                      (uptr uptr uptr uptr) int)])
-    (lambda (arc)
-      (assert (archive-read? arc))
-      (let ([ptr (archive-ptr arc)])
-        (unless ptr
-          (error 'archive-read-data-block
-            "archive already finished" arc))
-        (let ([uptr/size (foreign-sizeof 'uptr)])
-          (let ([buf* (foreign-alloc uptr/size)]
-                [len* (foreign-alloc uptr/size)]
-                [off* (foreign-alloc uptr/size)])
-            (case (status (read-block ptr buf* len* off*))
-              [(okay)
-               (@< |Return buffer and offset| buf* len* off*)]
-              [(warn)
-               (archive-warning 'archive-read-data-block arc)
-               (@< |Return buffer and offset| buf* len* off*)]
-              [(eof)
-               (@< |Free foreign blocks| buf* len* off*)
-               (eof-object)]
-              [else
-                (@< |Free foreign blocks| buf* len* off*)
-                (archive-error 'archive-read-data-block arc)])))))))
+                      (uptr uptr uptr uptr) int)]
+        [memcpy (foreign-procedure "memcpy"
+                  (u8* uptr unsigned-long) uptr)]
+        [uptr/size (foreign-sizeof 'uptr)])
+    (let ([buf* (foreign-alloc uptr/size)]
+          [len* (foreign-alloc uptr/size)]
+          [off* (foreign-alloc uptr/size)])
+      (lambda (arc)
+        (assert (archive-read? arc))
+        (let ([ptr (archive-ptr arc)])
+          (unless ptr
+            (error 'archive-read-data-block
+              "archive already finished" arc))
+          (case (status (read-block ptr buf* len* off*))
+            [(okay)
+             (@< |Return buffer and offset| buf* len* off* memcpy)]
+            [(warn)
+             (archive-warning 'archive-read-data-block arc)
+             (@< |Return buffer and offset| buf* len* off* memcpy)]
+            [(eof)
+             (values (eof-object) #f)]
+            [else
+              (archive-error 'archive-read-data-block arc)]))))))
 ))
 
 (@ "If we have a successful call to the |archive_read_data_block()|
@@ -561,15 +754,12 @@ entry. We want to return a bytevector and an offset value instead of
 these pointers, so we need to extract out and copy the values into the
 bytevector and convert the offset."
 
-(@> |Return buffer and offset| (capture buf* len* off*)
+(@> |Return buffer and offset| (capture buf* len* off* memcpy)
 (let ([len (foreign-ref 'long len* 0)]
       [offset (foreign-ref 'long off* 0)]
       [fbuf (foreign-ref 'uptr buf* 0)])
   (let ([buf (make-bytevector len)])
-    (do ([i 0 (+ i 1)])
-        [(>= i len)]
-      (bytevector-u8-set! buf i (foreign-ref 'unsigned-8 buf i)))
-    (@< |Free foreign blocks| buf* len* off*)
+    (memcpy buf fbuf len)
     (values buf offset)))
 ))
 
@@ -629,8 +819,12 @@ We'd like something like this:
 make use of the |set-port-position!| procedure to move along offsets, so
 we need to make sure that the given port supports these operations.
 
-XXX TODO: Is this really how you use |archive-read-data-block|? I'm
-unsure of how to tell when we're at the end of the block."
+{\\it Implementor's Note:} This could have been implemented using the
+|archive_read_data_into_fd()| procedure, but we could only do this if we
+could grab a file descriptor out of the port. We can only do this if we
+have a file port, and while we can special case this, and probably
+should, the general case should still let us provide any sort of binary
+output port that we want. "
 
 (@c
 (define (archive-read-data-port arc op)
@@ -643,7 +837,7 @@ unsure of how to tell when we're at the end of the block."
         "archive already finished" arc))
     (let loop ()
       (let-values ([(buf off) (archive-read-data-block arc)])
-        (unless (zero? (bytevector-length buf))
+        (unless (eof-object? buf)
           (set-port-position! op off)
           (put-bytevector op buf)
           (loop))))))
@@ -1095,7 +1289,7 @@ warning version."
   (assert (archive? arc))
   (let ([ptr (archive-ptr arc)])
     (if ptr
-        (errorf name "foreign archive error ~a: ~a"
+        (warningf name "foreign archive warning ~a: ~a"
           (errno ptr)
           (errstr ptr))
         (error 'archive-error "archive already finalized" arc))))
