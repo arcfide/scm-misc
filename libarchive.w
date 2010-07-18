@@ -466,9 +466,13 @@ number of bytes that were actually skipped."
 (@> |Define archive-read-open| (export archive-read-open)
 (define archive-read-open
   (let ([$open (foreign-procedure "archive_read_open2"
-                 (uptr uptr uptr uptr uptr uptr) int)])
+                 (uptr uptr uptr uptr uptr uptr) int)]
+        [$memcpy (foreign-procedure "memcpy" 
+                   (u8* uptr unsigned-long) uptr)])
+    (define (foreign-bytevector-ptr bv) ($memcpy bv 0 0))
     (lambda (arc open read skip close)
-      (@< |Define foreign callbacks| arc open read skip close)
+      (@< |Define foreign callbacks| 
+          foreign-bytevector-ptr arc open read skip close)
       (assert (archive-read? arc))
       (let ([ptr (archive-ptr arc)])
         (unless ptr
@@ -513,12 +517,13 @@ object that will let the foreign code read data from it. We will fill
 this buffer from the bytevector that we receive from the read callback."
 
 (@> |Define foreign callbacks| 
-(capture arc open read skip close)
+(capture foreign-bytevector-ptr arc open read skip close)
 (export ffi-read-ptr ffi-read-co ffi-open-ptr ffi-open-co
         ffi-skip-ptr ffi-skip-co ffi-close-ptr ffi-close-co)
 (define buffer #f)
 (@< |Define close callback| close buffer ffi-close-co ffi-close-ptr)
-(@< |Define read callback| read buffer ffi-read-co ffi-read-ptr)
+(@< |Define read callback| 
+    foreign-bytevector-ptr read buffer ffi-read-co ffi-read-ptr)
 (@< |Define skip callback| skip ffi-skip-co ffi-skip-ptr)
 (@< |Define open callback| open ffi-open-co ffi-open-ptr)
 ))
@@ -537,35 +542,24 @@ existing buffer and allocate a buffer that is as big as the bytevector.
 
 We return the number of bytes that are available in the buffer. We also
 want to make sure that we set the buf pointer correctly every time, as
-we are not sure whether the buffer pointer will remain the same.
+we are not sure whether the buffer pointer will remain the same."
 
-{\\it XXX Implementor's Note:} We are doing a copy here, which is a bit
-extra than I would like. I don't know of a better way to do this right
-now, and I don't know how much it will affect speed, so I'm going to
-leave it for now."
-
-(@> |Define read callback| (capture read buffer ffi-read-co ffi-read-ptr)
+(@> |Define read callback| 
+(capture foreign-bytevector-ptr read buffer ffi-read-co ffi-read-ptr)
 (export ffi-read-co ffi-read-ptr)
-(define buffer-length #f)
 (define (ffi-read arc* cd* buf**)
   (let* ([bv (read)]
          [bvl (and (not (eof-object? bv)) (bytevector-length bv))])
     (if (eof-object? bv)
         0
         (begin
-          (when (and buffer-length (< buffer-length bvl))
-            (foreign-free buffer) 
-            (set! buffer #f))
-          (unless buffer
-            (set! buffer (foreign-alloc bvl))
-            (set! buffer-length bvl))
-          (foreign-set! 'uptr buf** 0 buffer)
-          (do ([i 0 (fx1+ i)])
-              [(= i bvl) bvl]
-            (foreign-set! 'unsigned-8 buffer i 
-              (bytevector-u8-ref bv i)))))))
+          (unlock-object buffer)
+          (set! buffer bv)
+          (lock-object buffer)
+          (foreign-set! 'uptr buf** 0 (foreign-bytevector-ptr buffer))
+          bvl))))
 (define ffi-read-co
-  (foreign-callable ffi-read (uptr uptr uptr) long))
+  (foreign-callable ffi-read (uptr uptr uptr) integer-64))
 (define ffi-read-ptr (foreign-callable-entry-point ffi-read-co))
 ))
 
@@ -580,7 +574,7 @@ mostly needless wrapper."
 (define (ffi-skip arc* cd* request)
   (skip request))
 (define ffi-skip-co
-  (foreign-callable ffi-skip (uptr uptr unsigned-long) int))
+  (foreign-callable ffi-skip (uptr uptr unsigned-long) integer-64))
 (define ffi-skip-ptr (foreign-callable-entry-point ffi-skip-co))
 ))
 
@@ -606,7 +600,7 @@ we allocated."
 (export ffi-close-co ffi-close-ptr)
 (define (ffi-close arc* cd*)
   (close)
-  (foreign-free buffer)
+  (unlock-object buffer)
   0)
 (define ffi-close-co
   (foreign-callable ffi-close (uptr uptr) int))
