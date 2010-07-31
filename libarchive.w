@@ -34,13 +34,6 @@ is visible and loaded."
 (load-shared-object "libarchive.so")
 ))
 
-(@* "Important TODOs"
-"\\numberedlist
-\\li Improve the way that errors are handled. Right now they are just
-single non-continuable conditions that are raised. this should change to
-reflect the situation as actually present in the libarchive functions.
-\\endnumberedlist")
-
 (@l "This library wraps the functionality of the libarchive library.
 Libarchive provides a convenient API for reading and writing of
 stream-oriented archive formats.
