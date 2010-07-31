@@ -45,7 +45,7 @@ you should  beware!"
 (define errno
   (let ([errno-ent (#%$foreign-entry "errno")])
     (lambda ()
-      (#%$object-ref 'integer-32 errno-ent 0))))
+      (foreign-ref 'int errno-ent 0))))
 
 (define errno-message
   (let ([$strerror (foreign-procedure "strerror" (fixnum) string)])
