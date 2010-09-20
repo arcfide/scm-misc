@@ -1,19 +1,108 @@
-\title{Query Parameters}
+#!chezscheme
+(@chezweb)
 
-\chapter{Overview}%
-Oleg's CGI Processing utilities work well for CGI code, but if we just want to handle general 
-query strings, then we need to modify his code slightly. The following is essentially a 
-modified version of [[(oleg cgi processing)]] to allow for it to be used more generally, 
-with non-cgi applications.
+"\\centerline{
+  \\titlef Query Parameters}
+\\bigskip
+\\centerline{Aaron W. Hsu {\\tt <arcfide@sacrideo.us>}}
+\\medskip
+\\centerline{\\today}\\par
+\\bigskip\\rendertoc\\par
+\\vfill
+\\noindent
+Copyright $\\copyright$ 2010 Aaron W. Hsu {\\tt <arcfide@sacrideo.us>}
+\\medskip\\noindent
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+\\medskip\\noindent
+THE SOFTWARE IS PROVIDED ``AS IS'' AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\\par
+"
 
-\chapter{Implementation}%
-\procsig{[[query-string->parameters]]}{\var{Query String}}{\var{Query Parameter Alist}}
+(@l "Oleg's CGI Processing utilities work well for CGI code, but if we
+just want to handle general query strings, then we need to modify his
+code slightly.  The following is essentially a modified version of
+[[(oleg cgi processing)]] to allow for it to be used more generally,
+with non-cgi applications."
 
-\noindent This makes it easy to convert a query string into a set of query parameters 
-in the form of an Association list. It is roughtly the same as [[cgi:url-unquote]] from 
-[[cgi-util.scm]] by Oleg. A difference is that we automatically consolidate the parameters.
+(arcfide query-strings)
+(export query-parameter-lookup query-string->parameters)
+(import
+	(except (rnrs base) error)
+	(rnrs programs)
+	(rnrs io simple)
+	(rnrs mutable-pairs)
+	(rnrs unicode)
+	(rnrs exceptions)
+	(rnrs conditions)
+	(rnrs lists)
+	(rnrs control)
+	(rnrs mutable-strings)
+	(only (chezscheme)
+		with-input-from-string
+		with-output-to-string
+		display-condition
+		trace-define)
+	(only (srfi :13)
+		string-index-right
+		string-contains
+		string-null?
+		string-concatenate-reverse)
+	(oleg sxml-to-html)
+	(oleg prelude)
+	(srfi :23)
+	(srfi :0)
+	(srfi private include))
 
-<<Code>>=
+(@* "Implementation"
+"Firstly, we need to bring in the dependencies and other Oleg-isms
+that need to be around."
+
+(@c
+(define parser-error
+	(lambda (port msg . args)
+		(apply error (cons msg args))))
+
+(define abort
+	(lambda (condition)
+		(raise condition)))
+
+(define make-property-condition
+	(lambda (type . props)
+		(condition
+			(make-error)
+			(make-who-condition type)
+			(make-irritants-condition props))))
+
+(define condition-property-accessor
+	(lambda args
+		(raise (make-implementation-restriction-violation))))
+
+(include/resolve-ci ("oleg" "ssax" "lib") "char-encoding.scm")
+(include/resolve-ci ("oleg" "ssax" "lib") "util.scm")
+(include/resolve-ci ("oleg" "ssax" "lib") "input-parse.scm")
+))
+
+(@ "|query-string->parameters| makes it easy to convert a query string
+into a set of query parameters in the form of an association list.
+
+\\medskip\\verbatim
+(query-string->parameters query-string)
+|endverbatim
+\\medskip
+
+\\noindent
+This is roughtly the same as |cgi:url-unquote| from |cgi-util.scm| by
+Oleg.  A difference is that we automatically consolidate the
+parameters."
+
+(@c
 (define (query-string->parameters parm-string)
   (define (consolidate-duplicates alist)
     (let loop ((old-l alist) (new-l '()))
@@ -91,14 +180,17 @@ in the form of an Association list. It is roughtly the same as [[cgi:url-unquote
                          'have-read-value)
                      (else (error "unexpected status " status))))
                  (else (error "unexpected action-prefix " action-prefix))))))))))
-@
+))
 
-\procsig{[[query-parameter-lookup]]}{\var{parameters}}{\var{result}}
+(@ "|query-parameter-lookup| works the same way that |CGI:lookup| works, 
+but it accepts the parameters as an argument, and does not have the predefined 
+values.
 
-\noindent This works the same way that [[CGI:lookup]] works, but it accepts the 
-parameters as an argument, and doesn't have the predefined values.
+\\medskip\\verbatim
+(query-parameter-lookup parameters name type [default])
+|endverbatim"
 
-<<Code>>=
+(@c
 (define (query-parameter-lookup query-parms name type . default-value-l)
   (define (coerce type name . vals)
     (case type
@@ -138,70 +230,6 @@ parameters as an argument, and doesn't have the predefined values.
         (error "CGI name " name
           " was not found among form parameters: " query-parms))
       (else (car default-value-l)))))
-@
-
-\chapter{File Forms}%
-
-<<query-strings.scm>>=
-<<Code>>
-@
-
-<<query-strings.sls>>=
-(library (arcfide query-strings)
-  (export query-parameter-lookup query-string->parameters)
-  (import
-    (except (rnrs base) error)
-    (rnrs programs)
-    (rnrs io simple)
-    (rnrs mutable-pairs)
-    (rnrs unicode)
-    (rnrs exceptions)
-    (rnrs conditions)
-    (rnrs lists)
-    (rnrs control)
-    (rnrs mutable-strings)
-    (only (chezscheme)
-      with-input-from-string
-      with-output-to-string
-      display-condition
-      trace-define)
-    (only (srfi :13)
-      string-index-right
-      string-contains
-      string-null?
-      string-concatenate-reverse)
-    (oleg sxml-to-html)
-    (oleg prelude)
-    (srfi :23)
-    (srfi :0)
-    (srfi private include))
-
-(define parser-error
-  (lambda (port msg . args)
-    (apply error (cons msg args))))
-
-(define abort
-  (lambda (condition)
-    (raise condition)))
-
-(define make-property-condition
-  (lambda (type . props)
-    (condition
-      (make-error)
-      (make-who-condition type)
-      (make-irritants-condition props))))
-
-(define condition-property-accessor
-  (lambda args
-    (raise (make-implementation-restriction-violation))))
-
-(include/resolve-ci ("oleg" "ssax" "lib") "char-encoding.scm")
-(include/resolve-ci ("oleg" "ssax" "lib") "util.scm")
-(include/resolve-ci ("oleg" "ssax" "lib") "input-parse.scm")
-
-<<Code>>
+))
 
 )
-@
-
-
