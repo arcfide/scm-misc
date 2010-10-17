@@ -820,11 +820,13 @@ syntax for Datalog."
 	current-theory
 	eval-program
 	eval-statement
-	eval-program/fresh)
+	eval-program/fresh
+	datalog-repl)
 (import
 	(chezscheme)
 	(rename (only (chezscheme) lambda) (lambda λ))
 	(arcfide datalog ast)
+	(arcfide datalog sexp)
 	(arcfide datalog pretty-printing)
 	(arcfide datalog runtime))
 
@@ -894,6 +896,35 @@ syntax for Datalog."
 							thy])
 					 (cdr p))))))
 ))
+
+(@* "Datalog REPLs"
+"The following convenience form makes it easy to spawn a new interactive Datalog REPL for playing around with a specific datalog theorem.
+
+\\medskip\\verbatim
+(datalog-repl)
+(datalog-repl theory)
+|endverbatim
+\\medskip
+
+\\noindent
+The nullary version of this procedure creates a new REPL using |new-cafe| that has an empty, new, mutable theory. You can run SEXP datalog commands in it and it will print out the results of queries. The unary version uses the given theory as its starting point. We can create a new cafe like so:"
+
+(@> |New datalog cafe| (capture theory)
+(new-cafe
+	(λ (exp)
+		(let ([res (eval-statement (sexp->statement exp))])
+			(when (pair? res)
+				(display (format-literals res))))))
+))
+
+(@ "We can then use |case-lambda| for a nice little datalog repl creating procedure."
+
+(@c
+(define datalog-repl
+	(case-lambda
+		[() (let ([theory (make-mutable-theory)]) (@< |New datalog cafe| theory))]
+		[(theory) (@< |New datalog cafe| theory)]))
+))
 )
 
 (@l "This package contains a lightweight deductive database system.
@@ -953,6 +984,7 @@ queries terminate."
 	eval-program
 	eval-statement
 	eval-program/fresh
+	datalog-repl
 )
 (import
 	(arcfide datalog ast)
