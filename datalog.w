@@ -50,6 +50,13 @@ The pretty printing code for datalog output.
 The runtime system for datalog.
 \\item{|(arcfide datalog eval)|}
 The evaluation code for datalog.
+
+\\centerline{\\bf TODO List}\\bigskip
+
+\\orderedlist
+\\li Add more primitive predicates to the system.
+\\endorderedlist
+
 \\vfill\\par}"
 
 (@l "This library provides the structures that represent Datalog syntax."
@@ -62,7 +69,7 @@ The evaluation code for datalog.
 	constant constant? make-constant constant-srcloc constant-datum
 	constant-equal?
 	term?
-	term-equal?
+	term-equal? term->? term->=? term-<? term-<=? term-<>?
 	literal literal? make-literal literal-srcloc literal-predicate literal-terms
 	literal-equal? 
 	clause clause? make-clause clause-srcloc clause-head clause-body
@@ -73,8 +80,9 @@ The evaluation code for datalog.
 	statement?
 	program?
 )
-
-(import (chezscheme))
+(import 
+	(chezscheme)
+	(rename (only (chezscheme) lambda) (lambda λ)))
 
 (@* "Structures/Records"
 "The following form the abstract syntax tree elements."
@@ -160,10 +168,51 @@ by the Datalog abstract syntax tree."
 			(clause-body c1)
 			(clause-body c2))))
 ))
+
+(@* "Primitive Predicates"
+"In addition to the equivalence predicates above, we have a number of
+term level predicates that are used as primitives."
+
+(@c
+(define (make-term-comparator num-pred? string-pred?)
+	(λ (t1 t2)
+		(and (constant? t1) (constant? t2)
+			(let (
+					[d1 (constant-datum t1)]
+					[d2 (constant-datum t2)])
+				(or
+					(and (string? d1) (string? d2)
+						(string-pred? d1 d2))
+					(and (number? d1) (number? d2)
+						(num-pred? d1 d2)))))))
+(define term-<? (make-term-comparator < string<?))
+(define term-<=? (make-term-comparator <= string<=?))
+(define term->? (make-term-comparator > string>?))
+(define term->=? (make-term-comparator >= string>=?))
+(define term-<>? 
+	(make-term-comparator 
+		(λ (x y) (not (= x y)))
+		(λ (x y) (not (string=? x y)))))
+))
 )
 
 (@l "This package recognizes an alternative, Scheme-like front-end
-syntax for Datalog."
+syntax for Datalog.
+
+\\medskip\\verbatim
+program := (begin <statement> ...) 	 	 
+statement := <assertion> || <retraction> || <query>
+assertion  :=  (! <clause>)
+retraction  :=  (~ <clause>)
+query  :=  (? <literal>)
+clause  :=  (:- <literal> <literal> ...) ||  <literal>
+literal  :=  (<datum> <term> ...)
+term  :=  <variable> ||  <constant>
+variable  :=  (unquote :symbol)
+constant  :=  <datum>
+datum  :=  :symbol ||  :string
+|endverbatim
+\\medskip"
 
 (arcfide datalog sexp)
 (export
@@ -182,7 +231,10 @@ syntax for Datalog."
 	(chezscheme) 
 	(arcfide datalog ast))
 
-(@* "Wrapping S-expressions" ""
+(@* "Wrapping S-expressions" 
+"Generally speaking, our S-expression based form can come in either a
+syntax object form or a raw s-expression form.  We turn the raw datum
+form into syntax so that we can use |syntax-case| to parse it."
 
 (@c
 (define (sexpr? x) #t)
@@ -192,7 +244,10 @@ syntax for Datalog."
 		(s-> (datum->syntax #'dummy sexp))))
 ))
 
-(@* "Syntax Conversions" ""
+(@* "Syntax Conversions" 
+"The syntax conversions allow us to convert a syntax object
+representing the datalog program, assertion, and so forth, and convert
+it into the abstract syntax tree."
 
 (@c
 (define (stx->program stx)
@@ -202,7 +257,8 @@ syntax for Datalog."
 (define sexp->program (sexp-wrap stx->program))
 ))
 
-(@ ""
+(@ "Statements are either assertions, queries, or retractions.  We use
+explicit auxiliary keywords for the literals."
 
 (@c
 (define (stx->statement stx)
@@ -226,7 +282,7 @@ syntax for Datalog."
 		(syntax->datum x)))
 ))
 
-(@ ""
+(@ "A clause is either a literal or it is an implication or horn clause."
 
 (@c
 (define (stx->clause stx)
@@ -243,7 +299,8 @@ syntax for Datalog."
 		(syntax->datum x)))
 ))
 
-(@ ""
+(@ "A literal is the combination of a datum at the front (the
+predicate) and the terms, which are either variables or data."
 
 (@c
 (define (stx->literal stx)
@@ -255,7 +312,7 @@ syntax for Datalog."
 (define sexp->literal (sexp-wrap stx->literal))
 ))
 
-(@ ""
+(@ "A term is either a variable or a constant."
 
 (@c
 (define (stx->term stx)
@@ -269,12 +326,12 @@ syntax for Datalog."
 (define sexp->term (sexp-wrap stx->term))
 ))
 
-(@ ""
+(@ "This are just some ways of handling data."
 
 (@c
 (define (datum-syntax? stx)
 	(define d (syntax->datum stx))
-	(or (symbol? d) (string? d)))
+	(or (symbol? d) (string? d) (number? d)))
 (define (stx->datum stx)
 	(syntax-case stx ()
 		[d
@@ -283,7 +340,12 @@ syntax for Datalog."
 ))
 )
 
-(@l "This library provides facilities for pretty-printing Datalog source."
+(@l "This library provides facilities for pretty-printing Datalog
+source.  This code is based on the Common Lisp Formatted output
+program |format|, which is opposition to the Racket version of this
+code, which uses pprint and some other things.  Actually, there are
+now at least two different versions in Racket, one which uses the
+pprint libraries, and one that does not."
 
 (arcfide datalog pretty-printing)
 (export
@@ -304,7 +366,15 @@ syntax for Datalog."
 	(rename (only (chezscheme) lambda) (lambda λ))
 	(arcfide datalog ast))
 
-(@ ""
+(@ "When we format a datum, it should come out in a reasonable form.
+Here are some examples:
+
+\\medskip\\verbatim
+> (printf \"~a~n\" (format-datum 'sym))
+sym
+> (printf \"~a~n\" (format-datum \"str\"))
+\"str\"
+|endverbatim \\medskip"
 
 (@c
 (define (format-datum s)
@@ -312,10 +382,22 @@ syntax for Datalog."
 		[(string? s)
 			(format "~S" s)]
 		[(symbol? s)
-			(symbol->string s)]))
+			(symbol->string s)]
+		[(number? s) 
+			(format "~d" s)]))
 ))
 
-(@ ""
+(@ "Variables and constants get formatted just the same as any other
+datum.  For example:
+
+\\medskip\\verbatim
+> (printf \"~a~n\" (format-variable (make-variable #f 'Ancestor)))
+Ancestor
+> (printf \"~a~n\" (format-constant (make-constant #f 'joseph)))
+joseph
+> (printf \"~a~n\" (format-constant (make-constant #f \"whom\")))
+\"whom\"
+|endverbatim \\medskip"
 
 (@c
 (define (format-variable v)
@@ -324,7 +406,7 @@ syntax for Datalog."
 	(format-datum (constant-datum c)))
 ))
 
-(@ ""
+(@ "Printing a term is just the same as printing any data,"
 
 (@c
 (define (format-term t)
@@ -335,17 +417,38 @@ syntax for Datalog."
 			(format-constant t)]))
 ))
 
-(@ ""
+(@ "A literal can be either a single datum, a predicate, or an infix
+predicate.  We special case any of the primitives to be infix binary. For example:
+
+\\medskip\\verbatim
+> (printf \"~a~n\" (format-literal (make-literal #f 'true (list))))
+true
+> (printf \"~a~n\" (format-literal 
+	(make-literal (make-literal #f '=
+		(list (make-constant #f 'joseph) (make-constant #f 'jay))))))
+joseph = jay
+> (printf \"~a~n\" 
+	(format-literal 
+		(make-literal #f 'ancestor
+			(list (make-variable #f 'A) (make-constant #f 'jay)))))
+ancestor(A, jay).
+|endverbatim \\medskip"
 
 (@c
+(define primitive-predicates
+	'(= >= > < <= <>))
 (define (format-literal l)
 	(assert (literal? l))
 	(let ([pred (literal-predicate l)] [terms (literal-terms l)])
 		(cond
 			[(null? terms) (format-datum pred)]
-			[(and (eq? '= pred) (list? terms) (= 2 (length terms)))
-				(format "~a = ~a" 
+			[(and 
+				(memq pred primitive-predicates) 
+				(list? terms) 
+				(= 2 (length terms)))
+				(format "~a ~a ~a" 
 					(format-term (car terms))
+					pred
 					(format-term (cadr terms)))]
 			[else
 				(format "~a(~{~a~^, ~})"
@@ -353,7 +456,7 @@ syntax for Datalog."
 					(map format-term terms))])))
 ))
 
-(@ ""
+(@ "We may also want to format a list of literals, one per line."
 
 (@c
 (define (format-literals ls)
@@ -365,7 +468,9 @@ syntax for Datalog."
 			ls)))
 ))
 
-(@ ""
+(@ "Formatting a clause is a single literal unless we have a horn
+clause, in which case we need to print the head of the clause to the
+left of the horn."
 
 (@c
 (define (format-clause c)
@@ -376,7 +481,10 @@ syntax for Datalog."
 			(map format-literal (clause-body c)))))
 ))
 
-(@ ""
+(@ "Assertions, retractions, and queries are the same as formatting a
+clause, with the additional character at the end that determines what
+sort of clause it is.  This could be a period, tilde, or question
+mark, respectively."
 
 (@c
 (define (format-assertion a)
@@ -387,7 +495,8 @@ syntax for Datalog."
 	(format "~a?" (format-literal (query-literal q))))
 ))
 
-(@ ""
+(@ "A statement is basically one of either an assertion, query, or
+retraction.  "
 
 (@c
 (define (format-statement s)
@@ -400,7 +509,8 @@ syntax for Datalog."
 ))
 )
 
-(@l ""
+(@l "The Datalog runtime system provides the means for interacting
+with theories and make retractions, assertions, and queries."
 
 (arcfide datalog runtime)
 (export
@@ -415,7 +525,11 @@ syntax for Datalog."
 	(arcfide datalog ast))
 
 (@* "Environment module"
-""
+"Environments are modelled using immutable hash tries.  We use the
+implementation from Taylor Campbell's library for this, but this
+should work with any decent constant time lookup structure.  It would
+be interesting to see how the performance is affected by using
+association lists instead of hash tries."
 
 (@c
 (define hash-trie-type:equal (make-hash-trie-type equal? equal-hash))
@@ -431,7 +545,12 @@ syntax for Datalog."
 ))
 
 (@* "Substitution"
-""
+"Substitutions of the runtime are handled here.  I don't really know
+how it all works at the moment, so I am leaving this fairly blank.
+Basically, there are substitutions, where you lookup the values in the
+environment,and there are renames.  There is also a strange procedure
+known as |shuffle|.  I am not sure what shuffling does, and I don't
+want to study it too hard at the moment."
 
 (@> |Substitution procedures| 
 (export subst-term subst-clause rename-clause rename-literal)
@@ -489,14 +608,16 @@ syntax for Datalog."
 	(subst-literal (shuffle (empty-env) lit) lit))
 ))
 
-(@ ""
+(@ "Let's make sure that the useful ones are available for the rest of
+the code."
 
 (@c
 (@< |Substitution procedures|)
 ))
 
 (@* "Unification module"
-""
+"Unification is done in a fairly naive way, so I won't belabor the
+point here.  It's standard unification."
 
 (@> |Unification procedures|
 (export unify unify-term)
@@ -538,14 +659,15 @@ syntax for Datalog."
 			(literal-terms l2))))
 ))
 
-(@ ""
+(@ "Let's make these available at the top-level."
 
 (@c
 (@< |Unification procedures|)
 ))
 
 (@* "Variant term module"
-""
+"I don't really know what any of this stuff does.  I really should
+document it more clearly at some point.  "
 
 (@> |Variant term procedures|
 (export literal-tbl? make-literal-tbl literal-tbl-find literal-tbl-replace! mem-literal)
@@ -629,17 +751,16 @@ syntax for Datalog."
 
 ))
 
-(@ ""
+(@ "Make them all visible."
 
 (@c
 (@< |Variant term procedures|)
 ))
 
 (@* "Clause safety"
-""
+"A clause is safe if every variable in its head occurs in some literal in its body."
 
 (@c
-; A clause is safe if every variable in its head occurs in some literal in its body.
 (define (safe-clause? c)
 	(for-all 
 		(λ (v)
@@ -653,7 +774,11 @@ syntax for Datalog."
 ))
 
 (@* "Predicates"
-""
+"We need to define some simple predicates to distinguish and recognize
+the various theories.  We aren't using disjoint types here, but that
+isn't too important at this point.  It would be better to provide a
+bit more abstraction here, because these are visible to the outside
+world, though."
 
 (@c
 (define (theory? x)
@@ -665,7 +790,7 @@ syntax for Datalog."
 ))
 
 (@* "Keys"
-""
+"I don't know."
 
 (@c
 (define (literal-key l)
@@ -675,7 +800,9 @@ syntax for Datalog."
 ))
 
 (@* "Theory Constructors"
-""
+"The basic constructors for mutable and immutable theories.  I use a
+hash-trie for the immutable theories, and a mutable hashtable for the
+mutable theories.  Both of these work on |equal?| equivalence."
 
 (@c
 (define (make-immutable-theory)
@@ -685,7 +812,21 @@ syntax for Datalog."
 ))
 
 (@* "Theorem Functions"
-""
+"Finally we can define the basic runtime functions. 
+
+\\medskip\\verbatim
+(assume theory clause) 
+(assume! theory clause)
+(retract theory clause)
+(retract! theory clause)
+(get theory literatl)
+|endverbatim
+\\medskip
+
+\\noindent
+The mutating versions are marked by the exclamation point and work on
+mutable theories, while the non-mutable ones return newly extended or
+retracted theories from immutable theories.  "
 
 (@c
 (define (mk-assume hash-update) 
@@ -719,7 +860,8 @@ syntax for Datalog."
 ))
 
 (@* "Subgoals"
-""
+"A subgoal is used internally when dealing with searching for problem
+solutions."
 
 (@c
 (define-record-type subgoal
@@ -730,7 +872,50 @@ syntax for Datalog."
 ))
 
 (@* "Proving Theories"
-""
+"The actual proving techniques are a little troublesome to understand,
+but they basically use a tabling technique for the intermediate
+results, which is supposedly a well known technique for doing fast
+proofs.")
+
+(@ "We have the following primitive predicates, which are used further
+down in the following code."
+
+(@c
+(define primitive-predicates
+	`((= . ,term-equal?)
+		(>= . ,term->=?)
+		(> . ,term->?)
+		(< . ,term-<?)
+		(<= . ,term-<=?)
+		(<> . ,term-<>?)))
+))
+
+(@ "When attempting to deal with subgoals that are literals, we need to
+handle the case when these literals are primitive predicates.  We do
+this by unifying the terms if necessary and then checking whether the
+predicate holds.  If it does, we insert it into our system as a fact."
+
+(@> |Deal with primitves| (capture sg sglit fact!)
+(λ (pred-pair)
+	(let (
+			[srcloc (literal-srcloc sglit)] 
+			[terms (literal-terms sglit)]
+			[pred-sym (car pred-pair)]
+			[term-test? (cdr pred-pair)])
+		(define (test a b)
+			(when (term-test? a b)
+				(fact! sg (make-literal srcloc pred-sym (list a b)))))
+		(cond
+			[(unify-term (empty-env) (car terms) (cadr terms)) =>
+				(λ (env)
+					(test 
+						(subst-term env (car terms))
+						(subst-term env (cadr terms))))]
+			[else (test (car terms) (cadr terms))])))	
+))
+
+(@ "The rest of the prover follows, and I don't really understand how
+it works."
 
 (@c
 (define (resolve c lit)
@@ -792,19 +977,10 @@ syntax for Datalog."
 			(cond
 				[(and 
 					(literal? sglit) 
-					(eq? '= (literal-predicate sglit)) 
-					(= 2 (length (literal-terms sglit))))
-					(let ([srcloc (literal-srcloc sglit)] [terms (literal-terms sglit)])
-						(define (equal-test a b)
-							(when (term-equal? a b)
-					 			(fact! sg (make-literal srcloc '= (list a b)))))
-						(cond
-							[(unify-term (empty-env) (car terms) (cadr terms)) =>
-								(λ (env)
-									(equal-test 
-										(subst-term env (car terms))
-										(subst-term env (cadr terms))))]
-							[else (equal-test (car terms) (cadr terms))]))]
+					(= 2 (length (literal-terms sglit))) 
+					(assq (literal-predicate sglit) primitive-predicates)) 
+					=>
+					(@< |Deal with primitves| sg sglit fact!)]
 				[else (search-theory! sg)])))
 	(define sg (make-subgoal lit '() '()))
 	(literal-tbl-replace! subgoals lit sg)
@@ -813,7 +989,8 @@ syntax for Datalog."
 ))
 )
 
-(@l ""
+(@l "This library provides facilities for evaluating Datalog programs,
+statements, and so forth."
 
 (arcfide datalog eval)
 (export
@@ -831,14 +1008,18 @@ syntax for Datalog."
 	(arcfide datalog runtime))
 
 (@* "Theory Parameter"
-""
+"We define a parameter for use as an implicit parameter for some
+procedures, namely, |eval-program| and |eval-statement|.  "
 
 (@c
 (define current-theory (make-parameter (make-mutable-theory)))
 ))
 
 (@* "Safe Assumptions"
-""
+"We need to have some checking that we can perform any time we want to
+have some sort of assumption.  We use the |safe-clause?| predicate to
+ensure that we have a safe assumption clause before we actually do the
+assumption."
 
 (@c
 (define (assume-if-safe assume thy s)
@@ -851,7 +1032,9 @@ syntax for Datalog."
 ))
 
 (@* "Printing"
-""
+"When we get back results, it is good to print the results to the
+standard output.  We use |print-literals| defined below for this
+purpose."
 
 (@c
 (define (print-literals ls)
@@ -859,7 +1042,16 @@ syntax for Datalog."
 ))
 
 (@* "Evaluation"
-""
+"Programs can be evaluated using |eval-program| as follows:
+
+\\medskip\\verbatim
+(eval-program datalog-program)
+|endverbatim
+\\medskip
+
+\\noindent 
+If any results are returned, then they will be printed out.  This uses
+the |current-theory| parameter as the theory on which to operate."
 
 (@c
 (define (eval-program p)
@@ -869,6 +1061,11 @@ syntax for Datalog."
 			(unless (eq? (void) v)
 				(print-literals v)))
 		p))
+))
+
+(@ "Statements are evaluated with the appropriate runtime procedures."
+
+(@c
 (define (eval-statement s)
 	(cond
 		[(assertion? s)
@@ -877,7 +1074,13 @@ syntax for Datalog."
 			(retract! (current-theory) (retraction-clause s))]
 		[(query? s)
 			(prove (current-theory) (query-literal s))]))
+))
 
+(@ "|eval-program/fresh| let's you evaluate a program in a fresh
+theory, and have that theory returned after completing the program.
+Any query responses are printed out as they are encountered."
+
+(@c
 (define (eval-program/fresh p)
 	(let loop (
 			[thy (make-immutable-theory)]
@@ -898,7 +1101,9 @@ syntax for Datalog."
 ))
 
 (@* "Datalog REPLs"
-"The following convenience form makes it easy to spawn a new interactive Datalog REPL for playing around with a specific datalog theorem.
+"The following convenience form makes it easy to spawn a new
+interactive Datalog REPL for playing around with a specific datalog
+theorem.
 
 \\medskip\\verbatim
 (datalog-repl)
@@ -907,7 +1112,11 @@ syntax for Datalog."
 \\medskip
 
 \\noindent
-The nullary version of this procedure creates a new REPL using |new-cafe| that has an empty, new, mutable theory. You can run SEXP datalog commands in it and it will print out the results of queries. The unary version uses the given theory as its starting point. We can create a new cafe like so:"
+The nullary version of this procedure creates a new REPL using
+|new-cafe| that has an empty, new, mutable theory.  You can run SEXP
+datalog commands in it and it will print out the results of queries.
+The unary version uses the given theory as its starting point.  We can
+create a new cafe like so:"
 
 (@> |New datalog cafe| (capture theory)
 (new-cafe
@@ -917,12 +1126,15 @@ The nullary version of this procedure creates a new REPL using |new-cafe| that h
 				(display (format-literals res))))))
 ))
 
-(@ "We can then use |case-lambda| for a nice little datalog repl creating procedure."
+(@ "We can then use |case-lambda| for a nice little datalog repl
+creating procedure."
 
 (@c
 (define datalog-repl
 	(case-lambda
-		[() (let ([theory (make-mutable-theory)]) (@< |New datalog cafe| theory))]
+		[() 
+			(let ([theory (make-mutable-theory)]) 
+				(@< |New datalog cafe| theory))]
 		[(theory) (@< |New datalog cafe| theory)]))
 ))
 )
@@ -943,7 +1155,7 @@ queries terminate."
 	constant constant? make-constant constant-srcloc constant-datum
 	constant-equal?
 	term?
-	term-equal?
+	term-equal? term-<? term-<=? term->? term->=? term-<>?
 	literal literal? make-literal literal-srcloc literal-predicate literal-terms
 	literal-equal? 
 	clause clause? make-clause clause-srcloc clause-head clause-body
