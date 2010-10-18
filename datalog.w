@@ -79,10 +79,12 @@ The evaluation code for datalog.
 	query query? make-query query-srcloc query-literal
 	statement?
 	program?
+	run-datalog/ast-tests
 )
 (import 
 	(chezscheme)
-	(rename (only (chezscheme) lambda) (lambda λ)))
+	(rename (only (chezscheme) lambda) (lambda λ))
+	(srfi :64))
 
 (@* "Structures/Records"
 "The following form the abstract syntax tree elements."
@@ -193,6 +195,204 @@ term level predicates that are used as primitives."
 	(make-term-comparator 
 		(λ (x y) (not (= x y)))
 		(λ (x y) (not (string=? x y)))))
+))
+
+(@* "Testing Suite"
+"The following groups the various tests together into a single testing suite for export."
+
+(@c
+(define (run-datalog/ast-tests)
+	(test-begin "AST")
+		(test-begin "Datum Equality")
+			(test-assert "str/str 1" (datum-equal? "str" "str"))
+			(test-assert "str/str 2" (not (datum-equal? "str1" "str2")))
+			(test-assert "sym/sym 1" (datum-equal? 'sym1 'sym1))
+			(test-assert "sym/sym" (not (datum-equal? 'sym1 'sym2)))
+			(test-assert "str/sym" (not (datum-equal? "str" 'sym)))
+			(test-assert "sym/str" (not (datum-equal? 'sym "str")))
+		(test-end "Datum Equality")
+		(test-begin "Variable Equality")
+			(test-assert "var/var" 
+				(variable-equal? 
+					(make-variable #f 'sym1) 
+					(make-variable #f 'sym1)))
+			(test-assert "var/var" 
+				(variable-equal? 
+					(make-variable #f 'sym1) 
+					(make-variable #'sym1 'sym1)))
+			(test-assert "var/var" 
+				(not 
+					(variable-equal? 
+						(make-variable #f 'sym1) 
+						(make-variable #f 'sym2))))
+			(test-assert "var/var" 
+				(not 
+					(variable-equal? 
+						(make-variable #f 'sym1) 
+						(make-variable #'sym2 'sym2))))
+		(test-end "Variable Equality")
+		(test-begin "Constant Equality")
+			(test-assert "sym/sym" 
+				(constant-equal? 
+					(make-constant #f 'sym1) 
+					(make-constant #f 'sym1)))
+			(test-assert "sym/sym" 
+				(constant-equal? 
+					(make-constant #f 'sym1) 
+					(make-constant #'sym1 'sym1)))
+			(test-assert "sym/sym" 
+				(not 
+					(constant-equal? 
+						(make-constant #f 'sym1) 
+						(make-constant #'sym1 'sym2))))
+			(test-assert "str/str" 
+				(constant-equal? 
+					(make-constant #f "sym1") 
+					(make-constant #f "sym1")))
+			(test-assert "str/str" 
+				(constant-equal? 
+					(make-constant #f "sym1") 
+					(make-constant #'sym1 "sym1")))
+			(test-assert "str/str" 
+				(not 
+					(constant-equal? 
+						(make-constant #f "sym1") 
+						(make-constant #'sym1 "sym2"))))
+			(test-assert "sym/str" 
+				(not 
+					(constant-equal? 
+						(make-constant #f 'sym1) 
+						(make-constant #'sym1 "sym2"))))
+			(test-assert "str/sym" 
+				(not 
+					(constant-equal? 
+						(make-constant #'sym1 "sym2") 
+						(make-constant #f 'sym1))))
+		(test-end "Constant Equality")
+		(test-begin "Term Equality")
+			(test-assert "var/var" 
+				(term-equal? 
+					(make-variable #f 'sym1) 
+					(make-variable #f 'sym1)))
+			(test-assert "var/var" 
+				(term-equal? 
+					(make-variable #f 'sym1) 
+					(make-variable #'sym1 'sym1)))
+			(test-assert "var/var" 
+				(not 
+					(term-equal? 
+						(make-variable #f 'sym1) 
+						(make-variable #f 'sym2))))
+			(test-assert "var/var" 
+				(not 
+					(term-equal? 
+						(make-variable #f 'sym1) 
+						(make-variable #'sym2 'sym2))))
+			(test-assert "sym/sym" 
+				(term-equal? 
+					(make-constant #f 'sym1) 
+					(make-constant #f 'sym1)))
+			(test-assert "sym/sym" 
+				(term-equal? 
+					(make-constant #f 'sym1) 
+					(make-constant #'sym1 'sym1)))
+			(test-assert "sym/sym" 
+				(not 
+					(term-equal? 
+						(make-constant #f 'sym1) 
+						(make-constant #'sym1 'sym2))))
+			(test-assert "str/str" 
+				(term-equal? 
+					(make-constant #f "sym1") 
+					(make-constant #f "sym1")))
+			(test-assert "str/str" 
+				(term-equal? 
+					(make-constant #f "sym1") 
+					(make-constant #'sym1 "sym1")))
+			(test-assert "str/str" 
+				(not 
+					(term-equal? 
+						(make-constant #f "sym1") 
+						(make-constant #'sym1 "sym2"))))
+			(test-assert "sym/str" 
+				(not 
+					(term-equal? 
+						(make-constant #f 'sym1) 
+						(make-constant #'sym1 "sym2"))))
+			(test-assert "str/sym" 
+				(not 
+					(term-equal? 
+						(make-constant #'sym1 "sym2") 
+						(make-constant #f 'sym1)))) 
+			(test-assert "con/var" 
+				(not 
+					(term-equal? 
+						(make-constant #'sym1 "sym2") 
+						(make-variable #f 'sym1))))
+			(test-assert "var/con" 
+				(not 
+					(term-equal? 
+						(make-variable #f 'sym1) 
+						(make-constant #'sym1 "sym2"))))
+		(test-end "Term Equality")
+		(test-begin "Literal Equality")
+			(test-assert "lit" 
+				(literal-equal? 
+					(make-literal #f 'lit1 '()) 
+					(make-literal #'lit1 'lit1 '())))
+			(test-assert "lit" 
+				(literal-equal? 
+					(make-literal #f 'lit1 (list (make-variable #f 'sym1)))
+					(make-literal #'lit1 'lit1 (list (make-variable #f 'sym1)))))
+			(test-assert "lit" 
+				(literal-equal? 
+					(make-literal #f 'lit1 (list (make-variable #f 'sym1)))
+					(make-literal #'lit1 'lit1 (list (make-variable #'sym1 'sym1)))))
+			(test-assert "lit" 
+				(not 
+					(literal-equal? 
+						(make-literal #f 'lit1 '()) (make-literal #'lit1 'lit2 '()))))
+			(test-assert "lit" 
+				(not 
+					(literal-equal? 
+						(make-literal #f 'lit1 (list (make-variable #f 'sym1))) 
+						(make-literal #'lit1 'lit2 '()))))
+			(test-assert "lit" 
+				(not 
+					(literal-equal? 
+						(make-literal #f 'lit1 (list (make-variable #f 'sym1)))
+						(make-literal #'lit1 'lit2 (list (make-variable #'sym1 'sym2))))))
+		(test-end "Literal Equality")
+		(test-begin "Clause Equality")
+			(test-assert "lit" 
+				(clause-equal? 
+					(make-clause #f (make-literal #f 'lit1 '()) '())
+					(make-clause #f (make-literal #f 'lit1 '()) '())))
+			(test-assert "lit" 
+				(clause-equal?
+					(make-clause #f (make-literal #f 'lit1 '()) (list (make-literal #f 'lit1 '())))
+					(make-clause #f (make-literal #f 'lit1 '()) (list (make-literal #f 'lit1 '())))))
+			(test-assert "lit" 
+				(clause-equal? 
+					(make-clause #f (make-literal #f 'lit1 '()) '())
+					(make-clause #'cl1 (make-literal #f 'lit1 '()) '())))
+			(test-assert "lit" 
+				(not 
+					(clause-equal? 
+						(make-clause #f (make-literal #f 'lit1 '()) '())
+						(make-clause #f (make-literal #f 'lit2 '()) '()))))
+			(test-assert "lit" 
+				(not 
+					(clause-equal? 
+						(make-clause #f (make-literal #f 'lit1 '()) (list (make-literal #f 'lit1 '())))
+						(make-clause #f (make-literal #f 'lit1 '()) '()))))
+			(test-assert "lit" 
+				(not 
+					(clause-equal? 
+						(make-clause #f (make-literal #f 'lit1 '()) (list (make-literal #f 'lit1 '())))
+						(make-clause #f (make-literal #f 'lit1 '()) (list (make-literal #f 'lit2 '()))))))
+		(test-end "Clause Equality")
+	(test-end "AST"))
 ))
 )
 
@@ -1197,14 +1397,26 @@ queries terminate."
 	eval-statement
 	eval-program/fresh
 	datalog-repl
+	run-datalog-tests
 )
 (import
 	(arcfide datalog ast)
 	(arcfide datalog sexp)
 	(arcfide datalog pretty-printing)
 	(arcfide datalog runtime)
-	(arcfide datalog eval))
+	(arcfide datalog eval)
+	(chezscheme)
+	(srfi :64))
 
-(@ "This package has no definitions of its own.")
+(@ "This package only re-exports various procedures.  It also provides
+the following grouping for the testing suites."
+
+(@c
+(define (run-datalog-tests)
+	(parameterize ([test-runner-current (test-runner-simple)])
+		(test-begin "Datalog")
+		(run-datalog/ast-tests)
+		(test-end "Datalog")))
+))
 
 )
