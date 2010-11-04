@@ -42,10 +42,12 @@ their own way of accomplishing this."
 you should  beware!"
 
 (@c
-(define errno
-  (let ([errno-ent (#%$foreign-entry "errno")])
-    (lambda ()
-      (foreign-ref 'int errno-ent 0))))
+(define errno 
+  (let ([get (foreign-procedure "get_errno" () int)])
+    (lambda () (get))))
+;   (let ([errno-ent (#%$foreign-entry "errno")])
+;     (lambda ()
+;       (foreign-ref 'int errno-ent 0))))
 
 (define errno-message
   (let ([$strerror (foreign-procedure "strerror" (fixnum) string)])

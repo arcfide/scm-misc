@@ -6,5 +6,8 @@ DOC_DIR=doc/
 
 all: ${FILES}
 
+.c.so: 
+	cc -shared -fPIC -o $*.so.1 $<
+
 include noweb_make.mk
 include chezweb_make.mk
