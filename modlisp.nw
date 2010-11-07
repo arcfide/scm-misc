@@ -59,10 +59,16 @@ called packets.
 
 <<Exports>>=
 make-modlisp-packet modlisp-packet-headers modlisp-packet-contents
+modlisp-packet-response-consumer modlisp-packet-response-consumer-set!
 @
 
 <<Datatypes>>=
-(define-record-type modlisp-packet (fields headers contents))
+(define-record-type modlisp-packet 
+  (fields headers contents (mutable response-consumer))
+  (protocol
+    (lambda (n)
+      (lambda (headers contents)
+        (n headers contents #f)))))
 @
 
 \section{Input/Ouput of Packets}%
@@ -201,7 +207,10 @@ the handler.
   (define empty-uri (string->uri ""))
   (define (packet-url p) (uri->string (get-modlisp-header p 'url empty-uri)))
   (define (get-response url p) 
-    (if url ((lookup-request-handler url) p) (make-500-response)))
+    (call-with-current-continuation
+      (lambda (k)
+        (modlisp-packet-response-consumer-set! p k)
+        (if url ((lookup-request-handler url) p) (make-500-response)))))
   (let ([incoming (get-packet in)])
     (and incoming
       (begin 
@@ -349,6 +358,19 @@ get-modlisp-parameter
 
 <<Imports>>=
 (arcfide query-strings)
+@
+
+\procsig{[[modlisp-respond]]}{\var{request} \var{response}}{}
+
+<<Exports>>=
+modlisp-respond
+@
+
+\noindent Responds to a given request with the given response.
+
+<<Utilities>>=
+(define (modlisp-respond req res)
+  ((modlisp-packet-response-consumer req) res))
 @
 
 \procsig{[[make-html-response]]}{\var{body}}{\var{Response Packet}}
