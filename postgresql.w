@@ -61,7 +61,25 @@ function call operations that are supported by the protocol. As
 documented in the PostgreSQL manual, new code should not use these 
 operations, and should instead use the aggregate function syntax 
 of SQL.")
+ 
+(@* "Loading this library"
+"This library relies on the |(arcfide sockets)| library, which has
+some foreign library dependencies. Before attempting to load this
+library, you should make sure that your application loads the correct
+libraries. As of the time of this writing this should be done with the
+following:
+ 
+\\medskip\\verbatim
+(load-shared-object \"libc.so.6\")
+(load-shared-object \"sockets.so.1\")
+(load-shared-object \"chez_errno.so.1\")
+|endverbatim
+\\medskip
 
+\\noindent
+The above are for Linux machines. You may have a different set of
+libraries for Windows or Mac OS X boxes.")
+ 
 (@* "Reading and writing utilities"
 "A lot of integers are being read and put onto ports in this
 interface. R6RS does not define anything that is really concise to do
@@ -342,6 +360,10 @@ ready."
     (#\A . ,get-notification-response-message)
     (#\t . ,get-parameter-description-message)
     (#\S . ,get-parameter-status-message)
+    (#\1 . ,get-parse-complete-message)
+    (#\s . ,get-portal-suspended-message)
+    (#\Z . ,get-ready-for-query-message)
+    (#\T . ,get-row-description-message)
     ))
 ))
  
@@ -1624,7 +1646,7 @@ array of object IDs for the parameters that may be prespecified."
           ((p #\P
               (+ (bytevector-length dest-bv)
                  (bytevector-length query-bv)
-                 6
+                 8
                  (* 4 (vector-length params)))
               (make-parse-message-writer dest-bv query-bv params))
            dest query params))))))
@@ -1660,6 +1682,402 @@ tests."
       (make-pred-test "Parse Message Predicate" parse-message?))))
 )) 
  
+(@ "The server response to a parse message is a Parse Complete
+message, at least, if it worked. It does not have any fields, and it
+uses `1' as its code."
+ 
+(@c
+(define-record-type parse-complete-message
+  (parent postgresql-backend-message)
+  (protocol
+    (lambda (p) (lambda () ((p))))))
+(define (get-parse-complete-message port len)
+  (make-parse-complete-message))
+(define run-parse-complete-tests
+  (let ([bv '#vu8(49 0 0 0 4)])
+    (make-backend-message-tester "Parse Complete Message" bv
+      make-parse-complete-message
+      (make-pred-test "Parse Complete Predicate"
+        parse-complete-message?))))
+))
+ 
+(@* "Passwords, portals, and queries"
+"This section details some of the messages for password messages,
+portal suspended messages, and two query oriented messages. 
+ 
+The frontend Password message contains only a single string field that
+contains the possibly encrypted password. 
+"
+ 
+(@c
+(define-record-type password-message
+  (parent postgresql-frontend-message)
+  (fields value)
+  (protocol
+    (lambda (p)
+      (lambda (pass)
+        (assert (string? pass))
+        (let ([bv (string->bytevector pass (native-transcoder))])
+          ((p #\p (+ 5 (bytevector-length bv))
+              (lambda (port)
+                (put-bytevector port bv) (put-u8 port 0)))
+           pass))))))
+(define run-password-tests
+  (let ([bv '#vu8(112 0 0 0 9 98 108 97 104 0)])
+    (make-frontend-message-tester "Password Message" bv
+      (lambda () (make-password-message "blah"))
+      (make-pred-test "Password Message Predicate" 
+        password-message?))))
+))
+ 
+(@ "If an Execute message's row-count limit is reached, then the
+backend will send a Port Suspended message to the client. This message
+uses `s' as its code and has no fields."
+ 
+(@c
+(define-record-type portal-suspended-message
+  (parent postgresql-backend-message)
+  (protocol
+    (lambda (p) (lambda () ((p))))))
+(define (get-portal-suspended-message port len)
+  (make-portal-suspended-message))
+(define run-portal-suspended-tests
+  (let ([bv '#vu8(115 0 0 0 4)])
+    (make-backend-message-tester "Portal Suspended Message" bv
+      make-portal-suspended-message
+      (make-pred-test "Portal Suspended Message Predicate" 
+        portal-suspended-message?))))
+))
+ 
+(@ "Now let's define two messages that work together. The first,
+Query, is a frontend message that uses `Q' as its code. it has only a
+string to represent the query as its sole field."
+ 
+(@c
+(define-record-type query-message
+  (parent postgresql-frontend-message)
+  (fields value)
+  (protocol 
+    (lambda (p)
+      (lambda (query)
+        (assert (string? query))
+        (let ([bv (string->bytevector query (native-transcoder))])
+          ((p #\Q (+ 5 (bytevector-length bv))
+              (lambda (port)
+                (put-bytevector port bv) (put-u8 port 0)))
+           query))))))
+(define run-query-tests
+  (let ([bv '#vu8(81 0 0 0 9 98 108 97 104 0)])
+    (make-frontend-message-tester "Query Message" bv
+      (lambda () (make-query-message "blah"))
+      (make-pred-test "Query Message Predicate" query-message?)
+      (make-accessor-test "Query Message Predicate" 
+        query-message-value "blah"))))
+))
+ 
+(@ "Whenever the server is ready for a new query, it will send a Ready
+for Query message. This is a message that has only a single one-byte
+field that contains one of the following values:
+ 
+\\medskip
+\\item{|I|} if the server is idle, that is, not a transaction block.
+\\item{|T|} if the server is in a transaction block.
+\\item{|E|} if the server is in a failed transaction block. In this
+state, queries will be rejected until the block is ended.
+\\medskip
+ 
+\\noindent
+Naturally, I want to use real symbols here instead of using these
+constants, so let's start by defining some procedures for handling
+this." 
+ 
+(@c
+(define (transaction-status? x) (memq x '(idle transaction error)))
+(define (byte->transaction-status x)
+  (case (integer->char x)
+    [(#\I) 'idle]
+    [(#\T) 'transaction]
+    [(#\E) 'error]
+    [else (errorf 'byte->transaction-status 
+            "unknown transaction status ~s" x)]))
+)) 
+ 
+(@ "Now that we have those, we can define the actual message type
+easily."
+ 
+(@c
+(define-record-type ready-for-query-message
+  (parent postgresql-backend-message)
+  (fields transaction-status)
+  (protocol
+    (lambda (p)
+      (lambda (status)
+        (assert (transaction-status? status))
+        ((p) status)))))
+(define (get-ready-for-query-message port len)
+  (make-ready-for-query-message
+    (byte->transaction-status (get-u8 port))))
+))
+ 
+(@ "And, of course, there are a few unit tests that need to be
+defined, especially to ensure that the accessor work."
+ 
+(@c
+(define run-ready-for-query-tests
+  (let ([bv '#vu8(90 0 0 0 5 73)])
+    (make-backend-message-tester "Ready for Query Message" bv
+      (lambda () (make-ready-for-query-message 'idle))
+      (make-pred-test "Ready for Query Message Predicate" 
+        ready-for-query-message?)
+      (make-accessor-test "Ready for Query Message Status"
+        ready-for-query-message-transaction-status 'idle))))
+))
+ 
+(@* "Row Description Messages"
+"A server might need to send some information to the client about the
+types and information about the fields in the rows that it is sending
+back to the client. These are sent in the Row Description message. Row
+Description Messages use `T' as their code and consist of an array of
+column descriptions. Each column description is a set of fields
+described as follows:
+ 
+\\medskip
+\\item{Name} This is a string indicating the field name.
+\\item{OID} This is either zero or it indicates the OID
+of the column if the column can be identified as belonging to a
+specific table.
+\\item{Attr} If the column belongs to a specific tablen this is the
+attirbute of the column, and it is zero otherwise.
+\\item{DOID} This is the Object ID of the field's data type.
+\\item{size} This value indicates the size of the object, but a
+negative type indicates a variable width type.
+\\item{Mod} This is a type-specific modifier.
+\\item{Fmt} This is the format code of the field.
+\\medskip
+ 
+\\noindent 
+To assist in parsing the above out, let's first define a simple
+structure to hold these values. "
+ 
+(@c
+(define-record-type field-description
+  (fields name object-id attribute data-object-id
+          size modifier format))
+))
+ 
+(@ "Armed with this we can define a reader for field descriptions." 
+ 
+(@c
+(define (get-field-description port)
+  (let* ([name (get-pg-string port)]
+         [oid (get-s32 port)]
+         [attr (get-s16 port)]
+         [doid (get-s32 port)]
+         [size (get-s16 port)]
+         [mod (get-s32 port)]
+         [fmt (get-s16 port)])
+    (make-field-description name oid attr doid size mod fmt)))
+))
+ 
+(@ "Now we can define a record type for the row description messages."
+ 
+(@c
+(define-record-type row-description-message
+  (parent postgresql-backend-message)
+  (fields fields)
+  (protocol
+    (lambda (p)
+      (lambda (fields)
+        (assert (vector? fields))
+        (assert (for-all field-description? (vector->list fields)))
+        ((p) fields)))))
+))
+ 
+(@ "We also need to define a reader for this. We just have to grab the
+initial count and then iterate over a series of
+|get-field-description| calls."
+ 
+(@c
+(define (get-row-description-message port len)
+  (let ([len (get-s16 port)])
+    (let ([vec (make-vector len)])
+      (do ([i 0 (fx1+ i)]) [(= i len)]
+        (vector-set! vec i (get-field-description port)))
+      (make-row-description-message vec))))
+))
+ 
+(@ "Now let's see how we can make a unit test for this thing." 
+ 
+(@c
+(define run-row-description-tests
+  (let ([bv '#vu8(84 0 0 0 29 0 1 
+                  98 108 97 104 0
+                  0 0 0 1 0 2 0 0 0 3 0 4 0 0 0 5 0 6)])
+    (make-backend-message-tester "Row Description Message" bv
+      (lambda ()
+        (let ([fd (make-field-description "blah" 1 2 3 4 5 6)])
+          (make-row-description-message (vector fd))))
+      (make-pred-test "Row Description Message" 
+        row-description-message?)
+      (make-accessor-test "Row Description Message Fields"
+        (lambda (msg)
+          (let ([fields (row-description-message-fields msg)])
+            (let ([fd (vector-ref fields 0)])
+              (list 
+                (field-description-name fd)
+                (field-description-object-id fd)
+                (field-description-attribute fd)
+                (field-description-data-object-id fd)
+                (field-description-size fd)
+                (field-description-modifier fd)
+                (field-description-format fd)))))
+        '("blah" 1 2 3 4 5 6)))))
+))
+
+(@* "SSL, Startup, Shutdown, and Sync Messages"
+"This section details the startup and sync related messages. The first
+being the relatively simple SSL Request message. It's a special field
+that contains a series of magic values to indicate that it is a SSL
+Request. It is a frontend message."
+ 
+(@c
+(define-record-type ssl-request-message
+  (parent postgresql-frontend-message)
+  (protocol
+    (lambda (p)
+      (lambda ()
+        ((p #\nul 2049 
+          (lambda (port)
+            (put-bytevector port '#vu8(2 3 4 5 6 7 9)))))))))
+(define run-ssl-request-tests
+  (let ([bv '#vu8(0 0 0 8 1 2 3 4 5 6 7 9)])
+    (make-frontend-message-tester "SSL Request Message" bv
+      make-ssl-request-message
+      (make-pred-test "SSL Request Message" ssl-request-message?))))
+))
+ 
+(@ "The first message sent out is the startup message from the client.
+It is a frontend message that contains the length field and the
+version number, followed by a list of parameters that is terminated by
+a null byte. Each parameter is a string-string pair where the first
+string is the name and the second is the value."
+ 
+(@c
+(define-record-type startup-message
+  (parent postgresql-frontend-message)
+  (fields major minor params)
+  (protocol
+    (lambda (p)
+      (lambda (params)
+        (assert (list? params))
+        (assert (for-all pair? params))
+        (assert (for-all symbol? (map car params)))
+        (assert (for-all string? (map cdr params)))
+        ((p #\nul (compute-startup-message-length params)
+          (make-startup-message-writer params))
+         3 0 params)))))
+))
+ 
+(@ "The writer for the startup message will always send the version
+protocol value first, followed by the name value pairs and the final
+null."
+ 
+(@c
+(define (make-startup-message-writer params)
+  (lambda (port)
+    (put-bytevector port '#vu8(3 0))
+    (put-u8 port 0)
+    (for-each
+      (lambda (e)
+        (put-bytevector port
+          (string->bytevector (symbol->string (car e))
+            (native-transcoder)))
+        (put-u8 port 0)
+        (put-bytevector port 
+          (string->bytevector (cdr e) (native-transcoder)))
+        (put-u8 port 0))
+      params)
+    (put-u8 port 0)))
+))
+ 
+(@ "Testing this requires that we have the right string. For this,
+I'm going to be using only an |user| parameter and the user name
+|arcfide|. Here is how those value map out:
+ 
+\\medskip
+\\itemitem{|user|} |#vu8(117 115 101 114)|
+\\itemitem{|arcfide|} |#vu8(97 114 99 102 105 100 101)|
+\\medskip
+ 
+\\noindent
+Since the version number is constant, that doesn't change anything.
+Otherwise, this is a straightforward writing unit test.
+"
+ 
+(@c
+(define run-startup-tests
+  (let ([bv '#vu8(0 0 0 22 0 3 0 0 
+                  117 115 101 114 0 97 114 99 102 105 100 101 0 0)])
+    (make-frontend-message-tester "Startup Message" bv
+      (lambda () (make-startup-message '((user . "arcfide"))))
+      (make-pred-test "Startup Message Predicate" startup-message?))))
+))
+ 
+(@ "Computing the size of the startup message is a little involved,
+so we are doing it in a separate procedure here. We have a constant
+eight byte pad that is made up of the length field and the initial
+version number, but then we have the strings and symbols, which
+require some more work. To make it easy, we have a simple procedure
+for computing the length of any one field, and another to compute the
+length of each field pair."
+ 
+(@c
+(define (elem-length x)
+  (1+ (bytevector-length (string->bytevector x (native-transcoder)))))
+(define (sym-length x)
+  (elem-length (symbol->string x)))
+(define (pair-length x)
+  (+ (sym-length (car x)) (elem-length (cdr x))))
+(define (compute-startup-message-length params)
+  (* 256 (+ 9 (apply + (map pair-length params)))))
+))
+
+(@ "The sync message is a simple front end message that indicates a
+sync request from the client." 
+ 
+(@c
+(define-record-type sync-message
+  (parent postgresql-frontend-message)
+  (protocol
+    (lambda (p) 
+      (lambda ()
+        ((p #\S 4 (lambda (port) (void))))))))
+(define run-sync-tests
+  (let ([bv '#vu8(83 0 0 0 4)])
+    (make-frontend-message-tester "Sync Message" bv
+      make-sync-message
+      (make-pred-test "Sync Message Predicate" sync-message?))))
+))
+ 
+(@ "Our final message type is a terminate message type that the front
+end will send to the back end to indicate that the client is
+terminating." 
+ 
+(@c
+(define-record-type terminate-message
+  (parent postgresql-frontend-message)
+  (protocol
+    (lambda (p)
+      (lambda ()
+        ((p #\X 4 (lambda (port) (void))))))))
+(define run-terminate-tests
+  (let ([bv '#vu8(88 0 0 0 4)])
+    (make-frontend-message-tester "Terminate Message" bv
+      make-terminate-message
+      (make-pred-test "Terminate Message Predicate" 
+        terminate-message?))))
+))
+ 
 (@* "Format codes"
 "Some of the messages above deal with format codes. These shouldn't be
 numbers on the Scheme side. Symbols are good analogs and the right
@@ -1680,7 +2098,411 @@ difference and conversion between easier."
     [else
       (errorf 'number->format-code "unsupported format code ~a" x)]))
 ))
+ 
+(@* "Sending Messages to the Server"
+"While we can print to ports in the above code, it is nice to have a
+simple, low-level mechanism for sending messages to the server based
+on a server connection object, defined below. This procedure takes
+care of that:
+ 
+\\medskip\\verbatim
+(send-message conn msg)
+|endverbatim
+\\medskip
+ 
+\\noindent
+The |conn| should be a |postgresql-connection| record, and the message
+should be a |postgresql-message| object. It will send the postgresql
+message to the connection based on the output port defined there, and
+raise an error if it has trouble doing so."
+ 
+(@c
+(define (send-message conn msg)
+  (assert (postgresql-connection? conn))
+  (assert (postgresql-message? msg))
+  (unless (postgresql-connection-output-port conn)
+    (error 'send-message "connection is not established"
+      conn))
+  (put-postgresql-message (postgresql-connection-output-port conn)
+    msg))
+))
         
+(@* "Handling Incoming Messages"
+"When we send a message defined above to some server, we have to be
+ready to handle all types of messages coming back. The PostgreSQL
+manual suggests that systems not depend on any specific messages being
+returned. Instead, they suggest that systems should handle all types
+of messages at any state for robustness. 
+ 
+To facilitate this, this section defines a macro for describing
+message loops. In these message loops, one specifies a name for the
+loop, and a binary input port from which to read postgresql messages.
+It then dispatches based on the type of the message.
+ 
+\\medskip\\verbatim
+(postgresql-message-loop name msg port clause clause ...)
+|endverbatim
+\\medskip
+ 
+\\noindent
+The |name| above is the name of the loop. It is bound to a procedure
+of no arguments that, when called, will recur on the loop, which means
+that it reads in another packet and dispatches. The |port| is a binary
+input port. The |msg| is bound to the message that is read in.
+The |clause|s have the following forms:
+ 
+\\medskip\\verbatim
+(message-predicate? expr expr ...)
+((message-predicate? message-predicate? ...) expr expr ...)
+(else expr expr ...)
+|endverbatim
+\\medskip
+ 
+\\noindent
+The |message-predicate?| should be some predicate that can handle
+postgrseql messages." 
+ 
+(@c
+(define-syntax postgresql-message-loop
+  (syntax-rules (%internal else)
+    [(_ %internal msg (c ...) (else e1 e2 ...))
+     (cond c ... (else e1 e2 ...))]
+    [(_ %internal msg (c ...) [(p1? p2? ...) e1 e2 ...])
+     (cond c ... 
+       [(p1? msg) e1 e2 ...]
+       [(p2? msg) e1 e2 ...] ...)]
+    [(_ %internal msg (c ...) (pred? e1 e2 ...))
+     (cond c ... [(pred? msg) e1 e2 ...])]
+    [(_ %internal msg (c ...) [(p1? p2? ...) e1 e2 ...] rest ...)
+     (postgresql-message-loop %internal msg
+       (c ...
+        [(p1? msg) e1 e2 ...]
+        [(p2? msg) e1 e2 ...] ...)
+       rest ...)]
+    [(_ %internal msg (c ...) (pred? e1 e2 ...) rest ...)
+     (postgresql-message-loop %internal msg
+       (c ... [(pred? msg) e1 e2 ...]) rest ...)]
+    [(_ name msg port c1 c2 ...)
+     (let name ()
+       (let ([msg (get-postgresql-message port)])
+         (postgresql-message-loop %internal msg () c1 c2 ...)))]))
+))
+ 
+(@ "XXX: At some point, I need to write some test cases for this
+thing."
+ 
+(@c
+(define (run-message-loop-tests) (void))
+))
+ 
+(@* "Handling startup and connections" 
+"The client connects to the server by first sending a startup message
+to the server and then waiting for an appropriate response. 
+I will describe the handling of responses and listening to the server
+later, but for now, let's talk about how a connection is initiated and
+what happens at that point. 
+ 
+This library defines a connection procedure which takes in a set of
+parameter values for the connection request, and sends them off in a
+startup message. The procedure itself has the following signature.
+ 
+\\medskip\\verbatim
+(postgresql-connect . params)
+|endverbatim
+ 
+\\medskip\\noindent
+The procedure returns one value, and the |params| are
+expected to be an association list mapping symbol keys to their values
+in suitable fashion. The user is welcome to throw in any parameters
+that he wants, but the following are specifically supported and used:
+ 
+\\medskip
+\\itemitem{server} A string representing the server address, it
+defaults to ``localhost.''
+\\itemitem{port} A number indicating the port, by default this is
+5432. 
+\\itemitem{user} (Mandatory) This field indicates the user for the
+database.
+\\itemitem{database} A string containing the name of the database. it
+defaults to the username.
+\\itemitem{password} A string that contains the password for
+authentication. 
+\\itemitem{server-parameters} An association list containing the run-time
+parameters that the user wishes to set. [XXX: Currently not
+implemented.]
+\\medskip
+ 
+\\noindent 
+The startup message takes a list of parameters. To send the startup
+message, we need to construct this message from the above received
+parameters, but only after we have converted them to the appropriate
+form and stripped out anything that we don't want. We use the other
+parameters to create the connection. We return a 
+|postgresql-connection| object upon a successful return."
+ 
+(@> |Define postgresql-connect| (export postgresql-connect)
+(define (postgresql-connect . params)
+  (define get (@< |Make postgresql-connect getter| params))
+  (let-values ([(sock addr) (@< |Get socket and address| get)]
+               [(server-params) (@< |Get server parameters| get)])
+    (let-values ([(in out) 
+                  (@< |Connect to server| sock addr)])
+      (let ([res (make-postgresql-connection sock addr in out params)])
+        (send-message res (make-startup-message server-params))
+        (@< |Handle startup response| res)
+        res))))
+))
+
+(@ "It's convenient to just have a single get procedure that will grab
+out the appropriate values from the input parameters without having to
+specify too many things. To that end, the following |get| procedure
+provides that functionality. It takes an optional argument that
+indicates a default value to provide if the value is not defined in
+the parameters (listed as |params| above. However, if this is not
+provided, then it will raise an error if it cannot find the parameter
+that was requested."
+
+(@> |Make postgresql-connect getter| (capture params)
+(lambda (x . maybe-opt)
+  (let ([res (assq x params)])
+    (or res
+        (if (pair? maybe-opt)
+            (car maybe-opt)
+            (errorf 'postgresql-connect
+              "~a is mandatory but you have not provided it"
+              x)))))
+))
+
+(@ "When we make a connection, we need a socket that works. We should
+start by creating an appropriate socket and address object that works
+the way that we want. We won't make a connection to it right away.
+Rather, we will do a bit more processing before we actually make that
+final connection, so all we need to do is make sure that they are
+created."
+
+(@> |Get socket and address| (capture get)
+(let ([server-name (get 'server "localhost")]
+      [port (get 'port 5432)])
+  (values
+    (create-socket
+      socket-domain/internet
+      socket-type/stream
+      socket-protocol/auto)
+    (let-values ([(addrs ignore)
+                  (get-address-info server-name port
+                    socket-domain/internet
+                    socket-type/stream
+                    socket-protocol/auto)])
+      (when (null? addrs)
+        (error 'postgresql-connect "no addresses found"))
+      (address-info-address (car addrs)))))
+))
+
+(@ "Once we actually have the server socket and address values, we
+can make an attempt to connect to the server. In this, we're just 
+trying to make the connection. It probably will work, but just in case
+it doesn't, we need to make sure that we raise the right sort of error
+and such. We use blocking sockets at the moment. We'll assume that the
+errors raised by |connect-socket| is good enough for the moment.
+Additionally, we should construct two values, an input and and output
+porth, both binary, as our final value, since we will be using these
+to do the majority of our communication with the server."
+
+(@> |Connect to server| (capture sock addr)
+(set-socket-nonblocking! sock #f)
+(connect-socket sock addr)
+(socket->port sock)
+))
+ 
+(@ "The server parameters are made up of the server parameters that
+were explicitely given as run-time values in the initial connection
+arguments, but also the user and database values. The problem here is
+that the arguments to |postgresql-connect| have a mix of different
+values in them, and it's possible that some of the values may have
+been received as something other than strings, but the server
+parameters that are passed through to the server in a packet must all
+be strings. Thus, we have to create the server parameters by grabbing
+all of the run-time values and converting them to strings, as well as
+including the user and database values, also converted to strings. In
+these cases, we are just going to use the standard string conversion
+based on |DISPLAY| rather than anything else."
+ 
+(@> |Get server parameters| (capture get)
+(define (symbolify e)
+  (unless (symbol? e)
+    (errorf 'postgresql-connect
+      "Parameter name ~s is not a symbol"
+      e))
+  e)
+(define (stringify e)
+  (if (string? e) e (format "~a" e)))
+(fold-right
+  (lambda (e s)
+    (cons 
+      (cons 
+        (symbolify (car e)) 
+        (stringify (cdr e)))
+      s))
+  '()
+  (cons (get 'user)
+    (let ([db (get 'database #f)]
+          [rt-params (get 'server-parameters '())])
+      (if db (cons db rt-params) rt-params))))
+))
+
+(@ "We will define a specific postgresql connection record to hold the
+connection information for a postgresql connection. These will include
+the following:
+ 
+\\medskip
+\\itemitem{parameters} This is the argument received by
+|postgresql-connect| so that one can query these parameters at a later
+time. 
+\\itemitem{server-socket} This is a |socket| object that is use to
+connect to the server.
+\\itemitem{server-address} This is a |socket-address| object that is
+used in the connection to the server.
+\\itemitem{input-port} This is the input port to the server, if the
+server is no connected, then it will be |#f|, but if it is connected,
+this will be a binary input-port.
+\\itemitem{output-port} This is a binary output port to the server
+based on the above |server-socket| object assuming that the server is
+connected, and |#f| otherwise. 
+\\medskip
+ 
+\\noindent 
+In the above record, the input-port and output-port need to be
+mutable, but the other fields do not. We need the ports mutable
+becuase they may be set to |#f| in the case that the server is
+disconnected."
+ 
+(@c
+(define-record-type postgresql-connection
+  (fields socket address
+    (mutable input-port) (mutable output-port)
+    parameters 
+    (mutable backend-pid) (mutable backend-key))
+  (protocol 
+    (lambda (n)
+      (lambda (sock addr in out param)
+        (n sock addr in out param #f #f)))))
+))
+ 
+(@ "When we deal with postgresql connections, it may happen that one
+of the parameters is changed by the server. In this case, we want to
+adjust the parameters that are stored in the postgresql connection
+object. We use the following procedure to help us to do that."
+ 
+(@c
+(define (postgresql-connection-parameter-update! conn key val)
+  (let* ([params (postgresql-connection-parameters conn)]
+         [res (assq key params)])
+    (if res
+        (set-cdr! res val)
+        (postgresql-connection-parameters-set! conn
+          (cons (cons key val) params)))))
+))
+ 
+(@ "Once the startup message has been sent, we have to deal with a
+number of various responses that the server could send back to us.
+Either it
+will require authentication or the client may be given a final
+response to authentication immediately.
+The final responses are one of two messages:
+ 
+\\unorderedlist
+\\li An Authentication Okay message,
+\\li or, an Error Response message.
+\\endunorderedlist
+ 
+\\noindent
+These messages will indicate whether the client can continue. If the
+client receives the error message, the connection will have been
+closed by the server.
+ 
+The server may request that authentication be performed. There are a
+number of authentication messages:
+ 
+\\unorderedlist
+\\li Kerberos V5 
+\\li Clear text
+\\li MD5
+\\li SCM Credential
+\\li GSS
+\\li SSPI
+\\li GSS Continue
+\\endunorderedlist
+ 
+\\noindent
+At the moment, this client only supports clear text, unencrypted
+communication. This is dangerous, but expedient. You can wrap the
+connection, hopefully in some other SSL protocols, but for the moment,
+this is all that we are supporting until we can get some time to do
+the others correctly. 
+ 
+When the client receives an authentication request that it cannot
+handle, it will immediately close the connection. After an 
+authentication okay message has been sent, the client must still
+process a series of messages, such as backend key, notice, parameter
+status, and error messages. An error response is treated the same
+before or after the authentication okay message. The parameter status
+and other messages change the connection state in the connection
+object. Finally, after these messages are processed, if everything
+goes okay, a ready for query message should be sent by the server, in
+which case we are all done."
+
+(@> |Handle startup response| (capture res)
+(assert (postgresql-connection? res))
+(postgresql-message-loop continue msg (postgresql-connection-input-port res)
+  [authentication-okay-message? (continue)]
+  [ready-for-query-message? (void)]
+  [error-response-message?
+   (error 'postgresql-connect "server error"
+     (error-response-message-codes msg))]
+  [authentication-cleartext-password-message?
+   (send-message res (make-password-message (get 'password)))
+   (continue)]
+  [authentication-message?
+   (close-socket (postgresql-connection-socket res))
+   (errorf 'postgresql-connect
+     "server requested unsupported authentication type ~a, closing connection"
+     (cond
+       [(authentication-kerberos-v5-message? msg) "Kerberos V5"]
+       [(authentication-md5-password-message? msg) "MD5 Password"]
+       [(authentication-scm-credential-message? msg) "SCM Credential"]
+       [(authentication-gss-message? msg) "GSS"]
+       [(authentication-sspi-message? msg) "SSPI"]
+       [(authentication-gss-continue-message? msg) "GSS Continue"]
+       [else "Unknown"]))]
+  [backend-key-data-message?
+   (postgresql-connection-backend-pid-set! res
+     (backend-key-data-message-pid msg))
+   (postgresql-connection-backend-key-set! res
+     (backend-key-data-message-key msg))
+   (continue)]
+  [parameter-status-message?
+   (postgresql-connection-parameter-update! res
+     (parameter-status-message-name msg)
+     (parameter-status-message-value msg))
+   (continue)]
+  [notice-response-message? 
+   (warning 'postgresql-connect "server notice"
+     (notice-response-message-codes msg))
+   (continue)]
+  [else
+    (warning 'postgresql-connect "unhandled server response" msg)
+    (continue)])
+))
+
+
+(@ "Now that we have constructed everything related to making a 
+postgresql connection, let's define it to be visible to the rest of
+the world."
+ 
+(@c
+(@< |Define postgresql-connect|)
+))
+ 
 (@* "Unit Test Runner"
 "Let's make sure that we can run all of our unit tests at once if we
 want to do so."
@@ -1710,7 +2532,18 @@ want to do so."
   (run-notification-response-tests)
   (run-parameter-description-tests)
   (run-parameter-status-tests)
+  (run-parse-complete-tests)
   (run-parse-tests)
+  (run-password-tests)
+  (run-portal-suspended-tests)
+  (run-query-tests)
+  (run-ready-for-query-tests)
+  (run-row-description-tests)
+  (run-ssl-request-tests)
+  (run-startup-tests)
+  (run-sync-tests)
+  (run-terminate-tests)
+  (run-message-loop-tests)
   (test-end "Postgresql"))
 ))
  
