@@ -2528,6 +2528,20 @@ the world."
 (@< |Define postgresql-connect|)
 ))
  
+(@ "Now that we can connect to our database, it's probably a good idea
+that we also know how to terminate from it gracefully. This consists
+of sending a termination message to the server and closing the
+connection."
+ 
+(@c
+(define (postgresql-terminate-connection conn)
+  (assert (postgresql-connection? conn))
+  (send-message conn (make-terminate-message))
+  (close-socket (postgresql-connection-socket conn))
+  (postgresql-connection-input-port-set! conn #f)
+  (postgresql-connection-output-port-set! conn #f))
+))
+ 
 (@* "Unit Test Runner"
 "Let's make sure that we can run all of our unit tests at once if we
 want to do so."
