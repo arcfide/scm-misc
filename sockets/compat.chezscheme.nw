@@ -223,17 +223,17 @@ $recvfrom-blocking $sendto-blocking
 
 <<Foreign Procedures>>=
 (define $accept-blocking
-  (foreign-procedure "accept_block" (fixnum uptr uptr) fixnum))
+  (foreign-procedure "accept_block" (fixnum uptr uptr) int))
 (define $connect-blocking
-  (foreign-procedure "connect_block" (fixnum uptr fixnum) fixnum))
+  (foreign-procedure "connect_block" (fixnum uptr fixnum) int))
 (define $sendto-blocking
   (foreign-procedure "sendto_block" 
     (fixnum u8* fixnum fixnum uptr fixnum) 
-    fixnum))
+    int))
 (define $recvfrom-blocking
   (foreign-procedure "recvfrom_block" 
     (fixnum u8* fixnum fixnum uptr uptr)
-    fixnum))
+    int))
 @
 
 \chapter{Foreign Free/alloc}{}%
