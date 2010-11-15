@@ -59,11 +59,10 @@ operations, which may be used if separate |b-mode| and
 |transcoder| values should be used for the input and output ports."
 
 (@c
-(define (socket->port	sock . args)
-	(let ([fd (socket-fd sock)])
-		(values
-			(apply open-fd-input-port (cons fd args))
-			(apply open-fd-output-port (cons fd args)))))
+(define (socket->port sock . args)
+  (let ([fd (socket-fd sock)])
+    (let ([port (apply open-fd-input/output-port (cons fd args))])
+      (values port port))))
 
 (define (socket->input-port sock . args)
 	(apply open-fd-input-port (cons (socket-fd sock) args)))
