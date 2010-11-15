@@ -2542,6 +2542,31 @@ connection."
   (postgresql-connection-output-port-set! conn #f))
 ))
  
+(@ "The last sort of thing that is very similar to a normal startup
+sequence is the cancelation protocol. If someone wants to cancel a
+transaction that is occuring, he will send a cancellation message as
+the first message of a new connection to the server. This requires a
+bit of extra work, but it is done for efficiency on the server side.
+Let's define a procedure for handling this."
+ 
+(@c
+(define (postgresql-cancel-request conn)
+  (assert (postgresql-connection? conn))
+  (let ([pid (postgresql-connection-backend-pid conn)]
+        [key (postgresql-connection-backend-key conn)]
+        [saddr (postgresql-connection-address conn)]
+        [s (create-socket
+             socket-domain/internet 
+             socket-type/stream
+             socket-protocol/auto)])
+    (let-values ([(in out) (@< |Connect to server| s saddr)])
+      (put-postgresql-message out 
+        (make-cancel-request-message pid key))
+      (close-port in) 
+      (close-port out))))
+))
+
+ 
 (@* "Unit Test Runner"
 "Let's make sure that we can run all of our unit tests at once if we
 want to do so."
