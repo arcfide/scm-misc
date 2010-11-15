@@ -1592,7 +1592,7 @@ being the current value of the parameter."
   (protocol
     (lambda (p)
       (lambda (name value)
-        (assert (and (string? name) (string? value)))
+        (assert (and (symbol? name) (string? value)))
         ((p) name value)))))
 ))
  
@@ -1600,7 +1600,7 @@ being the current value of the parameter."
 
 (@c
 (define (get-parameter-status-message port len)
-  (let* ([name (get-pg-string port)]
+  (let* ([name (string->symbol (get-pg-string port))]
          [value (get-pg-string port)])
     (make-parameter-status-message name value)))
 )) 
@@ -2242,15 +2242,34 @@ parameters to create the connection. We return a
  
 (@> |Define postgresql-connect| (export postgresql-connect)
 (define (postgresql-connect . params)
-  (define get (@< |Make postgresql-connect getter| params))
-  (let-values ([(sock addr) (@< |Get socket and address| get)]
-               [(server-params) (@< |Get server parameters| get)])
-    (let-values ([(in out) 
-                  (@< |Connect to server| sock addr)])
-      (let ([res (make-postgresql-connection sock addr in out params)])
-        (send-message res (make-startup-message server-params))
-        (@< |Handle startup response| res)
-        res))))
+  (let ([params (@< |Parse parameters| params)])
+    (define get (@< |Make postgresql-connect getter| params))
+    (let-values ([(sock addr) (@< |Get socket and address| get)]
+                 [(server-params) (@< |Get server parameters| get)])
+      (let-values ([(in out) 
+                    (@< |Connect to server| sock addr)])
+        (let ([res 
+               (make-postgresql-connection sock addr in out params)])
+          (send-message res (make-startup-message server-params))
+          (@< |Handle startup response| res)
+          res)))))
+))
+ 
+(@ "The parameters will come in as a series of symbols and values, but
+we want to have them in an association list. We need to parse the
+input to make sure that we have the appropriate pairs and convert them
+into the right form."
+ 
+(@> |Parse parameters| (capture params)
+(assert (even? (length params)))
+(fold-right
+  (lambda (e s)
+    (cond
+      [(null? s) (list e)]
+      [(pair? (car s)) (cons e s)]
+      [else (cons (cons e (car s)) (cdr s))]))
+  '()
+  params)
 ))
 
 (@ "It's convenient to just have a single get procedure that will grab
