@@ -344,7 +344,7 @@ ready."
 (@> |Register message readers|
 (postgresql-message-readers
   `((#\R . ,get-authentication-message)
-    (#\B . ,get-backend-key-data-message)
+    (#\K . ,get-backend-key-data-message)
     (#\2 . ,get-bind-complete-message)
     (#\3 . ,get-close-complete-message)
     (#\C . ,get-command-complete-message)
@@ -570,8 +570,8 @@ integers and we are done."
  
 (@c
 (define (get-backend-key-data-message port len)
-  (let* ([pid (get-int32 port)]
-         [key (get-int32 port)])
+  (let* ([pid (get-s32 port)]
+         [key (get-s32 port)])
     (make-backend-key-data-message pid key)))
 ))
  
@@ -2368,19 +2368,25 @@ this will be a binary input-port.
 \\itemitem{output-port} This is a binary output port to the server
 based on the above |server-socket| object assuming that the server is
 connected, and |#f| otherwise. 
+\\itemitem{backend-pid} This is the pid value from any backend-data
+messages that are received on this connection.
+\\itemitem{backend-key} This is the key value from any
+backend-key-data messages that are received.
 \\medskip
  
 \\noindent 
-In the above record, the input-port and output-port need to be
-mutable, but the other fields do not. We need the ports mutable
+In the above record, the socket and socket address do not need to be
+mutable, but the other fields do. We need the ports mutable
 becuase they may be set to |#f| in the case that the server is
-disconnected."
+disconnected, the parameters if we get parameter status messages, and
+the backend fields need to be mutable because we set them explicitly
+after we have created the record, instead of during creation time."
  
 (@c
 (define-record-type postgresql-connection
   (fields socket address
     (mutable input-port) (mutable output-port)
-    parameters 
+    (mutable parameters)
     (mutable backend-pid) (mutable backend-key))
   (protocol 
     (lambda (n)
