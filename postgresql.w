@@ -942,10 +942,8 @@ number of rows copied."
       (lambda (tag)
         ((p) tag)))))
 (define (get-command-complete-message port len)
-  (make-command-complete
-    (bytevector->string
-      (get-bytevector-n port (- len 1))
-      (native-transcoder))))
+  (make-command-complete-message
+    (get-pg-string port)))
 ))
  
 (@ "And here we define some unit tests for the above. It's the basic
@@ -1613,11 +1611,11 @@ fields."
   (let ([bv '#vu8(83 0 0 0 14 98 108 97 104 0 98 108 97 104 0)])
     (make-backend-message-tester "Parameter Status Message" bv
       (lambda ()
-        (make-parameter-status-message "blah" "blah"))
+        (make-parameter-status-message 'blah "blah"))
       (make-pred-test "Parameter Status Message Predicate"
         parameter-status-message?)
       (make-accessor-test "Parameter Status Message Name"
-        parameter-status-message-name "blah")
+        parameter-status-message-name 'blah)
       (make-accessor-test "Parameter Status Message Value"
         parameter-status-message-value "blah"))))
 ))
@@ -1861,7 +1859,7 @@ structure to hold these values. "
  
 (@c
 (define-record-type field-description
-  (fields name object-id attribute data-object-id
+  (fields name object-id attribute type-object-id
           size modifier format))
 ))
  
@@ -1869,13 +1867,15 @@ structure to hold these values. "
  
 (@c
 (define (get-field-description port)
+  (define (convert-size x)
+    (if (= -1 x) 'variable x))
   (let* ([name (get-pg-string port)]
          [oid (get-s32 port)]
          [attr (get-s16 port)]
-         [doid (get-s32 port)]
-         [size (get-s16 port)]
+         [doid (oid->typename (get-s32 port))]
+         [size (convert-size (get-s16 port))]
          [mod (get-s32 port)]
-         [fmt (get-s16 port)])
+         [fmt (number->format-code (get-s16 port))])
     (make-field-description name oid attr doid size mod fmt)))
 ))
  
@@ -1927,7 +1927,7 @@ initial count and then iterate over a series of
                 (field-description-name fd)
                 (field-description-object-id fd)
                 (field-description-attribute fd)
-                (field-description-data-object-id fd)
+                (field-description-type-object-id fd)
                 (field-description-size fd)
                 (field-description-modifier fd)
                 (field-description-format fd)))))
@@ -2098,7 +2098,160 @@ difference and conversion between easier."
     [else
       (errorf 'number->format-code "unsupported format code ~a" x)]))
 ))
+
+(@ "In addition to the normal format codes, there are also all of the
+object ids and the object types that need to be converted and
+translated. Let's start with a function that translates their oid
+numbers into names."
  
+(@c
+(define (oid->typename id)
+  (case id
+    [20 'bigint]
+    [1560 'bit]
+    [16 'boolean]
+    [603 'box]
+    [17 'bytea]
+    [1043 'character-varying]
+    [18 'character]
+    [650 'cidr]
+    [710 'circle]
+    [1082 'date]
+    [701 'double-precision]
+    [869 'inet]
+    [23 'integer]
+    [1186 'interval]
+    [628 'line]
+    [601 'lseg]
+    [829 'macaddr]
+    [790 'money]
+    [1700 'numeric]
+    [602 'path]
+    [600 'point]
+    [604 'polygon]
+    [700 'real]
+    [21 'smallint]
+    [25 'text]
+    [1082 'time]
+    [1266 'time-with-time-zone]
+    [1114 'timestamp]
+    [1184 'timestamp-with-time-zone]
+    [3615 'tsquery]
+    [3614 'tsvector]
+    [2970 'txid-snapshot]
+    [2950 'uuid]
+    [142 'xml]
+    [else id]))
+))
+
+(@ "Now, we also want to have some sort of set of procedures for doing
+the appropriate conversions for these files. The input to these
+procedures will be the field description for the field as well as the 
+field contents, which is either a bytevector or |#f|. The purpose of
+this is then to convert this into something that is reasonably used in
+Scheme. For example, all of the numeric types should be turned into
+the appropriate numbers, and the string types should be turned into
+strings. The time types should be times, and so forth. We will not be
+doing all of them, right now, but there are a few that we can handle
+right away. (XXX: Finish doing the rest of the data types.)"
+
+(@c
+(define (convert-pg-field desc contents)
+  (let ([convert (lookup-pg-field-converter
+                   (field-description-type-object-id desc))])
+    (convert contents (field-description-format desc))))
+))
+
+(@ "In |convert-pg-field| above we use a |lookup-pg-field-converter|
+procedure that returns a unary conversion procedure, which takes a
+bytevector or |#f| and returns the apropriate Scheme version of the
+value. Let's define this here."
+
+(@c
+(define (lookup-pg-field-converter type)
+  (define-syntax converter
+    (syntax-rules ()
+      [(_ (bv fmt) exp)
+       (lambda (bv fmt) (and bv exp))]))
+  (case type
+    [bigint (converter (bv fmt) (convert-pg-integer-value bv fmt 8))]
+    [boolean convert-pg-boolean-value]
+    [double-precision (converter (bv fmt) (convert-pg-float-value bv fmt 8))]
+    [integer (converter (bv fmt) (convert-pg-integer-value bv fmt 4))]
+    [real (converter (bv fmt) (convert-pg-float-value bv fmt 4))]
+    [smallint (converter (bv fmt) (convert-pg-integer-value bv fmt 2))]
+    [(bytea bit) (converter (bv fmt) bv)]
+    [else
+      (converter (bv fmt)
+        (case fmt
+          [(text) (bytevector->string bv (native-transcoder))]
+          [else bv]))]))
+))
+
+(@ "Now that we have the general idea, we want to implement the
+specifics for each individual data type that we might encounter. The
+integer values are the first ones to consider. In each of these, if
+they are text, well, we can just read them in as anything else using
+|string->number| and things should work. If they are something like a
+binary, then we probably need to read them in a bit differently."
+ 
+(@c
+(define (convert-pg-integer-value bv fmt size)
+  (case fmt
+    [(text) 
+     (string->number (bytevector->string bv (native-transcoder)))]
+    [(binary)
+     ((case size
+        [(1) bytevector-u8-ref]
+        [(2) bytevector-s16-native-ref]
+        [(4) bytevector-s32-native-ref]
+        [(8) bytevector-s64-native-ref]
+        [else (errorf 'convert-pg-integer-value
+                "we should not be getting integer sizes like ~s"
+                size)])
+      bv 0)]
+    [else 
+      (warningf 'convert-pg-integer-value
+        "unrecognized format type ~s, not doing any conversion"
+        fmt)
+      bv]))
+))
+ 
+(@ "We need to do something similar with floating point values, but
+they require that we do things a little bit differently when it comes
+to the binary files. At the moment, I am just going to ignore binary
+files."
+ 
+(@c
+(define (convert-pg-float-value bv fmt size)
+  (case fmt
+    [(text) 
+     (string->number (bytevector->string bv (native-transcoder)))]
+    [else 
+      (warningf 'convert-pg-float-value
+        "unsupported format type ~s, not doing any conversion"
+        fmt)
+      bv]))
+))
+ 
+(@ "The boolean values convert is pretty straightforward, but we have
+to assume that we might get either `t' or `true' and similarly for the
+false values."
+ 
+(@c
+(define (convert-pg-boolean-value bv fmt)
+  (case fmt
+    [(text)
+     (= 116 (bytevector-u8-ref bv 0))]
+    [(binary)
+     (= 1 (bytevector-u8-ref bv 0))]
+    [else
+      (warningf 'convert-pg-boolean-value
+        "unsupported format type ~a, not converting"
+        fmt)
+      bv]))
+))
+
 (@* "Sending Messages to the Server"
 "While we can print to ports in the above code, it is nice to have a
 simple, low-level mechanism for sending messages to the server based
@@ -2140,14 +2293,16 @@ loop, and a binary input port from which to read postgresql messages.
 It then dispatches based on the type of the message.
  
 \\medskip\\verbatim
-(postgresql-message-loop name msg port clause clause ...)
+(postgresql-message-loop name args msg port clause clause ...)
 |endverbatim
 \\medskip
  
 \\noindent
-The |name| above is the name of the loop. It is bound to a procedure
-of no arguments that, when called, will recur on the loop, which means
-that it reads in another packet and dispatches. The |port| is a binary
+The |name| above is the name of the loop. 
+The |args| have the same form as a series of named let clauses. They 
+will be associated along with the |name| in the same way that a named
+let does. 
+The |port| is a binary
 input port. The |msg| is bound to the message that is read in.
 The |clause|s have the following forms:
  
@@ -2182,8 +2337,8 @@ postgrseql messages."
     [(_ %internal msg (c ...) (pred? e1 e2 ...) rest ...)
      (postgresql-message-loop %internal msg
        (c ... [(pred? msg) e1 e2 ...]) rest ...)]
-    [(_ name msg port c1 c2 ...)
-     (let name ()
+    [(_ name args msg port c1 c2 ...)
+     (let name args
        (let ([msg (get-postgresql-message port)])
          (postgresql-message-loop %internal msg () c1 c2 ...)))]))
 ))
@@ -2478,7 +2633,8 @@ which case we are all done."
 
 (@> |Handle startup response| (capture res)
 (assert (postgresql-connection? res))
-(postgresql-message-loop continue msg (postgresql-connection-input-port res)
+(postgresql-message-loop continue () msg 
+    (postgresql-connection-input-port res)
   [authentication-okay-message? (continue)]
   [ready-for-query-message? (void)]
   [error-response-message?
@@ -2537,7 +2693,9 @@ connection."
 (define (postgresql-terminate-connection conn)
   (assert (postgresql-connection? conn))
   (send-message conn (make-terminate-message))
-  (close-socket (postgresql-connection-socket conn))
+  (cond
+    [(postgresql-connection-input-port conn) => close-port]
+    [else (close-socket (postgresql-connection-socket conn))])
   (postgresql-connection-input-port-set! conn #f)
   (postgresql-connection-output-port-set! conn #f))
 ))
@@ -2566,6 +2724,184 @@ Let's define a procedure for handling this."
       (close-port out))))
 ))
 
+(@* "Handling simple queries"
+"Simple queries are ones that are not broken up and parsed. They are
+sent as a single string and then the results are parsed by the
+frontend. 
+We are going to define a single record type for this, which helps us
+to think about query results. A query result is a formatting
+associated with a list of query rows. "
+ 
+(@c
+(define-record-type query-result
+  (fields format rows))
+))
+ 
+(@ "Let's see if we can get the proper procedure for a simple query.
+It will take a single string for the query."
+ 
+(@> |Define postgresql-simple-query| (export postgresql-simple-query)
+(define (postgresql-simple-query conn query)
+  (assert (postgresql-connection? conn))
+  (assert (string? query))
+  (let ([msg (make-query-message query)])
+    (send-message conn msg)
+    (@< |Handle simple query response| conn)))
+))
+ 
+(@ "Our message loop will handle all the conceivalbe messages that we
+could be receiving.
+In this case, there are a few different situations that we
+handle and deal with explicitly:
+ 
+\\unorderedlist
+\\li The server could encounter an error in any case, in which case we
+fail with an error.
+\\li The server could send us any number of incidental messages, which
+we will handle by printing or updating the state of the system
+somehow, and then continuing.
+\\li We could receive a command complete message before processing any
+row data or row description messages, which means that the query was
+purely side-effecting and we don't have to return anything.
+\\li We could receive some copy in or copy out responses, which are
+things that we currently don't support. In this case, we just raise an
+error. XXX: This needs to be fixed.
+\\li We might encounter the empty query response, which means that the
+query which we sent was entirely empty. In this case, we'll want to
+raise a continuable error indicating that this was the case and let
+them go on their merry way. 
+\\li We might receive a single row description and set of data row
+messages. This means that we have only one result. In this case, we
+return a single record indicating this sort of thing.
+\\li We might have a number of row description messages and
+accompanying data row messages. In this case, a list of records about
+these responses should be returned. 
+\\endunorderedlist
+ 
+\\noindent
+The important part about the above is that regardless of whether we
+have an error or an empty response, we will always receive a ready for
+query message after that. This means that we need to store the errors
+and continue processing. Eventually, we will get the ready for query
+message, and then we can do the right thing based on what messages we
+have collected. This means that we are going to keep track of some
+state during our message processing loop.
+ 
+\\medskip
+\\itemitem{empty?} This flag will indicate whether we have received an
+empty query response.
+\\itemitem{error} This will be false unless an error response message
+was given, in which case we will store the error condition
+\\itemitem{desc} This will be the current query row
+description.
+\\itemitem{rows} These will be the current row values.
+information.
+\\itemitem{queries} This will start false, but 
+if
+we receive two row descriptions, this becomes a list of the previous
+query results.
+\\medskip
+ 
+\\noindent
+In this loop, we want to just maintain the state, and avoid doing
+any of the final processing. That means that I'll be doing the other
+work outside of here in another chunk. The main job here is just to
+control the collection and appropriate construction of the states
+above that we need for the final query response."
+ 
+(@> |Handle simple query response| (capture conn)
+(postgresql-message-loop continue
+    ([empty? #f] [err #f] [desc #f] [rows #f] [queries #f])
+    msg (postgresql-connection-input-port conn)
+  [ready-for-query-message? 
+   (@< |Construct simple query response| 
+       empty? err desc rows queries)]
+  [empty-query-response-message?
+   (continue #t err desc rows queries)]
+  [error-response-message?
+   (continue empty? msg desc rows queries)]
+  [command-complete-message? 
+   (continue empty? err desc rows queries)]
+  [(copy-in-response-message? copy-out-response-message?)
+   (error 'postgresql-simple-query
+     "copy operations are not supported right now")]
+  [row-description-message? 
+   (continue empty? err msg '()
+     (if desc
+         (cons (make-query-result desc (reverse rows)) 
+               queries)
+         '()))]
+  [data-row-message? 
+   (continue empty? err desc (cons msg rows) queries)]
+  [notice-response-message?
+   (warning 'postgresql-simple-query
+     "server notice"
+     (notice-response-message-codes msg))
+   (continue empty? err desc rows queries)]
+  [else (warning 'postgresql-simple-query "unhandled message" msg)
+    (continue empty? err desc rows queries)])
+))
+ 
+(@ "Now let's see what we need to do to actually construct the final
+response. We should address each state variable in order to make sure
+that we get the empty response first, which is a continuable error,
+and then the error if there is one, which is a non-continuable error,
+followed by the construction of the query results if there are any,
+otherwise returning void."
+ 
+(@> |Construct simple query response|
+    (capture empty? err desc rows queries)
+(when empty?
+  (raise-continuable 
+    (condition
+      (make-warning)
+      (make-empty-query-string-condition)
+      (make-who-condition 'postgresql-simple-query)
+      (make-message-condition "empty query"))))
+(when err
+  (error 'postgresql-simple-query "server error"
+    (error-response-message-codes err)))
+(when desc
+  (let ([res (make-query-result 
+               (row-description-message-fields desc)
+               (convert-rows desc (reverse rows)))])
+    (if (null? queries)
+        res
+        (reverse (cons res queries)))))
+))
+
+(@ "When we make the query result, we convert the rows based on their
+field descriptions. This is accomplished with the help of the
+|convert-rows| procedure defined here."
+ 
+(@c
+(define (convert-rows desc rows)
+  (define (get-field-description i)
+    (vector-ref (row-description-message-fields desc) i))
+  (define (convert-row row)
+    (let* ([vlen (vector-length row)]
+           [vres (make-vector vlen)])
+      (do ([i 0 (1+ i)]) [(= i vlen) vres]
+        (vector-set! vres i
+          (convert-pg-field (get-field-description i)
+            (vector-ref row i))))))
+  (map convert-row (map data-row-message-columns rows)))
+))
+ 
+(@ "In the above, we use a special condition to handle empty string
+conditions. We can define these as follows:"
+ 
+(@c
+(define-condition-type &empty-query-string &condition
+  make-empty-query-string-condition empty-query-string-condition?)
+))
+    
+(@ "Now that we have finished the definition of
+|postgresql-simple-query|, let's throw it into the top-level."
+ 
+(@c
+(@< |Define postgresql-simple-query|)
+))
  
 (@* "Unit Test Runner"
 "Let's make sure that we can run all of our unit tests at once if we
