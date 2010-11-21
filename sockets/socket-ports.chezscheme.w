@@ -61,7 +61,10 @@ operations, which may be used if separate |b-mode| and
 (@c
 (define (socket->port sock . args)
   (let ([fd (socket-fd sock)])
-    (let ([port (apply open-fd-input/output-port (cons fd args))])
+    (values
+      (apply open-fd-input-port fd args)
+      (apply open-fd-output-port fd args))
+    #;(let ([port (apply open-fd-input/output-port (cons fd args))])
       (values port port))))
 
 (define (socket->input-port sock . args)
