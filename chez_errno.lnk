@@ -1,0 +1,3 @@
+system nt_dll initinstance terminstance
+name chez_errno
+file chez_errno

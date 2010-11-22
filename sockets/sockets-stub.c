@@ -34,6 +34,8 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 typedef int ssize_t;
+extern __declspec(dllimport) int cdecl Sactivate_thread(void);
+extern __declspec(dllimport) void cdecl Sdeactivate_thread(void);
 #else
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -43,9 +45,8 @@ typedef int ssize_t;
 #include <errno.h>
 #include <sys/unistd.h>
 #include <sys/fcntl.h>
-#endif
-
 #include "scheme.h"
+#endif
 
 /* Blocking Accept */
 EXPORTED(int)

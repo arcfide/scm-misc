@@ -42,9 +42,11 @@ their own way of accomplishing this."
 you should  beware!"
 
 (@c
-(define errno 
-  (let ([get (foreign-procedure "get_errno" () int)])
-    (lambda () (get))))
+(define errno
+  (meta-cond
+    [(memq (machine-type) '(i3nt ti3nt)) 
+     (foreign-procedure "_get_errno" () int)]
+    [else (foreign-procedure "get_errno" () int)]))
 ;   (let ([errno-ent (#%$foreign-entry "errno")])
 ;     (lambda ()
 ;       (foreign-ref 'int errno-ent 0))))

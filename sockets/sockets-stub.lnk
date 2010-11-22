@@ -1,2 +1,4 @@
 system nt_dll initinstance terminstance
+name chez_sockets
 file sockets-stub
+library ws2_32, csv80
