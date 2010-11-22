@@ -18,21 +18,22 @@
 
 #ifdef __NT__
 #define WIN32
-#define EXPORTED __declspec ( dllexport ) cdecl
+#define EXPORTED(type) __declspec ( dllexport ) type cdecl
 #endif
 #ifdef __WINDOWS__
 #define WIN32
-#define EXPORTED __declspec ( dllexport ) cdecl
+#define EXPORTED(type) __declspec ( dllexport ) type cdecl
 #endif
 
 #ifndef WIN32
-#define EXPORTED 
+#define EXPORTED(type) type
 #endif
 
 #ifdef WIN32
 #include <stddef.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+typedef int ssize_t;
 #else
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -47,51 +48,51 @@
 #include "scheme.h"
 
 /* Blocking Accept */
-EXPORTED int 
+EXPORTED(int)
 accept_block(int fd, struct sockaddr *addr, socklen_t *addrlen) {
-	int ret;
-	
-	Sdeactivate_thread();
-	ret = accept(fd, addr, addrlen);
-	Sactivate_thread();
-	
-	return ret;
+        int ret;
+        
+        Sdeactivate_thread();
+        ret = accept(fd, addr, addrlen);
+        Sactivate_thread();
+        
+        return ret;
 }
 
 /* Blocking Connect */
-EXPORTED int
+EXPORTED(int)
 connect_block(int fd, const struct sockaddr *addr, socklen_t addrlen) {
-	int ret;
-	
-	Sdeactivate_thread();
-	ret = connect(fd, addr, addrlen);
-	Sactivate_thread();
-	
-	return ret;
+        int ret;
+        
+        Sdeactivate_thread();
+        ret = connect(fd, addr, addrlen);
+        Sactivate_thread();
+        
+        return ret;
 }
 
 /* Blocking Receive */
-EXPORTED ssize_t
+EXPORTED(ssize_t)
 recvfrom_block(int fd, void *buf, size_t len, int flags,
     struct sockaddr *src_addr, socklen_t *addrlen) {
-	ssize_t ret;
-	
-	Sdeactivate_thread();
-	ret = recvfrom(fd, buf, len, flags, src_addr, addrlen);
-	Sactivate_thread();
-	
-	return ret;
+        ssize_t ret;
+        
+        Sdeactivate_thread();
+        ret = recvfrom(fd, buf, len, flags, src_addr, addrlen);
+        Sactivate_thread();
+        
+        return ret;
 }
 
 /* Blocking Send To */
-EXPORTED int
+EXPORTED(int)
 sendto_block(int fd, const void *buf, size_t len, int flags,
     const struct sockaddr *dest_addr, socklen_t addrlen) {
-	ssize_t ret;
-	
-	Sdeactivate_thread();
-	ret = sendto(fd, buf, len, flags, dest_addr, addrlen);
-	Sactivate_thread();
-	
-	return ret;
+        ssize_t ret;
+        
+        Sdeactivate_thread();
+        ret = sendto(fd, buf, len, flags, dest_addr, addrlen);
+        Sactivate_thread();
+        
+        return ret;
 }
