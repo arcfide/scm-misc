@@ -24,7 +24,6 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\\par\\break
 "
-#|
 (@l "This library defines a pure Scheme PostgreSQL driver supporting 
 the PostgreSQL Message protocol version 3.0. This protocol is supported 
 by all versions of PostgreSQL 7.4 and later. It is a pure Scheme driver, 
@@ -33,7 +32,21 @@ for its operation. It is written in a fairly Schemely style and will
 hopefully support the full range of the protocol."
 
 (arcfide postgresql)
-(export ) |#
+(export 
+  field-description-name
+  field-description-object-id
+  field-description-attribute
+  field-description-type-object-id
+  field-description-size
+  field-description-modifier
+  field-description-format
+  postgresql-connect
+  postgresql-connection?
+  postgresql-terminate-connection
+  postgresql-cancel-request
+  query-result? query-result-format query-result-rows
+  postgresql-simple-query
+)
 (import 
   (chezscheme)
   (arcfide sockets)
@@ -2406,7 +2419,7 @@ parameters to create the connection. We return a
         (let ([res 
                (make-postgresql-connection sock addr in out params)])
           (send-message res (make-startup-message server-params))
-          (@< |Handle startup response| res)
+          (@< |Handle startup response| res get)
           res)))))
 ))
  
@@ -2631,7 +2644,7 @@ object. Finally, after these messages are processed, if everything
 goes okay, a ready for query message should be sent by the server, in
 which case we are all done."
 
-(@> |Handle startup response| (capture res)
+(@> |Handle startup response| (capture res get)
 (assert (postgresql-connection? res))
 (postgresql-message-loop continue () msg 
     (postgresql-connection-input-port res)
@@ -2954,4 +2967,4 @@ want to do so."
 (@< |Register message readers|)
 ))
  
-;)
+)
