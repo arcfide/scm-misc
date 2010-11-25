@@ -24,6 +24,16 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\\par\\break
 "
+
+(@* "Version 8.0 Workaround"
+"There is currently a bug in version 8.0 of Chez Scheme that
+causes some problems with the following library. To fix this, we run
+the following code as a workaround."
+ 
+(@c
+(#%$sremprop 'r6rs:record-constructor 'cp02)
+))
+
 (@l "This library defines a pure Scheme PostgreSQL driver supporting 
 the PostgreSQL Message protocol version 3.0. This protocol is supported 
 by all versions of PostgreSQL 7.4 and later. It is a pure Scheme driver, 
@@ -46,6 +56,7 @@ hopefully support the full range of the protocol."
   postgresql-cancel-request
   query-result? query-result-format query-result-rows
   postgresql-simple-query
+  run-postgresql-tests
 )
 (import 
   (chezscheme)
@@ -133,7 +144,7 @@ postgresql message types: frontend, backend, and dual messages."
 (@c
 (define-record-type postgresql-message)
 ))
- 
+
 (@ "When we have message types that are backend and frontend messages,
 it is nice to distinguish them. Backend messages don't do any writing,
 and automatically register the readers that they get with the generic
@@ -142,9 +153,7 @@ list parameter."
  
 (@c
 (define-record-type postgresql-backend-message
-  (parent postgresql-message)
-  (protocol
-    (lambda (p) (lambda () ((p))))))
+  (parent postgresql-message))
 ))
  
 (@ "Front end messages don't do any reading. Instead, they define
@@ -216,12 +225,7 @@ of the authentication message.
  
 (@c
 (define-record-type authentication-message
-  (parent postgresql-backend-message)
-  (fields)
-  (protocol
-    (lambda (p)
-      (lambda ()
-        ((p))))))
+  (parent postgresql-backend-message))
 ))
 
 (@ "{\\it Authentication Okay.} These packets are eight bytes and have
@@ -229,8 +233,7 @@ a zero as their type. They have not additional fields."
  
 (@c
 (define-record-type authentication-okay-message
-  (parent authentication-message)
-  (protocol (lambda (p) (lambda () ((p))))))
+  (parent authentication-message))
 ))
  
 (@ "{\\it Authentication Kerveros V5.}
@@ -239,8 +242,7 @@ authentication type."
  
 (@c
 (define-record-type authentication-kerberos-v5-message
-  (parent authentication-message)
-  (protocol (lambda (p) (lambda () ((p))))))
+  (parent authentication-message))
 ))
  
 (@ "{\\it Authentication Cleartext Password.}
@@ -249,8 +251,7 @@ authentication type."
  
 (@c
 (define-record-type authentication-cleartext-password-message
-  (parent authentication-message)
-  (protocol (lambda (p) (lambda () ((p))))))
+  (parent authentication-message))
 ))
 
 (@ "{\\it Authentication MD5 password.}
@@ -275,8 +276,7 @@ authentication type."
  
 (@c
 (define-record-type authentication-scm-credential-message
-  (parent authentication-message)
-  (protocol (lambda (p) (lambda () ((p))))))
+  (parent authentication-message))
 ))
  
 (@ "{\\it Authentication GSS.} 
@@ -285,8 +285,7 @@ authentication type."
  
 (@c
 (define-record-type authentication-gss-message
-  (parent authentication-message)
-  (protocol (lambda (p) (lambda () ((p))))))
+  (parent authentication-message))
 ))
  
 (@ "{\\it Authentication SSPI.}
@@ -295,8 +294,7 @@ authentication type."
  
 (@c
 (define-record-type authentication-sspi-message
-  (parent authentication-message)
-  (protocol (lambda (p) (lambda () ((p))))))
+  (parent authentication-message))
 ))
  
 (@ "{\\it Authentication GSS Continue.}
@@ -736,7 +734,7 @@ they should be."
         (assert (vector? formats))
         (assert (vector? columns))
         (assert (vector? params))
-        ((p #\B 
+        ((p #\B
             (compute-bind-msg-len portal stmnt formats columns params)
             (make-bind-message-writer 
               portal stmnt formats columns params))
@@ -786,11 +784,7 @@ packet, because there is nothing left to read or do."
  
 (@c
 (define-record-type bind-complete-message
-  (parent postgresql-backend-message)
-  (protocol
-    (lambda (p)
-      (lambda () 
-        ((p))))))
+  (parent postgresql-backend-message))
 (define (get-bind-complete-message port len)
   (make-bind-complete-message))
 ))
@@ -897,11 +891,7 @@ types, with no fields."
  
 (@c
 (define-record-type close-complete-message
-  (parent postgresql-backend-message)
-  (protocol
-    (lambda (p)
-      (lambda ()
-        ((p))))))
+  (parent postgresql-backend-message))
 (define (get-close-complete-message port len)
   (make-close-complete-message))
 ))
@@ -1254,9 +1244,7 @@ with the `I' character as its code. It has no fields."
  
 (@c
 (define-record-type empty-query-response-message
-  (parent postgresql-backend-message)
-  (protocol
-    (lambda (p) (lambda () ((p))))))
+  (parent postgresql-backend-message))
 (define (get-empty-query-response-message port len)
   (make-empty-query-response-message))
 ))
@@ -1434,9 +1422,7 @@ so we'll define it together with its unit tests here."
  
 (@c
 (define-record-type no-data-message
-  (parent postgresql-backend-message)
-  (protocol
-    (lambda (p) (lambda () ((p))))))
+  (parent postgresql-backend-message))
 (define (get-no-data-message port len)
   (make-no-data-message))
 (define run-no-data-tests
@@ -1699,9 +1685,7 @@ uses `1' as its code."
  
 (@c
 (define-record-type parse-complete-message
-  (parent postgresql-backend-message)
-  (protocol
-    (lambda (p) (lambda () ((p))))))
+  (parent postgresql-backend-message))
 (define (get-parse-complete-message port len)
   (make-parse-complete-message))
 (define run-parse-complete-tests
@@ -1747,9 +1731,7 @@ uses `s' as its code and has no fields."
  
 (@c
 (define-record-type portal-suspended-message
-  (parent postgresql-backend-message)
-  (protocol
-    (lambda (p) (lambda () ((p))))))
+  (parent postgresql-backend-message))
 (define (get-portal-suspended-message port len)
   (make-portal-suspended-message))
 (define run-portal-suspended-tests
@@ -2445,7 +2427,7 @@ out the appropriate values from the input parameters without having to
 specify too many things. To that end, the following |get| procedure
 provides that functionality. It takes an optional argument that
 indicates a default value to provide if the value is not defined in
-the parameters (listed as |params| above. However, if this is not
+the parameters (listed as |params| above). However, if this is not
 provided, then it will raise an error if it cannot find the parameter
 that was requested."
 
@@ -2966,5 +2948,5 @@ want to do so."
 (@c
 (@< |Register message readers|)
 ))
- 
+
 )
