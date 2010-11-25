@@ -2633,8 +2633,12 @@ which case we are all done."
   [authentication-okay-message? (continue)]
   [ready-for-query-message? (void)]
   [error-response-message?
-   (error 'postgresql-connect "server error"
-     (error-response-message-codes msg))]
+   (raise
+     (build-postgresql-condition 
+       (error-response-message-codes msg)
+       (make-error)
+       (make-who-condition 'postgresql-connect)
+       (make-message-condition "postgresql server error")))]
   [authentication-cleartext-password-message?
    (send-message res (make-password-message (get 'password)))
    (continue)]
@@ -2662,8 +2666,12 @@ which case we are all done."
      (parameter-status-message-value msg))
    (continue)]
   [notice-response-message? 
-   (warning 'postgresql-connect "server notice"
-     (notice-response-message-codes msg))
+   (raise-continuable
+     (build-postgresql-condition
+       (notice-response-message-codes msg)
+       (make-warning)
+       (make-who-condition 'postgresql-connect)
+       (make-message-condition "postgresql server notice")))
    (continue)]
   [else
     (warning 'postgresql-connect "unhandled server response" msg)
@@ -2829,9 +2837,12 @@ above that we need for the final query response."
   [data-row-message? 
    (continue empty? err desc (cons msg rows) queries)]
   [notice-response-message?
-   (warning 'postgresql-simple-query
-     "server notice"
-     (notice-response-message-codes msg))
+   (raise-continuable
+     (build-postgresql-condition
+       (notice-response-message-codes msg)
+       (make-warning)
+       (make-who-condition 'postgresql-simple-query)
+       (make-message-condition "PostgreSQL server notice")))
    (continue empty? err desc rows queries)]
   [else (warning 'postgresql-simple-query "unhandled message" msg)
     (continue empty? err desc rows queries)])
@@ -2854,8 +2865,12 @@ otherwise returning void."
       (make-who-condition 'postgresql-simple-query)
       (make-message-condition "empty query"))))
 (when err
-  (error 'postgresql-simple-query "server error"
-    (error-response-message-codes err)))
+  (raise
+    (build-postgresql-condition
+      (error-response-message-codes err)
+      (make-who-condition 'postgresql-simple-query)
+      (make-message-condition "postgresql server error")
+      (make-error))))
 (when desc
   (let ([res (make-query-result 
                (row-description-message-fields desc)
@@ -2884,13 +2899,150 @@ field descriptions. This is accomplished with the help of the
 ))
  
 (@ "In the above, we use a special condition to handle empty string
-conditions. We can define these as follows:"
+conditions. We also want to define some sort of condition for
+all of the various errors that we can encounter and their fields.
+We can start this definition with a parent condition
+|postgresql-condition| that houses all of the postgresql conditions."
  
 (@c
-(define-condition-type &empty-query-string &condition
+(define-condition-type &postgresql &condition
+  make-postgresql-condition postgresql-condition?)
+))
+
+(@ "Once we have the basic housing condition, we need some conditions
+for the various types of situations that we might encounter. We need a
+condition type that corresponds to an empty query string response, but
+we also need a condition that encapsulates the state or information
+returned during error and notice messages that is not captures by
+existing R6RS messages. Let's start with the emtpy query string."
+
+(@c
+(define-condition-type &empty-query-string &postgresql
   make-empty-query-string-condition empty-query-string-condition?)
 ))
+
+(@ "The following table indicates the particular types of fields that
+may be returned by PostgreSQL error or notice messages, and the
+appropriate conditions that encapsulate them. Some of them may be R6RS
+conditions that are predefined, and others may be new.
+
+$$\\vbox{
+\\offinterlineskip
+\\halign{
+\\strut {\\rm #} & \\vrule \\quad # \\hfill\\cr
+{\\bf Field} & {\\bf Condition Name} \\cr
+\\noalign{\\hrule}
+Severity & |&postgresql-severity| \\cr
+Code & |&postgresql-code| \\cr
+Message & |&postgresql-message| \\cr
+Detail & |&postgresql-detail| \\cr
+Hint & |&postgresql-hint| \\cr
+Position & |&postgresql-position| \\cr
+Internal Position & |&postgresql-internal-position| \\cr
+Internql Query & |&postgresql-internal-query| \\cr
+Where & |&postgresql-where| \\cr
+File & |&postgresql-file| \\cr
+Line & |&postgresql-line| \\cr
+Routine & |&postgresql-routine| \\cr
+}
+}$$
+
+\\noindent Note that the above are meant to be related to the
+postgresql server messages that are sent. Additional conditions may be
+created that assist in understanding what happens when dealing with
+client side problems, or to give the client's perspective on the
+error. There may be a mix of conditions in any conditions that are
+finally returned."
     
+(@c
+(define-condition-type &postgresql-severity &postgresql
+  make-postgresql-severity-condition postgresql-severity-condition?
+  (severity postgresql-severity))
+(define-condition-type &postgresql-code &postgresql
+  make-postgresql-code-condition postgresql-code-condition?
+  (code postgresql-code))
+(define-condition-type &postgresql-message &postgresql
+  make-postgresql-message-condition postgresql-message-condition?
+  (message postgresql-message-condition-message))
+(define-condition-type &postgresql-detail &postgresql
+  make-postgresql-detail-condition postgresql-detail-condition?
+  (detail postgresql-detail))
+(define-condition-type &postgresql-hint &postgresql
+  make-postgresql-hint-condition postgresql-hint-condition?
+  (hint postgresql-hint))
+(define-condition-type &postgresql-position &postgresql
+  make-postgresql-position-condition postgresql-position-condition?
+  (position postgresql-position))
+(define-condition-type &postgresql-internal-position &postgresql
+  make-postgresql-internal-position-condition
+  postgresql-internal-position-condition? 
+  (position postgresql-internal-position))
+(define-condition-type &postgresql-internal-query &postgresql
+  make-postgresql-internal-query-condition
+  postgresql-internal-query-condition?
+  (query postgresql-internal-query))
+(define-condition-type &postgresql-where &postgresql
+  make-postgresql-where-condition postgresql-where-condition?
+  (where postgresql-where))
+(define-condition-type &postgresql-file &postgresql
+  make-postgresql-file-condition postgresql-file-condition?
+  (file postgresql-file))
+(define-condition-type &postgresql-line &postgresql
+  make-postgresql-line-condition postgresql-line-condition?
+  (line postgresql-line))
+(define-condition-type &postgresql-routine &postgresql
+  make-postgresql-routine-condition postgresql-routine-condition? 
+  (routine postgresql-routine))
+))
+
+(@ "When we have these conditions, it's not exactly an easy thing to
+just make them up and constantly create them on the fly. Instead, we
+have to take something which is in the form of an association list of
+messages, which is what the postgresql message notice and error
+packets encapsulate, and somehow turn this into a reasonable condition
+object that can be sent upwards using |raise|. We also have to
+consider that we probably want to use other conditions to augment the
+information contained in the server message, so we should probably
+have some way of handling that as well.
+
+My interpretation of how this should be done is to have a procedure
+that takes an association list of the error and notice fields, and
+an additional set of condition objects that should be used to create a
+final compound condition object.
+
+\\medskip\\verbatim
+build-postgresql-condition : field-alist . extra-conditions
+|endverbatim
+\\medskip
+
+\\noindent |build-postgresql-condition| returns a condition object
+that contains all of the extra conditions as well as the conditions
+that correspond to the fields listed in the association list, but none
+of the conditions that are not listed in the association list."
+
+(@c
+(define (build-postgresql-condition fields . extras)
+  (apply condition
+    (append 
+      (map field->condition fields)
+      extras)))
+(define (field->condition field)
+  (define (-> make) (make (cdr field)))
+  (case (car field)
+    [severity (-> make-postgresql-severity-condition)]
+    [code (-> make-postgresql-code-condition)]
+    [message (-> make-postgresql-message-condition)]
+    [detail (-> make-postgresql-detail-condition)]
+    [hint (-> make-postgresql-hint-condition)]
+    [position (-> make-postgresql-position-condition)]
+    [internal-position (-> make-postgresql-internal-position-condition)]
+    [internal-query (-> make-postgresql-internal-query-condition)]
+    [where (-> make-postgresql-where-condition)]
+    [file (-> make-postgresql-file-condition)]
+    [line (-> make-postgresql-line-condition)]
+    [routine (-> make-postgresql-routine-condition)]))
+))
+
 (@ "Now that we have finished the definition of
 |postgresql-simple-query|, let's throw it into the top-level."
  
