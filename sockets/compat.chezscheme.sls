@@ -218,32 +218,32 @@
       (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))])
 (define $accept-blocking
   (meta-cond
-    [(windows?) (foreign-procedure "_accept_block" (fixnum uptr uptr) int)]
-    [else (foreign-procedure "accept_block" (fixnum uptr uptr) int)]))
+    [(windows?) (foreign-procedure "_accept_block" (int uptr uptr) int)]
+    [else (foreign-procedure "accept_block" (int uptr uptr) int)]))
 (define $connect-blocking
   (meta-cond
     [(windows?)
-     (foreign-procedure "_connect_block" (fixnum uptr fixnum) int)]
-    [else (foreign-procedure "connect_block" (fixnum uptr fixnum) int)]))
+     (foreign-procedure "_connect_block" (int uptr fixnum) int)]
+    [else (foreign-procedure "connect_block" (int uptr fixnum) int)]))
 (define $sendto-blocking
   (meta-cond
     [(windows?)
      (foreign-procedure "_sendto_block" 
-       (fixnum u8* fixnum fixnum uptr fixnum) 
+       (int u8* fixnum fixnum uptr fixnum)
        int)]
     [else
       (foreign-procedure "sendto_block" 
-        (fixnum u8* fixnum fixnum uptr fixnum) 
+        (int u8* fixnum fixnum uptr fixnum)
         int)]))
 (define $recvfrom-blocking
   (meta-cond
     [(windows?)
      (foreign-procedure "_recvfrom_block" 
-       (fixnum u8* fixnum fixnum uptr uptr)
+       (int u8* fixnum fixnum uptr uptr)
        int)]
     [else
       (foreign-procedure "recvfrom_block" 
-        (fixnum u8* fixnum fixnum uptr uptr)
+        (int u8* fixnum fixnum uptr uptr)
         int)]))
 (define make-foreign-unix-address 
   (let ([$strcpy (foreign-procedure "strcpy" (uptr string) void)])
