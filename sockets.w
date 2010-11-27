@@ -1266,7 +1266,8 @@ This function corresponds to the |connect(2)| system call."
             (socket-raise/unless 'connect-socket 
                                  'connect 
                                  err
-                                 $error-in-progress))))))
+                                 $error-in-progress
+				 $error-would-block))))))
 ))
 
 (@* "Closing and shutting down sockets"

@@ -18,25 +18,26 @@
 
 #ifdef __NT__
 #define WIN32
-#define EXPORTED(type) __declspec ( dllexport ) type cdecl
-#endif
-#ifdef __WINDOWS__
+#elif defined __WINDOWS__
 #define WIN32
-#define EXPORTED(type) __declspec ( dllexport ) type cdecl
-#endif
-
-#ifndef WIN32
-#define EXPORTED(type) type
 #endif
 
 #ifdef WIN32
+
+#define EXPORTED(type) __declspec ( dllexport ) type cdecl
+
 #include <stddef.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
 typedef int ssize_t;
-extern __declspec(dllimport) int cdecl Sactivate_thread(void);
-extern __declspec(dllimport) void cdecl Sdeactivate_thread(void);
+
+#define SCHEME_STATIC
+
 #else
+
+#define EXPORTED(type) type
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -45,6 +46,13 @@ extern __declspec(dllimport) void cdecl Sdeactivate_thread(void);
 #include <errno.h>
 #include <sys/unistd.h>
 #include <sys/fcntl.h>
+
+#endif
+
+#ifdef WIN32
+extern __declspec(dllimport) int cdecl Sactivate_thread(void);
+extern __declspec(dllimport) void cdecl Sdeactivate_thread(void);
+#else
 #include "scheme.h"
 #endif
 
