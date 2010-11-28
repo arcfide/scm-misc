@@ -58,7 +58,9 @@
     foreign-protocol-entry-protocol
     make-foreign-size-buffer foreign-size-buffer-value
     %set-blocking)
-  (import (chezscheme) (arcfide ffi-bind))
+  (import 
+    (chezscheme)
+    (arcfide ffi-bind))
 
 (define (runtime-windows?) (memq (machine-type) '(i3nt it3nt)))
 (meta define (windows?) (memq (machine-type) '(i3nt ti3nt)))
@@ -317,9 +319,21 @@
 (define type-offset (+ family-offset (foreign-sizeof 'int)))
 (define proto-offset (+ type-offset (foreign-sizeof 'int)))
 (define addrlen-offset (+ proto-offset (foreign-sizeof 'int)))
-(define addr-offset (+ addrlen-offset (foreign-sizeof 'unsigned-long)))
-(define name-offset (+ addr-offset (foreign-sizeof 'void*)))
-(define next-offset (+ name-offset (foreign-sizeof 'void*)))
+(meta-cond
+  [(windows?)
+   (define name-offset 
+     (+ addrlen-offset (foreign-sizeof 'unsigned-long)))
+   (define addr-offset 
+     (+ name-offset (foreign-sizeof 'void*)))
+   (define next-offset
+     (+ addr-offset (foreign-sizeof 'void*)))]
+  [else
+    (define addr-offset 
+      (+ addrlen-offset (foreign-sizeof 'unsigned-long)))
+    (define name-offset 
+      (+ addr-offset (foreign-sizeof 'void*)))
+    (define next-offset 
+      (+ name-offset (foreign-sizeof 'void*)))])
   
 (define (make-foreign-address-info 
           flags family type proto addrlen addr name next)
