@@ -2513,10 +2513,10 @@ based on |DISPLAY| rather than anything else."
         (stringify (cdr e)))
       s))
   '()
-  (cons (get 'user)
+  (cons (cons 'user (get 'user))
     (let ([db (get 'database #f)]
           [rt-params (get 'server-parameters '())])
-      (if db (cons db rt-params) rt-params))))
+      (if db (cons (cons 'database db) rt-params) rt-params))))
 ))
 
 (@ "We will define a specific postgresql connection record to hold the
