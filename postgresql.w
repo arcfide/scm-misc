@@ -2265,7 +2265,7 @@ that was requested."
 (@> |Make postgresql-connect getter| (capture params)
 (lambda (x . maybe-opt)
   (let ([res (assq x params)])
-    (or res
+    (or (and res (cdr res))
         (if (pair? maybe-opt)
             (car maybe-opt)
             (errorf 'postgresql-connect
