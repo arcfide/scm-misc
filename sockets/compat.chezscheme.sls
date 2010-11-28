@@ -218,17 +218,18 @@
       (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))])
 (define $accept-blocking
   (meta-cond
-    [(windows?) (foreign-procedure "_accept_block" (int uptr uptr) int)]
+    [(windows?) 
+     (foreign-procedure __cdecl "_accept_block" (int uptr uptr) int)]
     [else (foreign-procedure "accept_block" (int uptr uptr) int)]))
 (define $connect-blocking
   (meta-cond
     [(windows?)
-     (foreign-procedure "_connect_block" (int uptr fixnum) int)]
+     (foreign-procedure __cdecl "_connect_block" (int uptr fixnum) int)]
     [else (foreign-procedure "connect_block" (int uptr fixnum) int)]))
 (define $sendto-blocking
   (meta-cond
     [(windows?)
-     (foreign-procedure "_sendto_block" 
+     (foreign-procedure __cdecl "_sendto_block"
        (int u8* fixnum fixnum uptr fixnum)
        int)]
     [else
@@ -238,7 +239,7 @@
 (define $recvfrom-blocking
   (meta-cond
     [(windows?)
-     (foreign-procedure "_recvfrom_block" 
+     (foreign-procedure __cdecl "_recvfrom_block"
        (int u8* fixnum fixnum uptr uptr)
        int)]
     [else
