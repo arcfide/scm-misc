@@ -715,17 +715,21 @@ the foreign accessors and loop over the linked list."
     (capture alp)
 (define (get-address-info-entry alp)
   (let ([dom (lookup-domain (foreign-address-info-domain alp))])
-    (make-address-info
-      dom
-      (make-socket-type (foreign-address-info-type alp))
-      (make-socket-protocol (foreign-address-info-protocol alp))
-      (foreign->socket-address 
-        dom
-        (foreign-address-info-address alp)
-        (foreign-address-info-address-length alp)))))
+    (if dom
+        (make-address-info
+          dom
+          (make-socket-type (foreign-address-info-type alp))
+          (make-socket-protocol (foreign-address-info-protocol alp))
+          (foreign->socket-address 
+            dom
+            (foreign-address-info-address alp)
+            (foreign-address-info-address-length alp)))
+        #f)))
 
 (do ([ptr (foreign-pointer-value alp) (foreign-address-info-next ptr)]
-     [res '() (cons (get-address-info-entry ptr) res)])
+     [res '() 
+       (let ([entry (get-address-info-entry ptr)])
+         (if entry (cons entry res) res))])
   [(zero? ptr) (reverse res)])
 ))
 
