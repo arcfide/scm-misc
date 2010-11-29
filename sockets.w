@@ -25,6 +25,34 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\\par
 "
 
+(@* "Loading shared objects"
+"The following sockets library uses a few shared objects. We load them
+here. [XXX: We should include instructions on how to build these
+objects.]"
+ 
+(@c
+(meta-cond
+  [(memq (machine-type) '(i3nt ti3nt))
+   (load-shared-object "ws2_32.dll")
+   (load-shared-object "kernel32.dll")
+   (load-shared-object "crtdll.dll")
+   (load-shared-object "chez_sockets.dll")]
+  [(memq (machine-type) '(ta6le a6le i3le ti3le))
+   (load-shared-object "libc.so.6")
+   (load-shared-object "chez_sockets.so.1")
+   (load-shared-object "chez_errno.so.1")]
+  [(memq (machine-type) '(ti3osx i3osx a6osx ta6osx))
+   (load-shared-object "libc.dylib")
+   (load-shared-object "chez_sockets.dylib")
+   (load-shared-object "chez_errno.dylib")]
+  [(memq (machine-type) '(i3ob ti3ob a6ob ta6ob i3fb ti3fb i3s2 ti3s2 a6s2 ta6s2 sps2 tsps2 sp64 tsp64))
+   (load-shared-object "libc.so")
+   (load-shared-object "chez_sockets.so")
+   (load-shared-object "chez_errno.so")]
+  [else (warning '(arcfide sockets)
+          "Make sure you have loaded the appropriate shared objects.")])
+))
+
 (@l "This is a socket library for Chez Scheme which attempts to remain 
 as faithful as possible to BSD sockets while still maintaining a 
 normal operation that will be familiar to Scheme programmers.

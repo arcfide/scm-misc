@@ -5,12 +5,6 @@
  
 (define root (call-with-input-file "LIBPATH.txt" get-line))
 
-(define shared-object-filename
-  (format "shared-object-~a.ss"
-    (if (pair? (command-line-arguments))
-        (car (command-line-arguments))
-        "linux")))
- 
 (define (srfi x) (format "~a/srfi/~a" root x))
 (define (arcfide x) (format "~a/arcfide/~a" root x))
 
@@ -38,7 +32,6 @@
     (format "~a/~2,'0d_~a.so"
       build-path (counter) (path-root (path-last x)))))
 
-(build shared-object-filename)
 (build (arcfide "chezweb/cheztangle.ss"))
 (build (arcfide "ffi-bind.w"))
 (build (arcfide "errno.w"))

@@ -6,7 +6,7 @@ include ../chez_make.mk
 SCHEME_H= ${CHEZPREFIX}/${MACHINETYPE}/scheme.h
 SOCKETS_LIB_MAJOR=1
 
-SOCKETS_LIB=sockets.so.${SOCKETS_LIB_MAJOR}
+SOCKETS_LIB=chez_sockets.so.${SOCKETS_LIB_MAJOR}
 
 build: ${SOCKETS_LIB}
 
