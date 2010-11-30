@@ -1907,10 +1907,10 @@ initial count and then iterate over a series of
 (define run-row-description-tests
   (let ([bv '#vu8(84 0 0 0 29 0 1 
                   98 108 97 104 0
-                  0 0 0 1 0 2 0 0 0 3 0 4 0 0 0 5 0 6)])
+                  0 0 0 1 0 2 0 0 0 25 0 4 0 0 0 5 0 0)])
     (make-backend-message-tester "Row Description Message" bv
       (lambda ()
-        (let ([fd (make-field-description "blah" 1 2 3 4 5 6)])
+        (let ([fd (make-field-description "blah" 1 2 'text 4 5 'text)])
           (make-row-description-message (vector fd))))
       (make-pred-test "Row Description Message" 
         row-description-message?)
@@ -1926,7 +1926,7 @@ initial count and then iterate over a series of
                 (field-description-size fd)
                 (field-description-modifier fd)
                 (field-description-format fd)))))
-        '("blah" 1 2 3 4 5 6)))))
+        '("blah" 1 2 text 4 5 text)))))
 ))
 
 (@* "SSL, Startup, Shutdown, and Sync Messages"
