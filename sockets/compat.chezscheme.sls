@@ -19,6 +19,29 @@
 ;;; PERFORMANCE OF THIS SOFTWARE.
 
 #!chezscheme
+(let ()
+  (import (chezscheme))
+  (meta-cond
+    [(memq (machine-type) '(i3nt ti3nt))
+     (load-shared-object "ws2_32.dll")
+     (load-shared-object "kernel32.dll")
+     (load-shared-object "crtdll.dll")]
+    [(memq (machine-type) '(ta6le a6le i3le ti3le))
+     (load-shared-object "libc.so.6")
+     (load-shared-object "chez_errno.so.1")]
+    [(memq (machine-type) '(ti3osx i3osx a6osx ta6osx))
+     (load-shared-object "libc.dylib")
+     (load-shared-object "chez_errno.dylib")]
+    [(memq (machine-type) 
+       '(i3ob ti3ob a6ob ta6ob 
+         i3fb ti3fb i3s2 ti3s2 a6s2 ta6s2 sps2 tsps2 sp64 tsp64))
+     (load-shared-object "libc.so")
+     (load-shared-object "chez_errno.so")]
+    [else (warning '(arcfide sockets)
+            "Make sure you have loaded the appropriate shared objects.")])
+  (when (threaded?)
+    (load-shared-object "chez_sockets.so.1")))
+
 (library (arcfide sockets compat)
   (export
     (rename (runtime-windows? windows?))
@@ -220,16 +243,19 @@
       (foreign-procedure "fcntl" (fixnum fixnum fixnum) fixnum))])
 (define $accept-blocking
   (meta-cond
+    [(not (threaded?)) $accept]
     [(windows?) 
      (foreign-procedure __cdecl "_accept_block" (int uptr uptr) int)]
     [else (foreign-procedure "accept_block" (int uptr uptr) int)]))
 (define $connect-blocking
   (meta-cond
+    [(not (threaded?)) $connect]
     [(windows?)
      (foreign-procedure __cdecl "_connect_block" (int uptr fixnum) int)]
     [else (foreign-procedure "connect_block" (int uptr fixnum) int)]))
 (define $sendto-blocking
   (meta-cond
+    [(not (threaded?)) $sendto]
     [(windows?)
      (foreign-procedure __cdecl "_sendto_block"
        (int u8* fixnum fixnum uptr fixnum)
@@ -240,6 +266,7 @@
         int)]))
 (define $recvfrom-blocking
   (meta-cond
+    [(not (threaded?)) $recvfrom]
     [(windows?)
      (foreign-procedure __cdecl "_recvfrom_block"
        (int u8* fixnum fixnum uptr uptr)
