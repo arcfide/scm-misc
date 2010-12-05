@@ -2696,9 +2696,12 @@ connection."
 (define (postgresql-terminate-connection conn)
   (assert (postgresql-connection? conn))
   (send-message conn (make-terminate-message))
-  (cond
-    [(postgresql-connection-input-port conn) => close-port]
-    [else (close-socket (postgresql-connection-socket conn))])
+  (let ([out (postgresql-connection-output-port conn)]
+        [in (postgresql-connection-input-port conn)])
+    (when out (close-port out))
+    (guard (c [else (void)]) (when in (close-port in)))
+    (unless (or out in)
+      (close-socket (postgresql-connection-socket conn))))
   (postgresql-connection-input-port-set! conn #f)
   (postgresql-connection-output-port-set! conn #f))
 ))
