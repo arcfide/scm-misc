@@ -348,11 +348,12 @@ get-modlisp-parameter
 \noindent Makes it easy to get a parameter from a modlisp packet.
 
 <<Utilities>>=
-(define (get-modlisp-parameter key packet)
-  (let ([url (get-modlisp-header packet 'url #f)])
-    (and url 
-      (let ([res (assq key (query-string->parameters (or (uri-query url) "")))])
-        (and res (cadr res))))))
+(define (get-modlisp-parameter key packet . maybe-type)
+  (let ([type (if (pair? maybe-type) (car maybe-type) 'string)])
+    (let ([url (get-modlisp-header packet 'url #f)])
+      (and url 
+        (query-parameter-lookup (query-string->parameters (or (uri-query url) ""))
+          key type #f)))))
 
 @
 
