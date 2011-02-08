@@ -1,8 +1,5 @@
- #!chezscheme
+#!chezscheme
 (@chezweb)
-;;; SET YOUR TABS TO 2 IF YOU WANT TO READ THIS DOCUMENT
-;;; THIS DOCUMENT HAS BEEN DESIGNED FOR READING BY BOTH 
-;;; FIXED WIDTH AND PROPORTIONAL FONT
 
 "\\centerline{
   \\titlef Sapling: APL for Scheme}
@@ -51,7 +48,10 @@ Good luck."
 
 (arcfide apl)
 (export
-  ->apl-value)
+  ->apl-value
+  scalar? scalar-value
+  apl-array? apl-array-accessor
+  apl-value?)
 (import 
   (rename (chezscheme) 
     (assert scheme-assert)))
@@ -151,7 +151,7 @@ hold the data object that contains the values."
         (n dimensions contents)))))
 ))
 
-(@ 
+(@* "Converting Scheme values to APL values"
 "I would like to define some sort of correspondence between APL values
 and native Scheme values. 
 Later, such a correspondence may enable me to treat certain types of
@@ -279,38 +279,82 @@ us where we want to go."
 (@< |Define APL value converter|)
 ))
 
-(@ ""
+(@* "Type Dispatch"
+"When dealing with APL values, one should not have to think about the
+underlying implementation mechanism of the value.
+Namely, the programmer should not be burdened with whether or not the
+arrays are accessed as vectors or some other specialized value. 
+He should not be burdened with the array arrithmetic, nor should we
+burden him with the responsibility of determining what sort of value
+he has. 
+Instead, we should build up a |case| like dispatch system for the APL
+datatype.
+ 
+To begin, the more primitive concepts of type predicates and accessors
+should be defined.
+I will make two distinctions between APL values:
+we have either arrays or we have scalars. 
+Scalars may be numbers or characters, and arrays may have one or more
+dimensions (this is known as rank).
+When we have an array, we want to also define an accessor for the
+content and an index function.
+The index function takes as many arguments as the rank of the APL
+array that it indexes. It returns the index into the data structure
+used to store the APL values. "
 
 (@c
 (define (scalar? x)
-  (assert (apl-value? x))
-  (and 
-    (1d-array? x)
-    (fx=? 1 (fxvector-ref (get-dims x) 0))))
-(define (1d-array? x)
-  (assert (apl-value? x))
-  (fx= 1 (fxvector-length (get-dims x))))
-(define (->apl x)
+  (or (number? x)
+      (char? x)
+      (and (apl-value? x)
+           (zero? (fxvector-length (get-dims x))))))
+(define (scalar-value x)
   (cond
-    [(boolean? x) (boolean->apl x)]
-    [(list? x) (list->apl x)]
-    [else x]))
-(define (boolean->apl x)
-  (assert (boolean? x))
-  (if x 1 0))
-(define (list->apl x)
-  (assert (list? x))
-  (let ([len (length x)])
-    (let ([res (make-vector len)])
-      (fold-left
-        (lambda (s e)
-          (vector-set! res s (->apl e))
-          (fx1+ s))
-        0
-        x))))
-(define (vector-shape x)
-  (assert (vector? x))
-  (vector (vector-length x)))
+    [(or (number? x) (char? x)) x]
+    [(apl-value? x) 
+     (if (zero? (fxvector-length (get-dims x)))
+         (get-contents x)
+         (error 'scalar-value "not a scalar" x))]
+    [else
+      (error 'scalar-value "not a scalar" x)]))
+(define (apl-array? x)
+  (and (apl-value? x)
+       (not (zero? (fxvector-length (get-dims x))))))
+(define (apl-array-accessor x)
+  (unless (apl-array? x)
+    (error 'apl-array-accessor "invalid APL array" x))
+  (values
+    (let* ([contents (get-contents x)]
+           [len (vector-length contents)])
+      (lambda (i) 
+        (when (>= i len)
+          (errorf #f "range mismatch: max: ~d; index: ~d"
+            (fx- len 1) i))
+        (vector-ref contents i)))
+    (let* ([contents (get-contents x)]
+           [len (vector-length contents)])
+      (lambda (i v)
+        (when (>= i len)
+          (errorf #f "range mismatch: max: ~d; index: ~d"
+            (fx- len 1) i))
+        (unless (or (apl-value? v) (scalar? v))
+          (errorf #f "invalid APL value: ~s" v))
+        (vector-set! contents i v)))
+    (let ([dims (get-dims x)])
+      (lambda coord
+        (define (add-coord dim i res)
+          (let ([size (fxvector-ref dims i)])
+            (when (>= dim size)
+              (errorf #f "dimension mismatch: size: ~d; index: ~d"
+                size dim))
+            (if res
+                (+ (* dim size) res)
+                dim)))
+        (unless (= (fxvector-length dims) (length coord))
+          (errorf #f "rank mismatch, rank: ~d; given: ~d"
+            (fxvector-length dims)
+            (length coord)))
+        (fold-right add-coord #f coord (iota (length coord)))))))
 ))
 
 (@* "Dealing with Iteration over two arrays"
@@ -557,7 +601,7 @@ operations to use."
 (define apl- (@< |Arithmetic Function| single- apl- -))
 ))
 
-#;(@ "For all the arithmetic functions, things won't work unless everything is
+#;(@ "For all the arithmetic functions, things won't work unless everything is
 a number. 
 The following procedures help to ensure that things are all type checked."
 
