@@ -73,6 +73,23 @@ then the |assert| will be a no-op."
         #'(scheme-assert expr))]))
 ))
 
+(@* "Miscellaneous Utilities"
+"I use the following miscellaneous functions throughout the code, so I define them here for easy access."
+
+(@c
+(define (id x) x)
+(define (vector-for-all pred? v)
+  (let ([len (vector-length v)])
+    (let loop ([i 0])
+      (or (>= i len)
+          (and (pred? (vector-ref v i))
+               (loop (fx1+ i)))))))
+(define (vector-fold-left p s v)
+  (do ([i 0 (fx1+ i)]
+       [res s (p res (vector-ref v i))])
+      [(>= i (vector-length v)) res]))
+))
+
 (@* "The APL Datatype"
 "APL is actually a dynamic language without many datatypes.
 The basic number is supported, as well as strings of characters,
@@ -292,23 +309,6 @@ us where we want to go."
 (define (vector-shape x)
   (assert (vector? x))
   (vector (vector-length x)))
-))
-
-(@* "Miscellaneous Utilities"
-"I use the following miscellaneous functions throughout the code, so I define them here for easy access."
-
-(@c
-(define (id x) x)
-(define (vector-for-all pred? v)
-  (let ([len (vector-length v)])
-    (let loop ([i 0])
-      (or (>= i len)
-          (and (pred? (vector-ref v i))
-               (loop (fx1+ i)))))))
-(define (vector-fold-left p s v)
-  (do ([i 0 (fx1+ i)]
-       [res s (p res (vector-ref v i))])
-      [(>= i (vector-length v)) res]))
 ))
 
 (@* "Dealing with Iteration over two arrays"
