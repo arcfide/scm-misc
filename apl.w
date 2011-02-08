@@ -120,15 +120,11 @@ $$\\vbox{
   \\offinterlineskip
   \\halign{
     \\strut # & # & # \\cr
-    \\noalign{\\hrule}
     {\\bf Rank} & {\\bf Name of Array} & {\\bf Description} \\cr
     \\noalign{\\hrule}
     0 & Scalar & One item arranged along no axes. \\cr
-    \\noalign{\\hrule}
     1 & Vector & Zero or more items arranged along one axis. \\cr
-    \\noalign{\\hrule}
     2 & Matix & Zero or more items arranged along two axes. \\cr
-    \\noalign{\\hrule}
     3 & --- & Zero or more items arranged along $n$ axes. \\cr
     \\noalign{\\hrule}
   }
@@ -177,15 +173,21 @@ valid |apl-value|.
 It should raise an error if it cannot convert the value.
 The following details the conversions.
 
-\\medskip
-\\unorderedlist
-\\li Number $\\to$ Number
-\\li Boolean $\\to$ 0/1
-\\li Character $\\to$ Single-element string
-\\li String $\\to$ APL String
-\\li Vector $\\to$ APL Single dimensional vector
-\\endunorderedlist
-\\medskip
+$$\\vbox{
+  \\offinterlineskip
+  \\halign{
+    \\strut # \\hfil & # \\hfil \\cr
+    {\\bf Scheme Value} & {\\bf Equivalent APL Value} \\cr
+    \\noalign{\\hrule}
+    Number & Number \\cr
+    Boolean & 0/1 \\cr
+    Character & Character \\cr
+    String & APL Vector of Characters \\cr
+    Vector of arbitrary values & APL Vector of APL values \\cr
+    Vector $\\times$ Vector $\\times\\ldots\\times$ Vector & APL Array \\cr
+    \\noalign{\\hrule}
+  }
+}$$
 
 \\noindent
 When we talk about these values, we should remember to deeply convert
