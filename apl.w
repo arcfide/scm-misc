@@ -48,6 +48,7 @@ Good luck."
 
 (arcfide apl)
 (export
+  make-apl-array
   ->apl-value
   scalar? scalar-value
   apl-array? apl-array-accessor
@@ -149,6 +150,23 @@ hold the data object that contains the values."
       (lambda (dimensions contents)
         (assert (fxvector? dimensions))
         (n dimensions contents)))))
+))
+ 
+(@
+"We also want something analogous to |make-vector| that allows a
+programmer to construct new, empty APL arrays."
+ 
+(@c
+(define (make-apl-array initial . dims)
+  (unless (or (scalar? initial) (apl-array? initial))
+    (errorf 'make-apl-array "invalid initial value ~s" initial))
+  (unless (for-all fixnum? dims)
+    (errorf 'make-apl-array "non-fixnum dimensions ~s" dims))
+  (make-apl-value
+    (list->fxvector dims)
+    (make-vector
+      (apply fx+ dims)
+      initial)))
 ))
 
 (@* "Converting Scheme values to APL values"
@@ -295,12 +313,7 @@ should be defined.
 I will make two distinctions between APL values:
 we have either arrays or we have scalars. 
 Scalars may be numbers or characters, and arrays may have one or more
-dimensions (this is known as rank).
-When we have an array, we want to also define an accessor for the
-content and an index function.
-The index function takes as many arguments as the rank of the APL
-array that it indexes. It returns the index into the data structure
-used to store the APL values. "
+dimensions (this is known as rank)."
 
 (@c
 (define (scalar? x)
@@ -317,6 +330,27 @@ used to store the APL values. "
          (error 'scalar-value "not a scalar" x))]
     [else
       (error 'scalar-value "not a scalar" x)]))
+))
+
+(@
+"When we have an array, we want to also define an accessor for the
+content, a setter, and an index function.
+
+\\medskip\\verbatim
+(getter i)
+(setter i v)
+(index i j ...)
+|endverbatim
+\\medskip
+
+\\noindent
+The index function takes as many arguments as the rank of the APL
+array that it indexes. It returns the index into the data structure
+used to store the APL values. Both the getter and the setter accept
+the index as one of the arguments to specify the slot in the array."
+
+(@> |Define APL Array Predicate and Accessor Generator|
+(export apl-array? apl-array-accessor)
 (define (apl-array? x)
   (and (apl-value? x)
        (not (zero? (fxvector-length (get-dims x))))))
@@ -324,37 +358,72 @@ used to store the APL values. "
   (unless (apl-array? x)
     (error 'apl-array-accessor "invalid APL array" x))
   (values
-    (let* ([contents (get-contents x)]
-           [len (vector-length contents)])
-      (lambda (i) 
-        (when (>= i len)
-          (errorf #f "range mismatch: max: ~d; index: ~d"
-            (fx- len 1) i))
-        (vector-ref contents i)))
-    (let* ([contents (get-contents x)]
-           [len (vector-length contents)])
-      (lambda (i v)
-        (when (>= i len)
-          (errorf #f "range mismatch: max: ~d; index: ~d"
-            (fx- len 1) i))
-        (unless (or (apl-value? v) (scalar? v))
-          (errorf #f "invalid APL value: ~s" v))
-        (vector-set! contents i v)))
-    (let ([dims (get-dims x)])
-      (lambda coord
-        (define (add-coord dim i res)
-          (let ([size (fxvector-ref dims i)])
-            (when (>= dim size)
-              (errorf #f "dimension mismatch: size: ~d; index: ~d"
-                size dim))
-            (if res
-                (+ (* dim size) res)
-                dim)))
-        (unless (= (fxvector-length dims) (length coord))
-          (errorf #f "rank mismatch, rank: ~d; given: ~d"
-            (fxvector-length dims)
-            (length coord)))
-        (fold-right add-coord #f coord (iota (length coord)))))))
+    (@< |Create APL Array Getter| x)
+    (@< |Create APL Array Setter| x)
+    (@< |Create APL Array Indexer| x)))
+))
+
+(@
+"The getter should verify its arguments and the grab the index from
+the contents vector of the array."
+
+(@> |Create APL Array Getter| (capture x)
+(let* ([contents (get-contents x)]
+       [len (vector-length contents)])
+  (lambda (i) 
+    (when (>= i len)
+      (errorf #f "range mismatch: max: ~d; index: ~d"
+        (fx- len 1) i))
+    (vector-ref contents i)))
+))
+
+(@
+"The setter needs to do the same as the getter, but it should verify
+that it receives a valid input value. Of course, it uses |vector-set!|
+instead of |vector-ref|."
+ 
+(@> |Create APL Array Setter| (capture x)
+(let* ([contents (get-contents x)]
+       [len (vector-length contents)])
+  (lambda (i v)
+    (when (>= i len)
+      (errorf #f "range mismatch: max: ~d; index: ~d"
+        (fx- len 1) i))
+    (unless (or (apl-value? v) (scalar? v))
+      (errorf #f "invalid APL value: ~s" v))
+    (vector-set! contents i v)))
+))
+
+(@
+"The indexer is similarly easy, but we have to make our indexer
+generic enougth to handle arrays of any rank.
+We also need to do more error checking here to make sure that we catch
+dimension and rank mismatches as early as possible. 
+Otherwise, nothing complex here."
+ 
+(@> |Create APL Array Indexer| (capture x)
+(let ([dims (get-dims x)])
+  (lambda coord
+    (define (add-coord dim i res)
+      (let ([size (fxvector-ref dims i)])
+        (when (>= dim size)
+          (errorf #f "dimension mismatch: size: ~d; index: ~d"
+            size dim))
+        (if res
+            (+ (* dim size) res)
+            dim)))
+    (unless (= (fxvector-length dims) (length coord))
+      (errorf #f "rank mismatch, rank: ~d; given: ~d"
+        (fxvector-length dims)
+        (length coord)))
+    (fold-right add-coord #f coord (iota (length coord)))))
+))
+
+(@
+"Let's put the APL Array procedures at the top-level."
+ 
+(@c
+(@< |Define APL Array Predicate and Accessor Generator|)
 ))
 
 (@* "Dealing with Iteration over two arrays"
