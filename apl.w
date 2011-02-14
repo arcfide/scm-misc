@@ -51,6 +51,7 @@ Good luck."
 
 (arcfide apl)
 (export
+  make-scalar ;; Temporary remove later
   apl-value-case scalar array
   make-apl-array
   ->apl-value
@@ -495,6 +496,75 @@ of the array that we desire, and in the other we do not."
 	 (apl-value-case %internal x rest ...))]
     [(_ exp c1 c2 ...)
      (let ([tmp exp]) (apl-value-case %internal tmp c1 c2 ...))]))
+))
+
+(@* "Scalar Functions"
+"Scalar functions behave the most regularly among APL's set of primitive
+operations.
+They have defined operations on scalars, and we define their
+behavior on arrays in terms of an element-wise application of the
+function to each scalar element.
+The ouput array has the same shape as the input array or arrays,
+and most of the logic can be abstracted away, which is what we do
+here.
+
+\\medskip\\verbatim
+(make-scalar who f)
+|endverbatim
+\\medskip
+
+\\noindent
+I define a higher-order procedure |make-scalar| that takes the scalar
+function definition |f| as a procedure that handles one or two scalars.
+It returns the appropriate scalar function defined over all APL
+values.
+The |who| should be the name symbol of the function; |make-scalar|
+will use |who| when reporting errors."
+
+(@c
+(define (make-scalar who f)
+  (rec loop
+    (case-lambda
+      [(x)
+       (apl-value-case x
+	 [(scalar v) (f v)]
+	 [(array size index get set)
+	  (let ([len (apply + size)])
+	    (let ([res (apply make-apl-array 0 size)])
+	      (let-values ([(res-get res-set res-idx)
+			    (apl-array-accessor res)])
+		(do ([i 0 (fx1+ i)]) [(>= i len) res]
+		  (res-set i (loop (get i)))))))])]
+      [(x y)
+       (apl-value-case x
+	 [(scalar xv)
+	  (apl-value-case y
+	   [(scalar yv) (f xv yv)]
+	   [(array size index get set)
+	    (let ([len (apply + size)])
+	      (let ([res (apply make-apl-array 0 size)])
+		(let-values ([(res-get res-set res-idx)
+			      (apl-array-accessor res)])
+		  (do ([i 0 (fx1+ i)]) [(>= i len) res]
+		    (res-set i (loop x (get i)))))))])]
+	 [(array size index get set)
+	  (apl-value-case y
+	   [(scalar yv)
+	    (let ([len (apply + size)])
+	      (let ([res (apply make-apl-array 0 size)])
+		(let-values ([(res-get res-set res-idx)
+			      (apl-array-accessor res)])
+		  (do ([i 0 (fx1+ i)]) [(>= i len) res]
+		    (res-set i (loop (get i) y))))))]
+	   [(array ysize index yget yset)
+	    (unless (equal? size ysize)
+	      (errorf who "shape mismatch ~s vs. ~s" size ysize))
+	    (let ([len (apply + size)])
+	      (let ([res (apply make-apl-array 0 size)])
+		(let-values ([(res-get res-set res-idx)
+			      (apl-array-accessor res)])
+		  (do ([i 0 (fx1+ i)]) [(>= i len) res]
+		    (res-set i (loop (get i) (yget i)))))))])])])))
 ))
 
 )
