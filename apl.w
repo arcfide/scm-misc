@@ -25,6 +25,8 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\\par
+
+\\font\\tt = \"APL385 Unicode\"\n
 "
 
 (@l "Anyone who uses Scheme will no doubt question whether or not APL and
@@ -51,6 +53,7 @@ Good luck."
 
 (arcfide apl)
 (export
+  apl+ apl- × ÷ ⌈ ⌊ ∣
   make-scalar ;; Temporary remove later
   apl-value-case scalar array
   make-apl-array
@@ -521,7 +524,7 @@ values.
 The |who| should be the name symbol of the function; |make-scalar|
 will use |who| when reporting errors."
 
-(@c
+(@> |Define make-scalar| (export make-scalar)
 (define (make-scalar who f)
   (rec loop
     (case-lambda
@@ -529,42 +532,189 @@ will use |who| when reporting errors."
        (apl-value-case x
 	 [(scalar v) (f v)]
 	 [(array size index get set)
-	  (let ([len (apply + size)])
-	    (let ([res (apply make-apl-array 0 size)])
-	      (let-values ([(res-get res-set res-idx)
-			    (apl-array-accessor res)])
-		(do ([i 0 (fx1+ i)]) [(>= i len) res]
-		  (res-set i (loop (get i)))))))])]
+	  (scalar-array-loop size loop i (get i))])]
       [(x y)
        (apl-value-case x
 	 [(scalar xv)
 	  (apl-value-case y
 	   [(scalar yv) (f xv yv)]
 	   [(array size index get set)
-	    (let ([len (apply + size)])
-	      (let ([res (apply make-apl-array 0 size)])
-		(let-values ([(res-get res-set res-idx)
-			      (apl-array-accessor res)])
-		  (do ([i 0 (fx1+ i)]) [(>= i len) res]
-		    (res-set i (loop x (get i)))))))])]
+	    (scalar-array-loop size loop i x (get i))])]
 	 [(array size index get set)
 	  (apl-value-case y
-	   [(scalar yv)
-	    (let ([len (apply + size)])
-	      (let ([res (apply make-apl-array 0 size)])
-		(let-values ([(res-get res-set res-idx)
-			      (apl-array-accessor res)])
-		  (do ([i 0 (fx1+ i)]) [(>= i len) res]
-		    (res-set i (loop (get i) y))))))]
+	   [(scalar yv) (scalar-array-loop size loop i (get i) y)]
 	   [(array ysize index yget yset)
 	    (unless (equal? size ysize)
 	      (errorf who "shape mismatch ~s vs. ~s" size ysize))
-	    (let ([len (apply + size)])
-	      (let ([res (apply make-apl-array 0 size)])
-		(let-values ([(res-get res-set res-idx)
-			      (apl-array-accessor res)])
-		  (do ([i 0 (fx1+ i)]) [(>= i len) res]
-		    (res-set i (loop (get i) (yget i)))))))])])])))
+	    (scalar-array-loop size loop i (get i) (yget i))])])])))
+))
+
+(@
+"when we encounter an array in a scalar function, we need to loop
+over it recursively until we encounter the scalar elements.
+We also expect to return an array of the same shape, so we must
+allocate and populate the return vector as we do this.
+The following syntax lets us do this."
+
+(@c
+(define-syntax scalar-array-loop
+  (syntax-rules ()
+    [(_ size loop i args ...)
+     (let ([len (apply + size)])
+       (let ([res (apply make-apl-array 0 size)])
+	 (let-values ([(res-get res-set res-idx) (apl-array-accessor res)])
+	   (do ([i 0 (fx1+ i)]) [(>= i len) res]
+	     (res-set i (loop args ...))))))]))
+))
+
+(@
+"Let's bring this to the top-level."
+
+(@c
+(@< |Define make-scalar|)
+))
+
+(@* "Arithmetic Functions"
+"The arithmetic functions are those that operate on numbers and perform
+some sort of numerical computation the arrays.
+They are all scalar functions.
+
+$$\\vbox{
+  \\offinterlineskip
+  \\halign{
+    \\strut \\vrule\\quad # \\hfil &
+      \\vrule\\quad # \\hfil & \\vrule\\quad # \\hfil\\vrule \\cr
+    \\noalign{\\hrule}
+    {\\it Function} & {\\it Monadic Form} & {\\it Dyadic Form} \\cr
+    \\noalign{\\hrule}
+    |+| & Identity & Add \\cr
+    \\noalign{\\hrule}
+    |-| & Negate & Subtract \\cr
+    \\noalign{\\hrule}
+    |×| & Sign Of & Multiply \\cr
+    \\noalign{\\hrule}
+    |÷| & Recipricol & Divide \\cr
+    \\noalign{\\hrule}
+    |⌈| & Ceiling & Greater Of \\cr
+    \\noalign{\\hrule}
+    |⌊| & Floor & Lesser Of \\cr
+    \\noalign{\\hrule}
+    |∣| & Absolute Value & Division Residue \\cr
+    \\noalign{\\hrule}
+  }
+}$$
+
+\\noindent
+As you can see from the above table, they all have both monadic and
+dyadic forms.")
+
+(@
+"{\\it Identity/Addition.}
+The APL |+| function is either the identity function (monadic) or it
+computes the sum of two scalar values (dyadic)."
+
+(@c
+(define apl+
+  (make-scalar 'apl+
+    (case-lambda
+      [(x) x]
+      [(x y) (+ x y)])))
+))
+
+(@
+"{\\it Negation/Subtraction.}
+The APL |-| function computes either the negation of a scalar numeric
+value (monadic) or it computes the subtraction of its second argument
+from its first (dyadic)."
+
+(@c
+(define apl-
+  (make-scalar 'apl-
+    (case-lambda
+      [(x) (- x)]
+      [(x y) (- x y)])))
+))
+
+(@
+"{\\it Sign Of/Multipy.}
+The APL |×| function computes either the sign of a numeric scalar
+value (monadic) or the product of its arguments (dyadic).
+In monadic form, it gives |1|, |0|, or |¯1| depending on the sign of
+its argument."
+
+(@c
+(define ×
+  (make-scalar '×
+    (case-lambda
+      [(x)
+       (cond
+	 [(zero? x) 0]
+	 [(negative? x) -1]
+	 [else 1])]
+      [(x y) (* x y)])))
+))
+
+(@
+"{\\it Reciprical/Divide.}
+The APL |÷| function computes the reciprical of its argument in monadic
+form and divides the left hand side from the right hand side in
+the dyadic form.
+Deviating from standard APL, the full Scheme numeric tower is
+valid numeric input, instead of just floating point and integer values."
+
+(@c
+(define ÷
+  (make-scalar '÷
+    (case-lambda
+      [(x) (/ x)]
+      [(x y) (/ x y)])))
+))
+
+(@
+"{\\it Ceiling/Greater Of.}
+In Monadic form, the |⌈| function computes the ceiling of its
+argument; in dyadic form, it evaluates to the greater of its two
+arguments."
+
+(@c
+(define ⌈
+  (make-scalar '⌈
+    (case-lambda
+      [(x) (ceiling x)]
+      [(x y) (max x y)])))
+))
+
+(@
+"{\\it Floor/Lesser Of.}
+This is the same as the |⌈| function, but instead of computing the
+ceiling and greater value of two, the |⌊| function computes the
+floor and lesser value of two."
+
+(@c
+(define ⌊
+  (make-scalar '⌊
+    (case-lambda
+      [(x) (floor x)]
+      [(x y) (min x y)])))
+))
+
+(@
+"{\\it Absolute Value/Residue.}
+In monadic form, the |∣| function computes the absolute value,
+and in dyadic form, it computes the residue. The residue is the
+remainder of dividing the right-hand side by the left hand side
+if the signs are both positive or both negative.
+If the arguments have the opposite signs, then the result is
+the complement of the result you would get if they had the same
+sign.
+This corresponds to the |modulo| scheme procedure."
+
+(@c
+(define ∣
+  (make-scalar '∣
+    (case-lambda
+      [(x) (abs x)]
+      [(x y) (if (zero? x) y (modulo y x))])))
 ))
 
 )
