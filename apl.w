@@ -53,6 +53,7 @@ Good luck."
 
 (arcfide apl)
 (export
+  apl-waiter
   apl+ apl- × ÷ ⌈ ⌊ ∣
   make-scalar ;; Temporary remove later
   apl-value-case scalar array
@@ -715,6 +716,27 @@ This corresponds to the |modulo| scheme procedure."
     (case-lambda
       [(x) (abs x)]
       [(x y) (if (zero? x) y (modulo y x))])))
+))
+
+(@* "Simulating APL Workspaces"
+"The most visual difference between an APL workspace and the Scheme
+REPL is the prompt.
+Obviously, there are other differences, but I want something that
+looks like a prompt, at least.
+The procedure |apl-waiter| customizes the waiter in Chez Scheme
+to work superficially like an APL Workspace."
+
+(@c
+(define (sapling-version) "0.1")
+(define (sapling-copyright) "Copyright © 2011 Aaron W. Hsu")
+(define (sapling-banner) "Sapling APL for Chez Scheme")
+(define (apl-waiter)
+  (printf "~a~n~a~nMachine Type = ~a, Version = ~a~n"
+    (sapling-banner)
+    (sapling-copyright)
+    (machine-type)
+    (sapling-version))
+  (waiter-prompt-string "       "))
 ))
 
 )
