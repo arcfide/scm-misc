@@ -26,7 +26,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\\par
 
-\\font\\tt = \"APL385 Unicode\"\n
+\\font\\tt = \"APLX Upright\"\n
 "
 
 (@l "Anyone who uses Scheme will no doubt question whether or not APL and
@@ -55,6 +55,7 @@ Good luck."
 (export
   apl-waiter
   apl+ apl- × ÷ ⌈ ⌊ ∣
+  #;⍳ ? apl* ⍟ ○ ! #;⌹
   make-scalar ;; Temporary remove later
   apl-value-case scalar array
   make-apl-array
@@ -717,6 +718,280 @@ This corresponds to the |modulo| scheme procedure."
       [(x) (abs x)]
       [(x y) (if (zero? x) y (modulo y x))])))
 ))
+
+(@* "Algebraic Functions"
+"APL defines 7 algebraic functions.
+
+$$\\vbox{
+  \\offinterlineskip
+  \\halign{
+    \\strut \\vrule\\quad # \\hfil &
+      \\vrule\\quad # \\hfil & \\vrule\\quad # \\hfil\\vrule \\cr
+    \\noalign{\\hrule}
+    {\\it Function} & {\\it Monadic Form} & {\\it Dyadic Form} \\cr
+    \\noalign{\\hrule}
+    |⍳| & Index Generator & (ref. Comparative) \\cr
+    \\noalign{\\hrule}
+    |?| & Roll & Random deal \\cr
+    \\noalign{\\hrule}
+    |*| & $e$ to the power & Power \\cr
+    \\noalign{\\hrule}
+    |⍟| & Natural Logarithm & Log to the base \\cr
+    \\noalign{\\hrule}
+    |○| & $\\pi$ times & Circular and Hyperbolic \\cr
+    \\noalign{\\hrule}
+    |!| & Factorial/Gamma & Binomial \\cr
+    \\noalign{\\hrule}
+    |⌹| & Matrix Inversion & Matrix Division \\cr
+    \\noalign{\\hrule}
+  }
+}$$
+
+\\noindent
+Among these, the |*|, |⍟|, |○|, and |!| functions are entirely
+scalar, while the |?| function is only scalar in its monadic form,
+but is non-scalar in its dyadic form. The |⌹| and |⍳| functions
+are both entirely non-scalar, and the |⍳| is further defined
+in two different logical sections.
+Here, the monadic form of |⍳| is algebraic, but the dyadic form
+is considered comparative, so we only define the monadic form here,
+with the other definition coming form the comarative section.")
+
+(@
+"{\\it Index generation.}
+When used in its monadic form, |⍳| works just like |iota|."
+
+(@c
+(define ⍳m
+  (lambda (x)
+    (let ([res (make-apl-array 0 x)])
+      (let-values ([(get set index) (apl-array-accessor res)])
+	(do ([i 0 (fx1+ i)]) [(>= i x) res]
+	  (set i i))))))
+))
+
+(@
+"{\\it Roll/Deal.}
+In its monadic form, the |?| function is equivalent to |random|.
+In its dyadic form, the |?| function gives back as many numbers
+as its left-hand side, each selected at random in the range of
+the right-hand side."
+
+(@c
+(define ?
+  (make-scalar '?
+    (case-lambda
+      [(x) (random x)]
+      [(x y)
+       (let ([res (make-apl-array 0 x)])
+	 (let-values ([(index get set) (apl-array-accessor res)])
+	   (do ([i 0 (fx1+ i)]) [(>= i x) res]
+	     (set i (random y)))))])))
+))
+
+(@
+"{\\it $e$/Power.}
+In monadic form, |*| returns $e$ raised to the power of the right
+hand argument.
+In dyadic form, it uses the left hand side instead of $e$."
+
+(@c
+(define apl*
+  (make-scalar 'apl*
+    (case-lambda
+      [(x) (exp x)]
+      [(x y) (expt x y)])))
+))
+
+(@
+"{\\it Natural Logarithm/Log to base.}
+The |⍟| function computes either the Natural log (monadic) or
+the log of the right-hand side to the base (left-hand side)."
+
+(@c
+(define ⍟
+  (make-scalar '⍟
+    (case-lambda
+      [(x) (log x)]
+      [(x y) (log y x)])))
+))
+
+(@
+"{\\it $\\pi$ Times/Circular and Hyperbolic functions.}
+The monadic form of |○| computes the product of $\\pi$ and
+its argument, while the dyadic form combines a series of functions
+together.
+
+$$\\vbox{
+  \\offinterlineskip
+  \\halign{
+    \\strut \\vrule\\quad # \\hfil & \\vrule\\quad # \\hfil
+      & \\vrule\\quad # \\hfil & \\vrule\\quad # \\hfil\\vrule \\cr
+    \\noalign{\\hrule}
+    {\\it Left Arg.} & {\\it Function} & {\\it Left Arg.} & {\\it Function} \\cr
+    \\noalign{\\hrule}
+    |0| & $\\sqrt{1-x^2}$ & |¯1| & arcsin \\cr
+    \\noalign{\\hrule}
+    |1| & sin & |¯2| & arccos \\cr
+    \\noalign{\\hrule}
+    |2| & cos & |¯3| & arctan \\cr
+    \\noalign{\\hrule}
+    |3| & tan & |¯4| & $\\sqrt{x^2-1}$ \\cr
+    \\noalign{\\hrule}
+    |4| & $\\sqrt{1+x^2}$ & |¯5| & arcsinh \\cr
+    \\noalign{\\hrule}
+    |5| & sinh & |¯6| & arccosh \\cr
+    \\noalign{\\hrule}
+    |6| & cosh & |¯7| & arctanh \\cr
+    \\noalign{\\hrule}
+    |7| & tanh & & \\cr
+    \\noalign{\\hrule}
+  }
+}$$
+
+\\noindent
+Yes, I think that this is all weird."
+
+(@c
+(define π 3.14159265358979323846264)
+(define ○
+  (make-scalar '○
+    (case-lambda
+      [(x) (* π x)]
+      [(x y)
+       (case x
+	 [(0) (sqrt (- 1 (expt y 2)))]
+	 [(1) (sin y)]
+	 [(2) (cos y)]
+	 [(3) (tan y)]
+	 [(4) (sqrt (+ 1 (expt y 2)))]
+	 [(5) (sinh y)]
+	 [(6) (cosh y)]
+	 [(7) (tanh y)]
+	 [(-1) (asin y)]
+	 [(-2) (acos y)]
+	 [(-3) (atan y)]
+	 [(-4) (sqrt (- (expt y 2) 1))]
+	 [(-5) (asinh y)]
+	 [(-6) (acosh y)]
+	 [(-7) (atanh y)]
+	 [else (error '○ "unknown function specified" x y)])])))
+))
+
+(@
+"{\\it Factorial/Binomial.}
+In Monadic form, the |!| function computes factorial.
+In dyadic form, it computes the number of ways to select the number
+of items specified by the left-hand side if the population is the
+number of the right-hand side.
+Actually computing this turns out to take a bit more work than
+I would like.
+Given $n\\choose k$ where $n, k \\geq 0$, there is a recursive
+definition of the binomial coefficient $n\\choose {k+1}$:
+
+$${n\\choose{k+1}} = {{n - k}\\over{k+1}}{n\\choose k}$$
+
+\\noindent
+We can also take advantage of the symmetry of the binomial coefficient
+to say that ${n\\choose k} = {n\\choose {n - k}}$ where $k \\geq n - k$.
+If we take both of these into account we can write the following
+iterative solution to the standard binomial coefficient."
+
+(@c
+(define (binomial n k)
+  (let ([k (if (< k (- n k)) k (- n k))])
+    (let loop ([i 0] [prev 1])
+      (if (>= i k)
+	  prev
+	  (loop (+ i 1) (/ (* (- n i) prev) (+ i 1)))))))
+))
+
+(@
+"Given the above, we can easily handle non-negative values, but
+we cannot still handle the negative results.
+The following table gives the results for each possible combination
+of positive and negative arguments:
+
+$$\\vbox{
+  \\offinterlineskip
+  \\halign{
+    \\strut # \\hfil & # \\hfil & # \\hfil & # \\hfil \\cr
+      {\\it Left} & {\\it Right} & $R - L$ & Result\\cr
+    \\noalign{\\hrule}
+    $+$ & $+$ & $+$ & $R\\choose L$\\cr
+    $+$ & $+$ & $-$ & $0$\\cr
+    $+$ & $-$ & $-$ & ${(-1)^L}\\times{{L}\\choose{L-{R+1}}}$\\cr
+    $-$ & $+$ & $+$ & $0$\\cr
+    $-$ & $-$ & $+$ & ${((-1)^R-L)}\\times{{|R|+1}\\choose{|L|+1}}$\\cr
+    $-$ & $-$ & $-$ & $0$\\cr
+  }
+}$$
+
+\\noindent
+This gives us the final combination of code that we need to handle
+all of the different types of legal input in the |!| function."
+
+(@c
+(define !
+  (make-scalar '!
+    (case-lambda
+      [(x) (if (integer? x) (factorial x) (gamma (1+ x)))]
+      [(x y)
+       (let ([l (positive? x)]
+	     [r (positive? y)]
+	     [rl (positive? (- y x))])
+	 (if l
+	   (if r
+	     (if rl (binomial y x) 0)
+	     (* (expt -1 x) (binomial x (+ 1 (- x y)))))
+	   (if r
+	     0
+	     (if rl
+		 (* (- (expt -1 y) x) (binomial (1+ y) (1+ x)))
+		 0))))])))
+))
+
+(@
+"The factorial used above is the simple one."
+
+(@c
+(define factorial
+  (lambda (x)
+    (do ([i 1 (1+ i)] [r 1 (* r i)])
+      [(> i x) r])))
+))
+
+(@
+"More interesting is the $\\Gamma$ function. We use the Lanczos
+approximation for this with a $g=7$ and the coefficients precomputed."
+
+(@c
+(define gamma
+  (let ([g 7]
+	[p (vector
+	     0.99999999999980993 676.5203681218851 -1259.1392167224028
+	     771.32342877765313 -176.61502916214059 12.507343278686905
+	     -0.13857109526572012 9.9843695780195716e-6
+	     1.5056327351493116e-7)])
+    (lambda (x)
+      (if (> 0.5 (real-part x))
+	  (/ π
+	     (* (sin (* π x)) (gamma (- 1 x))))
+	  (let ([z (- x 1)])
+	    (do ([i 1 (1+ i)]
+		 [x (vector-ref p 0) (+ x (/ (vector-ref p i) (+ z i)))])
+	      [(>= i (+ g 2))
+	       (let ([t (+ z g 0.5)])
+		 (* (sqrt (* 2 π)) (expt t (+ z 0.5)) (exp (- t)) x))]))))))
+))
+
+(@* "Comparative Functions"
+"")
+
+(@
+"{\\it Index Of.}
+In its dyadic form, the |⍳| function determines where the elements on
+the right-hand side appear in the left-hand vector.")
 
 (@* "Simulating APL Workspaces"
 "The most visual difference between an APL workspace and the Scheme
