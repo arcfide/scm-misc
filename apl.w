@@ -1,8 +1,6 @@
 #!chezscheme
 (@chezweb)
 
-;;; This file assumes 8-space TABs
-
 "\\centerline{
   \\titlef Sapling: APL for Scheme}
 \\bigskip
@@ -26,7 +24,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\\par
 
-\\font\\tt = \"APLX Upright\"\n
+\\font\\tt = \"APL385 Unicode\"\n
 "
 
 (@l "Anyone who uses Scheme will no doubt question whether or not APL and
@@ -56,6 +54,7 @@ Good luck."
   apl-waiter
   apl+ apl- × ÷ ⌈ ⌊ ∣
   #;⍳ ? apl* ⍟ ○ ! #;⌹
+  ∇ ← λ
   make-scalar ;; Temporary remove later
   apl-value-case scalar array
   make-apl-array
@@ -574,6 +573,48 @@ The following syntax lets us do this."
 
 (@c
 (@< |Define make-scalar|)
+))
+
+(@* "Definition, Assignment, and Functions"
+"The symbol |←| is normally associated with assignment, and |∇| is 
+often used to delimit function definitions.
+Since these two things do not map very well to Scheme, I am going to
+modify them slightly but try to keep them in the same ball park.
+
+The assignment |←| operator will map to |set!|, with the extension 
+that a list of identifiers may be used as well:
+
+\\medskip\\verbatim
+(← id val)
+(← (id id ...) val)
+|endverbatim
+\\medskip
+
+\\noindent
+The list version will expect |val| to be an expression that returns
+as many values as identifiers in the list, and assigns them in order."
+
+(@c
+(define-syntax ∇
+  (syntax-rules ()
+    [(_ . rest) (define . rest)]))
+(define-syntax (← x)
+  (syntax-case x ()
+    [(_ (id1 id2 ...) val)
+     (with-syntax ([(r1 r2 ...) (generate-temporaries #'(id1 id2 ...))])
+       #'(let-values ([(r1 r2 ...) val])
+           (set! id1 r1)
+           (set! id2 r2) ...))]
+    [(_ id val) #'(set! id val)]))
+))
+
+(@
+"We also want to rebind |lambda| to a short form |λ|."
+
+(@c
+(define-syntax λ
+  (syntax-rules ()
+    [(_ . rest) (lambda . rest)]))
 ))
 
 (@* "Arithmetic Functions"
