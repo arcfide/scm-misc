@@ -203,7 +203,7 @@ the handler.
 <<Serving Requests>>=
 <<Handlers>>
 
-(define (serve-request in out)
+(define (serve-request port)
   (define empty-uri (string->uri ""))
   (define (packet-url p) (uri->string (get-modlisp-header p 'url empty-uri)))
   (define (get-response url p) 
@@ -211,10 +211,10 @@ the handler.
       (lambda (k)
         (modlisp-packet-response-consumer-set! p k)
         (if url ((lookup-request-handler url) p) (make-500-response)))))
-  (let ([incoming (get-packet in)])
+  (let ([incoming (get-packet port)])
     (and incoming
       (begin 
-        (put-packet (get-response (packet-url incoming) incoming) out)
+        (put-packet (get-response (packet-url incoming) incoming) port)
         #t))))
 @
 
@@ -298,8 +298,9 @@ start-modlisp-server modlisp-transcoder
     (set-socket-nonblocking! s #f)
     (loop ()
       (let-values ([(sock addr) (accept-socket s)])
-        (let-values ([(in out) (socket->port sock (buffer-mode block) modlisp-transcoder)])
-          (fork-thread (lambda () (loop ([while (serve-request in out)])))))))))
+        (let ([port (socket->input/output-port sock 
+                      (buffer-mode block) modlisp-transcoder)])
+          (fork-thread (lambda () (loop ([while (serve-request port)])))))))))
 @
 
 \chapter{Utilities and Helpers}%

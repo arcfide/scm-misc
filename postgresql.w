@@ -1,6 +1,11 @@
 #!chezscheme
 (@chezweb)
 
+(@e
+  (import (arcfide chezweb weave parameters))
+  (max-simple-elems 4)
+  (list-columns 2))
+
 "\\centerline{
   \\titlef Pure Scheme PostgreSQL Driver}
 \\bigskip
@@ -31,7 +36,10 @@ causes some problems with the following library. To fix this, we run
 the following code as a workaround."
  
 (@c
-(#%$sremprop 'r6rs:record-constructor 'cp02)
+(meta-cond
+  [(let-values ([(major minor patch) (scheme-version-number)])
+     (and (= 8 major) (= 0 minor)))
+   (#%$sremprop 'r6rs:record-constructor 'cp02)])
 ))
 
 (@l "This library defines a pure Scheme PostgreSQL driver supporting 
@@ -2268,10 +2276,10 @@ raise an error if it has trouble doing so."
 (define (send-message conn msg)
   (assert (postgresql-connection? conn))
   (assert (postgresql-message? msg))
-  (unless (postgresql-connection-output-port conn)
+  (unless (postgresql-connection-port conn)
     (error 'send-message "connection is not established"
       conn))
-  (put-postgresql-message (postgresql-connection-output-port conn)
+  (put-postgresql-message (postgresql-connection-port conn)
     msg))
 ))
         
@@ -2396,10 +2404,9 @@ parameters to create the connection. We return a
     (define get (@< |Make postgresql-connect getter| params))
     (let-values ([(sock addr) (@< |Get socket and address| get)]
                  [(server-params) (@< |Get server parameters| get)])
-      (let-values ([(in out) 
-                    (@< |Connect to server| sock addr)])
+      (let ([port (@< |Connect to server| sock addr)])
         (let ([res 
-               (make-postgresql-connection sock addr in out params)])
+               (make-postgresql-connection sock addr port params)])
           (send-message res (make-startup-message server-params))
           (@< |Handle startup response| res get)
           res)))))
@@ -2480,7 +2487,7 @@ to do the majority of our communication with the server."
 (@> |Connect to server| (capture sock addr)
 (set-socket-nonblocking! sock #f)
 (connect-socket sock addr)
-(socket->port sock)
+(socket->input/output-port sock)
 ))
  
 (@ "The server parameters are made up of the server parameters that
@@ -2554,13 +2561,13 @@ after we have created the record, instead of during creation time."
 (@c
 (define-record-type postgresql-connection
   (fields socket address
-    (mutable input-port) (mutable output-port)
+    (mutable port)
     (mutable parameters)
     (mutable backend-pid) (mutable backend-key))
   (protocol 
     (lambda (n)
-      (lambda (sock addr in out param)
-        (n sock addr in out param #f #f)))))
+      (lambda (sock addr port param)
+        (n sock addr port param #f #f)))))
 ))
  
 (@ "When we deal with postgresql connections, it may happen that one
@@ -2629,7 +2636,7 @@ which case we are all done."
 (@> |Handle startup response| (capture res get)
 (assert (postgresql-connection? res))
 (postgresql-message-loop continue () msg 
-    (postgresql-connection-input-port res)
+    (postgresql-connection-port res)
   [authentication-okay-message? (continue)]
   [ready-for-query-message? (void)]
   [error-response-message?
@@ -2696,14 +2703,10 @@ connection."
 (define (postgresql-terminate-connection conn)
   (assert (postgresql-connection? conn))
   (send-message conn (make-terminate-message))
-  (let ([out (postgresql-connection-output-port conn)]
-        [in (postgresql-connection-input-port conn)])
-    (when out (close-port out))
-    (guard (c [else (void)]) (when in (close-port in)))
-    (unless (or out in)
-      (close-socket (postgresql-connection-socket conn))))
-  (postgresql-connection-input-port-set! conn #f)
-  (postgresql-connection-output-port-set! conn #f))
+  (let ([port (postgresql-connection-port conn)])
+    (when port 
+      (close-port port)
+      (postgresql-connection-port-set! conn #f))))
 ))
  
 (@ "The last sort of thing that is very similar to a normal startup
@@ -2818,7 +2821,7 @@ above that we need for the final query response."
 (@> |Handle simple query response| (capture conn)
 (postgresql-message-loop continue
     ([empty? #f] [err #f] [desc #f] [rows #f] [queries #f])
-    msg (postgresql-connection-input-port conn)
+    msg (postgresql-connection-port conn)
   [ready-for-query-message? 
    (@< |Construct simple query response| 
        empty? err desc rows queries)]

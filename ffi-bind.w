@@ -117,7 +117,6 @@ we'll define that helper here."
 
 (@> |Define define-foreign-values|
     (export define-foreign-values)
-(...
 (define-syntax define-foreign-values
   (syntax-rules ()
     [(_ shared-object (conv proc-name) type binding ...)
@@ -140,7 +139,7 @@ we'll define that helper here."
            (foreign-procedure proc-name (string) type)))
        (@< |Define get-ffi-value| %get-ffi-value)
        (define-bindings get-ffi-value binding ...))]))
-)))
+))
 
 (@ "What about |get-ffi-value|? This syntactic function needs to convert
 the incoming binding into a string and pass it through to the getter. It

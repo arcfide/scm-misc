@@ -4,5 +4,5 @@
 	chezweave $<
 
 .tex.pdf:
-	xetex $<
-	xetex $<
+	xetex -papersize=letter $<
+	xetex -papersize=letter $<

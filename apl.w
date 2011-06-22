@@ -1045,10 +1045,11 @@ to work superficially like an APL Workspace."
 (@c
 (define (sapling-version) "0.1")
 (define (sapling-copyright) "Copyright © 2011 Aaron W. Hsu")
-(define (sapling-banner) "Sapling APL for Chez Scheme")
+(define (sapling-banner) "Sapling APL for")
 (define (apl-waiter)
-  (printf "~a~n~a~nMachine Type = ~a, Version = ~a~n"
+  (printf "~a ~a~n~a~nMachine Type = ~a, Version = ~a~n"
     (sapling-banner)
+    (scheme-version)
     (sapling-copyright)
     (machine-type)
     (sapling-version))

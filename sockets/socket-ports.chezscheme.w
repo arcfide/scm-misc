@@ -32,46 +32,41 @@ more useful to convert these to ports.  The following library provides
 Chez Scheme specific features for converting a socket into a port."
 
 (arcfide sockets socket-ports)
-(export socket->port socket->input-port socket->output-port)
+(export socket->input/output-port socket->input-port socket->output-port)
 (import 
-	(rnrs base) 
-	(arcfide sockets)
-	(only (chezscheme) 
-		open-fd-input-port 
-		open-fd-output-port
-		open-fd-input/output-port))
+  (rnrs base) 
+  (arcfide sockets)
+  (only (chezscheme) 
+    open-fd-input-port 
+    open-fd-output-port
+    open-fd-input/output-port))
 
 (@* "Implementation"
 "Chez Scheme already provides most of the features necessary, so the actual incantation is 
 quite simple.
 
 \\medskip\\verbatim
-(socket->port socket b-mode transcoder)
+(socket->input/output-port socket b-mode transcoder)
 |endverbatim
 \\medskip
 
 \\noindent 
-|socket->port| returns two values, an input port and an
-output port.  The |b-mode| and |transcoder| correspond to
+|socket->input/output-port| returns an input/output port
+The |b-mode| and |transcoder| correspond to
 their R6RS interpretations for port creators.  There are also
 analagous |socket->input-port| and |socket->output-port|
 operations, which may be used if separate |b-mode| and
 |transcoder| values should be used for the input and output ports."
 
 (@c
-(define (socket->port sock . args)
-  (let ([fd (socket-fd sock)])
-    (values
-      (apply open-fd-input-port fd args)
-      (apply open-fd-output-port fd args))
-    #;(let ([port (apply open-fd-input/output-port (cons fd args))])
-      (values port port))))
+(define (socket->input/output-port sock . args)
+  (apply open-fd-input/output-port (socket-fd sock) args))
 
 (define (socket->input-port sock . args)
-	(apply open-fd-input-port (cons (socket-fd sock) args)))
+  (apply open-fd-input-port (cons (socket-fd sock) args)))
 
 (define (socket->output-port sock . args)
-	(apply open-fd-output-port (cons (socket-fd sock) args)))
+  (apply open-fd-output-port (cons (socket-fd sock) args)))
 ))
 
 )
