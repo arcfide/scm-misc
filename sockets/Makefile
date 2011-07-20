@@ -1,6 +1,6 @@
 DOC_DIR=../doc/sockets_
 
-include ../noweb_make.mk
+include ../chezweb_make.mk
 include ../chez_make.mk
 
 SCHEME_H= ${CHEZPREFIX}/${MACHINETYPE}/scheme.h
