@@ -1,7 +1,7 @@
 #!chezscheme
 (@chezweb)
 
-"\\centerline{\\titlef Parameterize Modules}
+"\\centerline{\\titlef Parameterized Modules}
 \\bigskip
 \\centerline{Aaron W. Hsu {\\tt <awhsu@indiana.edu>}}
 \\medskip
@@ -9,7 +9,7 @@
 \\bigskip\\rendertoc\\par
 \\vfill
 \\noindent
-Copyright $\\copyright$ 2010 Aaron W. Hsu {\\tt <arcfide@sacrideo.us>}
+Copyright $\\copyright$ 2010 Aaron W. Hsu {\\tt <awhsu@indiana.edu>}
 \\medskip\\noindent
 Permission to use, copy, modify, and distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
@@ -94,6 +94,7 @@ roughly into a form somewhat like the following:
   (module (p ...) exp ...)
   body+ ...)
 |endverbatim
+\\medskip 
 
 \\noindent
 We must be careful to wrap the |p| bindings appropriately so that
