@@ -210,7 +210,7 @@ setting itself, as  described in |getsockopt(2)|.
 |valid?| is a predicate that returns true for valid setting values,
 and false otherwise. 
 |make-socket-option| called without a level will default to a socket
-api level option,  otherwise it expects a proper option level."
+api level option,  otherwise it expects a proper option level.
 
 @c () => (socket-option? make-socket-option socket-option
           socket-option-foreign-size socket-option-foreign-maker
@@ -384,7 +384,7 @@ this to a proper internet address structure.
    (string->internet-address)
 @<External procedure definitions@>=
 (define (string->internet-address s)
-  (let-values ([(ip-string port-string) (@< |Split IPV4 address| s)])
+  (let-values ([(ip-string port-string) @<Split IPV4 address@>])
     (let ([ip (and ip-string (string->ipv4 ip-string))]
           [port (and port-string (string->number port-string))])
       (assert (or (not ip) (>= 32 (bitwise-length ip))))
@@ -398,6 +398,7 @@ hand, if we do not, then we consider it an invalid internet address
 string.
 
 @c (s)
+@<Split IPV4 address@>=
 (let ([val (string-tokenize s (char-set-complement (char-set #\:)))])
   (if (pair? val)
       (values
