@@ -30,129 +30,77 @@ Procedures are documented inline at the top of their main
 definitions. 
 The current implementation uses records instead of magic numbers. 
 Hopefully this keeps the system a little more portable.
-Only Internet and Local/Unix domain sockets are supported 
-by this code, though additional types should be relatively easy 
-to make.
-The code itself is organized into 
-new socket datatypes and procedures. 
-Each relevant chapter discusses these parts in particular detail.
-The constants section describes how to extend the constants 
-defined for socket procedures.
+Only Internet and Local/Unix domain sockets are built-in, 
+though this library supports additional types through its 
+data hierarchy.
+The program itself is layed out like so:
 
 @p 
-@<Datatype Definitions@>
+@<Foreign code initialization@>
+@<Foreign constants@>
+@<Foreign functions@>
+@<Datatype definitions@>
 @<Procedures for manipulating or supporting datatypes@>
-@<Socket Constants@>
-@<Internal Procedure Definitions@>
-@<Exported Procedure Definitions@>
+@<Socket constants@>
+@<Internal procedure definitions@>
+@<Exported procedure definitions@>
 @<Register pre-defined socket domains@>
 
-@ We rely on some foreign code and that the correct initial 
-environment exist for loading that foreign code. This all goes into 
-a separate file that can be loaded before any libraries need it, 
-and so forth. This allows the main file to be loaded directly into 
-the body of an R6RS library, without sacrificing the ease with which 
-that library can be loaded.
+@ Because we are working at the system level, we need to know the 
+operating system on which we are working. Practically speaking, 
+when it comes to sockets, this really comes down to a question of
+whether we are working on Windows or now.
 
-@(socket-ffi-init.ss@>=@q)
-;;; This needs some stuff.
+@c () => (windows?)
+@<Foreign code initialization@>=
+(meta define (windows?) (memq (machine-type) '(i3nt ti3nt)))
+
 
 @ The following is an R6RS library that encapsulate this library 
 for use by external R6RS programs.
 
 @(sockets.sls@>=@q)
 (library (arcfide sockets)
-  (export make-socket
-	  socket?
-	  socket-fd
-	  socket-domain
-	  socket-type
-	  socket-protocol
+  (export make-socket socket? socket-fd socket-domain socket-type socket-protocol
 	  socket-option? make-socket-option socket-option
 	  define-socket-option-type
 	  make-tcp-option make-udp-option make-raw-option make-ip-option
 	  tcp-option? udp-option? raw-option? ip-option? 
-	  socket-address?
-	  socket-address
-	  unix-address?
-	  make-unix-address
-	  unix-address-path
-	  internet-address?
-	  make-internet-address
-	  internet-address-ip
-	  internet-address-port
-	  string->internet-address
-	  internet-address->string
-	  string->ipv4
-	  make-address-info
-	  address-info?
-	  address-info-domain
-	  address-info-type
-	  address-info-protocol
-	  address-info-address
+	  socket-address? socket-address
+	  unix-address? make-unix-address unix-address-path
+	  internet-address? make-internet-address internet-address-ip
+	  internet-address-port string->internet-address
+	  internet-address->string string->ipv4
+	  make-address-info address-info? address-info-domain
+	  address-info-type address-info-protocol address-info-address
 	  get-address-info
-	  address-info/canonical-name
-	  address-info/numeric-host
+	  address-info/canonical-name address-info/numeric-host
 	  address-info/passive
-	  create-socket
-	  make-socket-domain
-	  make-socket-type
+	  create-socket make-socket-domain make-socket-type
 	  socket-domain/unix socket-domain/local 
-	  socket-domain/internet
-	  socket-type/stream socket-type/datagram
-	  socket-type/sequence-packet socket-type/raw
-	  socket-type/random 
+	  socket-domain/internet socket-type/stream socket-type/datagram
+	  socket-type/sequence-packet socket-type/raw socket-type/random 
 	  register-socket-domain!
 	  make-socket-protocol socket-protocol?
 	  protocol-entry-name protocol-entry-aliases protocol-entry-value
-	  socket-protocol/auto
-	  next-protocol-entry
-	  get-protocol-by-name
-	  get-protocol-by-constant
-	  open-protocol-database
-	  close-protocol-database
-	  bind-socket
-	  listen-socket
-	  accept-socket
-	  connect-socket
-	  close-socket
-	  shutdown-socket
-	  shutdown-method?
-	  make-shutdown-method
+	  socket-protocol/auto next-protocol-entry
+	  get-protocol-by-name get-protocol-by-constant
+	  open-protocol-database close-protocol-database
+	  bind-socket listen-socket accept-socket connect-socket
+	  close-socket shutdown-socket shutdown-method? make-shutdown-method
 	  shutdown-method/read shutdown-method/write shutdown-method/read&write
-	  send-to-socket
-	  send-to/dont-route send-to/out-of-band
+	  send-to-socket send-to/dont-route send-to/out-of-band
 	  make-send-to-option
-	  receive-from-socket
-	  receive-from/out-of-band receive-from/peek 
+	  receive-from-socket receive-from/out-of-band receive-from/peek 
 	  receive-from/wait-all receive-from/dont-wait
 	  make-receive-from-option
 	  socket-maximum-connections
-	  get-socket-option
-	  set-socket-option!
-	  set-socket-nonblocking!
+	  get-socket-option set-socket-option! set-socket-nonblocking!
 	  socket-nonblocking?
 	  make-socket-condition socket-condition?
-	  socket-condition-who 
-	  socket-condition-syscall
-	  socket-condition-type
-	  socket-condition-message
-	  socket-error socket-raise/unless)
-  (import (rnrs base)
-	  (rnrs bytevectors)
-	  (rnrs records syntactic)
-	  (rnrs io ports)
-	  (rnrs control)
-	  (rnrs conditions)
-	  (rnrs arithmetic fixnums)
-	  (rnrs arithmetic bitwise)
-	  (rnrs lists)
-	  (rnrs mutable-pairs)
-	  (rnrs exceptions)
-	  (srfi :14)
-	  (srfi :39 parameters)
-	  (only (srfi :13) string-tokenize)
-	  (arcfide sockets compat))
+	  socket-condition-who socket-condition-syscall socket-condition-type
+	  socket-condition-message socket-error socket-raise/unless)
+  (import (chezscheme))
   (include "sockets.ss"))
 
 @* Uncompleted/Planned Features.
@@ -1400,5 +1348,472 @@ error condition.
 (define (socket-raise/unless who call errval . vals)
   (let ([cnd (make-socket-condition who call errval (errno-message errval))])
     (if (memv (socket-condition-type cnd) vals) cnd (raise cnd))))
+
+@* Low-level Interactions. Our discussion of sockets thus far has 
+precluded the details of low-level access to the system libraries. Now
+we need to consider these system functions. The first and most obvious 
+reason for accessing the system libraries is the system constants that 
+are stored there. We base a number of elements on constants, and we need 
+these constants to do our work. We use a form called |define-foreign-values|
+to help extract these elements from the system.
+This form is a  binding construct designed to extract results from foreign
+code 
+
+@* 2 Binding Foreign Values.
+We define a single syntax |define-foreign-values| that binds
+identifiers to values computed by a foreign function. The basic idea is
+to provide a foreign shared object, the name of a function, and its
+return type, and then to use that function to get various values of that
+return type bound to the identifiers that we provide. This could be used
+for getting things like the sizes or values of various structures, for
+example. Our syntax follows the following:
+ 
+\medskip\verbatim
+(define-foreign-values <shared-object> <proc-name> <return-type> 
+                       <binding> ...)
+!endverbatim
+\medskip
+
+\noindent Here |<shared-object>| is a string that will be used in a
+call to |load-shared-object|. The |<proc-name>| takes two forms, 
+one with a convention, and the other without.
+ 
+\medskip\verbatim
+(<conv> <name-string>)
+<name-string>
+!endverbatim
+\medskip
+
+\noindent The |<name-string>| should be a string as passed to the
+function name of |foreign-procedure|. The |<conv>| is a convention as
+listed by the Chez Scheme User's Guide in |foreign-procedure|. This is
+used mostly on Windows where there are various calling conventions.
+ 
+The |<return-type>| is just a valid |foreign-procedure| return type
+specifier.
+
+Each |<binding>| should be an identifier. Each |<binding>| will be bound
+to the value returned by calling the foreign procedure on the string
+representation of the |<binding>|.
+
+@ Let's first get the verifier for the syntax forms out of the way.
+We use this to verify our syntax later.
+
+@c (conv shared-object proc-name type binding)
+@<Verify DFV syntax@>=
+(and (identifier? #'conv)
+     (memq (syntax->datum #'conv) '(__cdecl __stdcall __com))
+     (string? (syntax->datum #'shared-object))
+     (string? (syntax->datum #'proc-name))
+     (identifier? #'type)
+     (for-all identifier? #'(binding ...)))
+
+@ Since these shared objects are not going to be distributed with the
+rest of the code, it's fair to assume that they won't be in the normal
+shared library paths. To make it possible to load these correctly then,
+I want to have a resolving procedure that can be used to find things in
+the current |source-directories|. This parameter is modified when the
+compiler is loading in libraries to make sure that I can load things in
+relative to the library's location. We need this at the meta level since
+that is where we are going to be doing the loading and importing.
+
+@c () => (resolve)
+@<Foreign code initialization@>=
+(meta define (resolve name)
+  (let loop ([dirs (source-directories)])
+    (cond
+      [(not (pair? dirs)) name]
+      [(let ([path (format "~a~a~a" (car dirs) (directory-separator) name)])
+         (and (file-exists? path) path))]
+      [else (loop (cdr dirs))])))
+
+@ The actual |define-foreign-values| macro is fairly simple. We need to
+have access to the resolver, but in general, we want to create a special
+|get-ffi-value| function that, when called with an identifier, will
+return back the result of calling the foreign code. Once that's defined,
+we simply call it on each of the bindings. Since the |foreign-procedure|
+code is different depending on whether we have a convention or not,
+we'll define that helper here.
+
+@c () => (define-foreign-values)
+@<Foreign code initialization@>=
+(define-syntax define-foreign-values
+  (syntax-rules ()
+    [(_ shared-object (conv proc-name) type binding ...)
+     @<Verify DFV syntax@>
+     (begin 
+       (meta define %get-ffi-value
+         (begin 
+           (load-shared-object (resolve shared-object))
+           (foreign-procedure conv proc-name (string) type)))
+       @<Define |get-ffi-value|@>
+       (define-bindings get-ffi-value binding ...))]
+    [(_ shared-object proc-name type binding ...)
+     (with-syntax ([conv #'__cdecl])
+       @<Verify DFV syntax@>)
+     (begin 
+       (meta define %get-ffi-value
+         (begin 
+           (load-shared-object (resolve shared-object))
+           (foreign-procedure proc-name (string) type)))
+       @<Define |get-ffi-value|@>
+       (define-bindings get-ffi-value binding ...))]))
+
+@ What about |get-ffi-value|? This syntactic function needs to convert
+the incoming binding into a string and pass it through to the getter. It
+then needs to bind the resulting value to the original name provided.
+
+@c (%get-ffi-value) => (get-ffi-value)
+@<Define |get-ffi-value|@>=
+(define-syntax (get-ffi-value x)
+  (syntax-case x ()
+    [(k name) (identifier? #'name)
+     #`'#,(datum->syntax #'k 
+            (%get-ffi-value 
+	     (symbol->string (syntax->datum #'name))))]))
+
+@ Finally, we need a definition for |define-bindings|.
+
+@c () => (define-bindings)
+@<Foreign code initialization@>=
+(define-syntax define-bindings
+  (syntax-rules ()
+    [(_ get) (begin)]
+    [(_ get binding) (define binding (get binding))]
+    [(_ get binding rest ...)
+     (begin (define binding (get binding))
+       (define-bindings get rest ...))]))
+
+@* 2 Foreign Socket Constants. We have the following constants that 
+must be defined for our library.
+
+@c () =>
+   ($error-again $error-in-progress $error-would-block #;$file-get-flag
+    $file-set-flag $format-message-allocate-buffer
+    $format-message-from-system $ipproto-ip $ipproto-raw $ipproto-tcp
+    $ipproto-udp $option-non-blocking $socket-error $sol-socket
+    %ai/canonname %ai/numerichost %ai/passive %msg/dont-route %msg/dont-wait
+    %msg/out-of-band %msg/peek %msg/wait-all %shutdown/read
+    %shutdown/read&write %shutdown/write %socket-domain/internet
+    %socket-domain/internet-v6 %socket-domain/local %socket-domain/unix
+    %socket-type/datagram %socket-type/random %socket-type/raw
+    %socket-type/sequence-packet %socket-type/stream %somaxconn af-inet
+    af-unix invalid-socket size-of/addr-in size-of/addr-un size-of/addrinfo
+    size-of/integer size-of/ip size-of/pointer size-of/port size-of/protoent
+    size-of/sa-family size-of/size-t size-of/sockaddr-in size-of/sockaddr-un
+    size-of/socklen-t size-of/wsa-data unix-max-path)
+@<Foreign constants@>=
+(define-syntax (define-constants x)
+  (syntax-case x ()
+    [(k head ...)
+     (with-implicit (k define-foreign-values)
+       #'(define-foreign-values head ... int
+	   $error-again $error-in-progress $error-would-block #;$file-get-flag
+	   $file-set-flag $format-message-allocate-buffer
+	   $format-message-from-system $ipproto-ip $ipproto-raw $ipproto-tcp
+	   $ipproto-udp $option-non-blocking $socket-error $sol-socket
+	   %ai/canonname %ai/numerichost %ai/passive %msg/dont-route %msg/dont-wait
+	   %msg/out-of-band %msg/peek %msg/wait-all %shutdown/read
+	   %shutdown/read&write %shutdown/write %socket-domain/internet
+	   %socket-domain/internet-v6 %socket-domain/local %socket-domain/unix
+	   %socket-type/datagram %socket-type/random %socket-type/raw
+	   %socket-type/sequence-packet %socket-type/stream %somaxconn af-inet
+	   af-unix invalid-socket size-of/addr-in size-of/addr-un size-of/addrinfo
+	   size-of/integer size-of/ip size-of/pointer size-of/port size-of/protoent
+	   size-of/sa-family size-of/size-t size-of/sockaddr-in size-of/sockaddr-un
+	   size-of/socklen-t size-of/wsa-data unix-max-path))]))
+(meta-cond
+  [(windows?)
+   (define-constants "socket-ffi-values.dll" (__cdecl "_get_ffi_value"))]
+  [else
+   (define-constants "socket-ffi-values.so" "get_ffi_value")])
+
+@ We use the following C code for the foreign values shared object.
+
+@(socket-ffi-values.c@>=
+#ifdef __NT__
+#define WIN32
+#define EXPORTED __declspec ( dllexport ) int cdecl
+#endif
+#ifdef __WINDOWS__
+#define WIN32
+#define EXPORTED __declspec ( dllexport ) int cdecl
+#endif
+
+#ifndef WIN32
+#define EXPORTED int
+#endif
+
+#ifdef WIN32
+#include <stddef.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <errno.h>
+#include <sys/unistd.h>
+#include <sys/fcntl.h>
+#endif
+
+EXPORTED get_ffi_value(const char *val) {
+  struct sockaddr_in sai;
+#ifndef WIN32
+  struct sockaddr_un sau;
+#endif
+
+  if (!strcmp(val, "$ipproto-ip")) return IPPROTO_IP;
+  if (!strcmp(val, "$ipproto-raw")) return IPPROTO_RAW;
+  if (!strcmp(val, "$ipproto-tcp")) return IPPROTO_TCP;
+  if (!strcmp(val, "$ipproto-udp")) return IPPROTO_UDP;
+  if (!strcmp(val, "$sol-socket")) return SOL_SOCKET;
+  if (!strcmp(val, "%ai/canonname")) return AI_CANONNAME;
+  if (!strcmp(val, "%ai/numerichost")) return AI_NUMERICHOST;
+  if (!strcmp(val, "%ai/passive")) return AI_PASSIVE;
+  if (!strcmp(val, "%msg/dont-route")) return MSG_DONTROUTE;
+  /* if (!strcmp(val, "%msg/dont-wait")) return MSG_DONTWAIT; 
+  if (!strcmp(val, "%msg/wait-all")) return MSG_WAITALL; */
+  if (!strcmp(val, "%msg/out-of-band")) return MSG_OOB;
+  if (!strcmp(val, "%msg/peek")) return MSG_PEEK;
+  if (!strcmp(val, "%socket-domain/internet")) return AF_INET;
+  if (!strcmp(val, "%socket-domain/internet-v6")) return AF_INET6;
+  if (!strcmp(val, "%socket-type/datagram")) return SOCK_DGRAM;
+  if (!strcmp(val, "%socket-type/random")) return SOCK_RDM;
+  if (!strcmp(val, "%socket-type/raw")) return SOCK_RAW;
+  if (!strcmp(val, "%socket-type/sequence-packet")) return SOCK_SEQPACKET;
+  if (!strcmp(val, "%socket-type/stream")) return SOCK_STREAM;
+  if (!strcmp(val, "%somaxconn")) return SOMAXCONN;
+  if (!strcmp(val, "af-inet")) return AF_INET;
+  if (!strcmp(val, "size-of/addr-in")) return sizeof(struct sockaddr_in);
+  if (!strcmp(val, "size-of/addrinfo")) return sizeof(struct addrinfo);
+  if (!strcmp(val, "size-of/integer")) return sizeof(int);
+  if (!strcmp(val, "size-of/ip")) return sizeof(struct in_addr);
+  if (!strcmp(val, "size-of/pointer")) return sizeof(void *);
+  if (!strcmp(val, "size-of/port")) return sizeof(sai.sin_port); 
+  if (!strcmp(val, "size-of/protoent")) return sizeof(struct protoent);
+  if (!strcmp(val, "size-of/size-t")) return sizeof(size_t);
+  if (!strcmp(val, "size-of/sockaddr-in")) return sizeof(struct sockaddr_in);
+  if (!strcmp(val, "size-of/socklen-t")) return sizeof(socklen_t);
+  /* if (!strcmp(val, "$file-get-flag")) return F_GETFL; */
+#ifdef WIN32
+  if (!strcmp(val, "size-of/sa-family")) return sizeof(unsigned short);
+  if (!strcmp(val, "%shutdown/read")) return SD_RECEIVE;
+  if (!strcmp(val, "%shutdown/read&write")) return SD_BOTH;
+  if (!strcmp(val, "%shutdown/write")) return SD_SEND;
+  if (!strcmp(val, "invalid-socket")) return INVALID_SOCKET;
+  if (!strcmp(val, "$file-set-flag")) return FIONBIO;
+  if (!strcmp(val, "$option-non-blocking")) return 1;
+  if (!strcmp(val, "$error-again")) return WSAEWOULDBLOCK;
+  if (!strcmp(val, "$error-in-progress")) return WSAEINPROGRESS;
+  if (!strcmp(val, "$error-would-block")) return WSAEWOULDBLOCK;
+  if (!strcmp(val, "$socket-error")) return SOCKET_ERROR;
+  if (!strcmp(val, "$format-message-allocate-buffer")) 
+    return FORMAT_MESSAGE_ALLOCATE_BUFFER;
+  if (!strcmp(val, "$format-message-from-system"))
+    return FORMAT_MESSAGE_FROM_SYSTEM;
+  if (!strcmp(val, "size-of/wsa-data")) return sizeof(WSADATA);
+#else
+  if (!strcmp(val, "size-of/sa-family")) return sizeof(sa_family_t);
+  if (!strcmp(val, "%shutdown/read")) return SHUT_RD;
+  if (!strcmp(val, "%shutdown/read&write")) return SHUT_RDWR;
+  if (!strcmp(val, "%shutdown/write")) return SHUT_WR;
+  if (!strcmp(val, "invalid-socket")) return -1;
+  if (!strcmp(val, "$file-set-flag")) return F_SETFL;
+  if (!strcmp(val, "$option-non-blocking")) return O_NONBLOCK;
+  if (!strcmp(val, "$error-again")) return EAGAIN;
+  if (!strcmp(val, "$error-in-progress")) return EINPROGRESS;
+  if (!strcmp(val, "$error-would-block")) return EWOULDBLOCK;
+  if (!strcmp(val, "$socket-error")) return -1;
+  if (!strcmp(val, "%socket-domain/local")) return AF_LOCAL;
+  if (!strcmp(val, "%socket-domain/unix")) return AF_UNIX;
+  if (!strcmp(val, "af-unix")) return AF_UNIX;
+  if (!strcmp(val, "size-of/sockaddr-un")) return sizeof(struct sockaddr_un);
+  if (!strcmp(val, "unix-max-path")) return sizeof(sau.sun_path);
+  if (!strcmp(val, "size-of/addr-un")) return sizeof(struct sockaddr_un);
+#endif
+
+  return 0;
+}
+
+@* Foreign Stub File. We have a C file separate from the foreign values 
+library that is expected to be available at runtime. It's not necessary to 
+have the foreign values shared object available at runtime, since all of that
+operates at compile time, but it is necessary to have the stub file around 
+for persistent code. We set up the headers for that file here.
+
+@(sockets-stub.c@>=
+#ifdef __NT__
+#define WIN32
+#elif defined __WINDOWS__
+#define WIN32
+#endif
+
+#ifdef WIN32
+
+#define EXPORTED(type) __declspec ( dllexport ) type cdecl
+
+#include <stddef.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+typedef int ssize_t;
+
+#define SCHEME_STATIC
+
+#else
+
+#define EXPORTED(type) type
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <errno.h>
+#include <sys/unistd.h>
+#include <sys/fcntl.h>
+
+#endif
+
+#ifdef WIN32
+extern __declspec(dllimport) int cdecl Sactivate_thread(void);
+extern __declspec(dllimport) void cdecl Sdeactivate_thread(void);
+#else
+#include "scheme.h"
+#endif
+
+@* 2 Dealing with errors. We need to provide some mechanism for getting the 
+error report for foreign code. This is different on Windows than on UNIX 
+systems.
+
+@c () => (call-with-errno errno-message)
+@<Foreign functions@>=
+(meta-cond
+  [(windows?) @<Define Windows foreign error handler@>]
+  [else @<Define POSIX foreign error handler@>])
+(define (call-with-errno thunk receiver)
+  (call-with-values
+   (lambda () (critical-section (let ([v (thunk)]) (values v (errno)))))
+   receiver))
+
+@ On the POSIX systems we are allowed to just use the value of |errno| so we 
+do this through the stub file.
+
+@(sockets-stub.c@>=
+EXPORTED(int)
+get_errno()
+{
+	return errno;
+}
+
+@ @c () => (errno errno-message)
+@<Define POSIX foreign error handler@>=
+(define errno (foreign-procedure "get_errno" () int))
+(define errno-message (foreign-procedure "strerror" (int) string))
+
+@ In the case of Windows systems, you are not supposed to use the 
+|errno| value to get the value. instead, you are supposed to use 
+|WSAGetLastError|. 
+
+@c () => (errno errno-message)
+@<Define Windows foreign error handler@>=
+(define errno (foreign-procedure "WSAGetLastError" () int))
+(define errno-message
+  (let ([$format-message 
+	 (foreign-procedure __stdcall "FormatMessageA"
+			    (unsigned-32 uptr unsigned-32 
+			     unsigned-32 uptr unsigned-32 uptr)
+			    unsigned-32)]
+        [$local-free (foreign-procedure __stdcall "LocalFree" (uptr) void)])
+    (lambda (num)
+      (let* ([ptr (make-foreign-pointer)]
+	     [ret-res ($format-message 
+		       (bitwise-xor $format-message-allocate-buffer
+				    $format-message-from-system)
+		       0 num 0 ptr 0 0)]
+	     [res (and (not (zero? ret-res))
+		       (get-foreign-string (foreign-pointer-value ptr)))])
+	    ($local-free (foreign-pointer-value ptr))
+	    (foreign-free ptr)
+	    res))))
+
+@* Foreign procedures. We rely on quite a few foreign procedures for our ditry 
+work. Unfortunately, supporting Windows makes our life miserable, yet again.
+To aleviate some of this misery, the following macros allow me to hide away 
+some of the details of supporting both platforms.
+
+@c () => (define-posix-only define-ffi)
+@<Foreign code initialization@>=
+(define-syntax define-ffi
+  (syntax-rules ()
+    [(_ name ffiname in out)
+     (define name
+       (meta-cond
+	[(windows?) (foreign-procedure __stdcall ffiname in out)]
+	[else (foreign-procedure ffiname in out)]))]))
+
+@ Here is our set of foreign procedures that we rely on.
+
+@c () => ($getaddrinfo $gai_strerror $socket $getprotobyname 
+	  $getprotobynumber $bind $listen 
+	  $accept $connect $close $shutdown $sendto $recvfrom $getsockopt
+	  $setsockopt $fcntl)
+@<Foreign functions@>=
+(define-ffi $socket "socket" (fixnum fixnum fixnum) fixnum)
+(define-ffi $getaddrinfo "getaddrinfo" (string string uptr uptr) int)
+(define-ffi $getprotobyname "getprotobyname" (string) uptr)
+(define-ffi $getprotobynumber "getprotobynumber" (fixnum) uptr)
+(define-ffi $bind "bind" (fixnum uptr fixnum) fixnum)
+(define-ffi $listen "listen" (fixnum fixnum) fixnum)
+(define-ffi $accept "accept" (fixnum uptr uptr) fixnum)
+(define-ffi $connect "connect" (fixnum uptr fixnum) fixnum)
+(define-ffi $shutdown "shutdown" (fixnum fixnum) fixnum)
+(define-ffi $sendto "sendto" (fixnum u8* fixnum fixnum uptr fixnum) fixnum)
+(define-ffi $recvfrom "recvfrom" (fixnum u8* fixnum fixnum uptr uptr) fixnum)
+(define-ffi $getsockopt "getsockopt" (int int int uptr uptr) int)
+(define-ffi $setsockopt "setsockopt" (int int int uptr int) int)
+(define-ffi $close "closesocket" (unsigned) int)
+(define-ffi $fcntl "ioctlsocket" (unsigned unsigned unsigned) int)
+(meta-cond
+  [(windows?) (define $gai_strerror errno-message)]
+  [else (define $gai_strerror (foreign-procedure "gai_strerror" (int) string))])
+
+@ Unfortunately, there are some things that Windows just doesn't support at all.
+
+@c () => ($getprotoent $setprotoent $endprotoent)
+@<Foreign functions@>=
+(meta-cond
+  [(windows?)
+   (define ($getprotoent) (unsupported-feature '$getprotoent))
+   (define ($setprotoent) (unsupported-feature '$setprotoent))
+   (define ($endprotoent) (unsupported-feature '$endprotoent))]
+  [else
+   (define $getprotoent (foreign-procedure "getprotoent" () uptr))
+   (define $setprotoent (foreign-procedure "setprotoent" (boolean) void))
+   (define $endprotoent (foreign-procedure "endprotoent" () void))])
+
+@ There are four procedures that could potentially block for long times 
+when we use them, and these require that we deactivate the blocked foreign
+thread before we block, so that the rest of Chez Scheme can work.
+This is only necessary if we are on a threaded version of Chez Scheme, 
+
+@c () => 
+   ($accept-blocking $connect-blocking $sendto-blocking $recvfrom-blocking)
+@<Foreign functions@>=
+(define $accept-blocking
+  (foreign-procedure "accept_block" (fixnum uptr uptr) int))
+(define $connect-blocking
+  (foreign-procedure "connect_block" (fixnum uptr fixnum) int))
+(define $sendto-blocking
+  (foreign-procedure "sendto_block" 
+		     (fixnum u8* fixnum fixnum uptr fixnum) 
+		     int))
+(define $recvfrom-blocking
+  (foreign-procedure "recvfrom_block" 
+		     (fixnum u8* fixnum fixnum uptr uptr)
+		     int))
 
 @* Index.
