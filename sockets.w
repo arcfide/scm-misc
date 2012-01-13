@@ -1188,7 +1188,7 @@ of the effects of these copies, however.
           [addr-len-buf (make-foreign-size-buffer addr-len)])
       (call-with-errno
         (lambda () 
-	  @<Call |$recvfrom| or |$recvfrom-blocking|@>)
+	  @<Call \$|recvfrom| or \$|recvfrom-blocking|@>)
         (lambda (n err)
 	  @<Convert recvfrom returns to scheme versions@>)))))
 
@@ -1198,7 +1198,7 @@ blocking flag of the socket to either the straight |recvfrom(2)| system
 call or the specially wrapped blocking version.
 
 @c (sock buf addr addr-len-buf flags c)
-@<Call |$recvfrom| or |$recvfrom-blocking|@>=
+@<Call \$|recvfrom| or \$|recvfrom-blocking|@>=
 ((if (socket-nonblocking? sock) $recvfrom $recvfrom-blocking)
   (socket-fd sock) buf c 
   (fold-left (lambda (s v) (fxior s (socket-constant-value v))) 
