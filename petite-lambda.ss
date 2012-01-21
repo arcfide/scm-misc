@@ -22,6 +22,7 @@
 (define-condition-type &lambda &error
   lambda-error lambda-error?
   (formals lambda-error-formals)
+  (arguments lambda-error-arguments)
   (body lambda-error-body))
 
 (define-syntax (lambda/petite x)
@@ -41,5 +42,10 @@
              (guard
                (c
                  [(serious-condition? c)
-                  (raise (condition c (lambda-error #'formals #'(b1 b2 ...))))])
+                  (raise
+                    (condition c
+                      (lambda-error
+                        #'formals
+                        args
+                        #'(b1 b2 ...))))])
                (apply f args)))))]))
